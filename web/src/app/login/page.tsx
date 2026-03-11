@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { useAppContext } from "@/lib/app-context";
 import { authClient } from "@/lib/auth-client";
+import { track } from "@/lib/track";
 
 type AuthMode = "signin" | "signup";
 
@@ -133,7 +134,7 @@ export default function LoginPage() {
   }, [isLoggedIn, router]);
 
   async function handleEmailSignIn() {
-
+    track('auth_signin_attempt', { email });
     if (!email || !password) {
       toast.error("Email and password are required.");
       return;
@@ -143,10 +144,12 @@ export default function LoginPage() {
     try {
       const result = await authClient.signIn.email({ email, password });
       if (result.error) {
+        track('auth_signin_failed', { email, error: result.error.message });
         toast.error(result.error.message || "Sign in failed.");
         setLoading(false);
         return;
       }
+      track('auth_signin_success', { email });
       router.push("/home");
     } catch (err) {
       toast.error("Network error: " + (err as Error).message);
@@ -155,7 +158,7 @@ export default function LoginPage() {
   }
 
   async function handleEmailSignUp() {
-
+    track('auth_signup_attempt', { email, name });
     if (!email || !password || !name) {
       toast.error("Name, email, and password are required.");
       return;
@@ -165,10 +168,12 @@ export default function LoginPage() {
     try {
       const result = await authClient.signUp.email({ email, password, name });
       if (result.error) {
+        track('auth_signup_failed', { email, error: result.error.message });
         toast.error(result.error.message || "Sign up failed.");
         setLoading(false);
         return;
       }
+      track('auth_signup_success', { email, name });
       router.push("/home");
     } catch (err) {
       toast.error("Network error: " + (err as Error).message);
@@ -177,7 +182,7 @@ export default function LoginPage() {
   }
 
   async function handleGoogleSignIn() {
-
+    track('auth_google_signin_attempt');
     setLoading(true);
     try {
       await authClient.signIn.social({ provider: "google" });
@@ -188,6 +193,7 @@ export default function LoginPage() {
   }
 
   async function loadDemo() {
+    track('demo_button_clicked');
     setLoading(true);
     ctx.setIsDemo(true);
 

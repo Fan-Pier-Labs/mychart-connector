@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { complete2faFlow } from '@/lib/mychart/login';
 import { getSession, setSession, getSessionMetadata } from '@/lib/sessions';
 import { requireAuth, AuthError } from '@/lib/auth-helpers';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
   try {
     await requireAuth(req);
+    sendTelemetryEvent('api_2fa_submit');
     const { sessionKey, code } = await req.json();
 
     if (!sessionKey || !code) {

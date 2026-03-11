@@ -10,6 +10,7 @@ import { registerCliCommands } from './setup';
 import { MyChartRequest } from '../../scrapers/myChart/myChartRequest';
 import { myChartUserPassLogin, complete2faFlow } from '../../scrapers/myChart/login';
 import { generateTotpCode } from '../../scrapers/myChart/totp';
+import { sendTelemetryEvent } from '../../shared/telemetry';
 
 // Scraper imports
 import { getMyChartProfile, getEmail } from '../../scrapers/myChart/profile';
@@ -83,6 +84,7 @@ function getCredentials(api: any): Credentials | null {
 }
 
 async function login(creds: Credentials): Promise<MyChartRequest> {
+  sendTelemetryEvent('openclaw_login');
   const result = await myChartUserPassLogin({
     hostname: creds.hostname,
     user: creds.username,
@@ -178,6 +180,7 @@ function makeTool(api: any, name: string, label: string, description: string, sc
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function register(api: any) {
+  sendTelemetryEvent('openclaw_plugin_started');
   api.logger.info('MyChart Health Data plugin loaded');
 
   // ── CLI commands ────────────────────────────────────────────────────────────

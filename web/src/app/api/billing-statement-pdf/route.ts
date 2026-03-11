@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
 import { saveStatementPdf } from '@/lib/mychart/bills/bills';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_billing_pdf');
   const { token, encBillingId, statement } = await req.json();
 
   const mychartRequest = getSession(token);

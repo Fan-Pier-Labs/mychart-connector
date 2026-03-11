@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
 import { getMyChartProfile } from '@/lib/mychart/profile';
 import { requireAuth, AuthError } from '@/lib/auth-helpers';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_profile_fetch');
   try {
     await requireAuth(req);
     const { sessionKey } = await req.json();

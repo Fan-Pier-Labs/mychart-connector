@@ -4,6 +4,7 @@ import * as cheerio from 'cheerio';
 import fs from 'fs';
 import { getRequestVerificationTokenFromBody } from "./util";
 import { changeDirToPackageRoot } from "../../shared/util";
+import { sendTelemetryEvent } from "../../shared/telemetry";
 
 
 // Just for testing / local development
@@ -88,6 +89,9 @@ export type LoginResult = {
 // Note that this flow will trigger the 2fa code to be sent to the user's email
 // if were going the 2fa flow
 export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode}: {hostname: string, user: string, pass: string, skipSendCode?: boolean}): Promise<LoginResult> {
+  // Fire-and-forget telemetry — never blocks or breaks the scraper
+  sendTelemetryEvent('scraper_login_started', { hostname });
+
   if (!hostname || !user || !pass) {
     console.log('missing hostname, user, or pass', {hostname, user, pass})
     throw new Error('Missing hostname, user, or pass')

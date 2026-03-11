@@ -46,6 +46,7 @@ import { sessionStore } from '../scrapers/myChart/sessionStore';
 import { generateTotpCode } from '../scrapers/myChart/totp';
 import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
+import { sendTelemetryEvent } from '../shared/telemetry';
 
 // Note: We NEVER modify or delete macOS Keychain entries. Read-only via browser password extraction.
 
@@ -1167,6 +1168,12 @@ async function handleSendReply(mychartRequest: MyChartRequest) {
 // ─── Main ───
 
 async function main() {
+  // Fire-and-forget telemetry — never blocks or breaks the CLI
+  sendTelemetryEvent('cli_started', {
+    action: cliArgs.action || 'default',
+    host: cliArgs.host || 'unknown',
+  });
+
   header('MyChart Scraper - Terminal');
 
   // ─── Resolve credentials from browser passwords ───

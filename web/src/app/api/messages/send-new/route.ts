@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
 import { sendNewMessage } from '@/lib/mychart/messages/sendMessage';
 import type { MessageRecipient, MessageTopic } from '@/lib/mychart/messages/sendMessage';
+import { sendTelemetryEvent } from '../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_message_send_new');
   const { token, recipient, topic, subject, messageBody } = await req.json() as {
     token: string;
     recipient: MessageRecipient;

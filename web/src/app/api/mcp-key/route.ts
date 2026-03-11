@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { generateApiKey, revokeApiKey, hasApiKey } from '@/lib/mcp/api-keys';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function GET(req: NextRequest) {
+  sendTelemetryEvent('api_mcp_key_check');
   try {
     const user = await requireAuth(req);
     const exists = await hasApiKey(user.id);
@@ -16,6 +18,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_mcp_key_generate');
   try {
     const user = await requireAuth(req);
     const key = await generateApiKey(user.id);
@@ -41,6 +44,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  sendTelemetryEvent('api_mcp_key_revoke');
   try {
     const user = await requireAuth(req);
     await revokeApiKey(user.id);

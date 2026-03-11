@@ -3,8 +3,10 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance } from '@/lib/db';
 import { getSession as getMyChartSession } from '@/lib/sessions';
 import { autoConnectInstance } from '@/lib/mcp/auto-connect';
+import { sendTelemetryEvent } from '../../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  sendTelemetryEvent('api_instance_connect');
   try {
     const user = await requireAuth(req);
     const { id } = await params;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 import { getMyChartProfile, getEmail } from '@/lib/mychart/profile';
 import { getBillingHistory } from '@/lib/mychart/bills/bills';
 import { upcomingVisits, pastVisits } from '@/lib/mychart/visits/visits';
@@ -30,6 +31,7 @@ import { getImagingResults } from '@/lib/mychart/imagingResults';
 import { getLinkedMyChartAccounts } from '@/lib/mychart/linkedMyChartAccounts';
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_scrape_start', { categories_count: 29 });
   // Validate BetterAuth session
   const { getAuth } = await import('@/lib/auth');
   const auth = await getAuth();

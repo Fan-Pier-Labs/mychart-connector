@@ -12,6 +12,7 @@
     "deploy": "python3 ./node_modules/deploy/main.py --config deploy.yaml"
   },
   "dependencies": {
+    "@amplitude/unified": "^1.0.4",
     "@aws-sdk/client-secrets-manager": "^3.1000.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-auth": "^1.5.4",

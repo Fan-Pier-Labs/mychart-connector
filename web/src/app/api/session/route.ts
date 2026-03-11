@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from '@/lib/auth';
 import { getMyChartInstances } from '@/lib/db';
 import { getSession as getMyChartSession } from '@/lib/sessions';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function GET(req: NextRequest) {
+  sendTelemetryEvent('api_session_check');
   try {
     const auth = await getAuth();
     const session = await auth.api.getSession({ headers: req.headers });

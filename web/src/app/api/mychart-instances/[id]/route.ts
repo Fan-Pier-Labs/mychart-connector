@@ -3,8 +3,10 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance, updateMyChartInstance, deleteMyChartInstance } from '@/lib/db';
 import { getSession as getMyChartSession, deleteSession } from '@/lib/sessions';
 import { normalizeHostname } from '@/lib/utils';
+import { sendTelemetryEvent } from '../../../../../../shared/telemetry';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  sendTelemetryEvent('api_instance_get');
   try {
     const user = await requireAuth(req);
     const { id } = await params;
@@ -35,6 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  sendTelemetryEvent('api_instance_update');
   try {
     const user = await requireAuth(req);
     const { id } = await params;
@@ -67,6 +70,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  sendTelemetryEvent('api_instance_delete');
   try {
     const user = await requireAuth(req);
     const { id } = await params;

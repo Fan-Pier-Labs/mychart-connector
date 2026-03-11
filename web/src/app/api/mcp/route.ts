@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { createMcpServer } from '@/lib/mcp/server';
 import { validateApiKey } from '@/lib/mcp/api-keys';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 // Map of MCP session ID (transport-level) -> transport instance
 const transports = new Map<string, WebStandardStreamableHTTPServerTransport>();
@@ -12,6 +13,7 @@ async function authenticateRequest(url: URL): Promise<{ userId: string } | null>
 }
 
 export async function POST(req: Request) {
+  sendTelemetryEvent('api_mcp_request');
   const url = new URL(req.url);
 
   // Check for existing MCP transport session via Mcp-Session-Id header

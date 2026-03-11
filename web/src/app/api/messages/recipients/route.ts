@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
 import { getVerificationToken, getMessageRecipients, getMessageTopics } from '@/lib/mychart/messages/sendMessage';
+import { sendTelemetryEvent } from '../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_message_recipients');
   const { token } = await req.json();
 
   const mychartRequest = getSession(token);

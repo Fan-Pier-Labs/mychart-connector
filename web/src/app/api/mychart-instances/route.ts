@@ -4,8 +4,10 @@ import { createMyChartInstance, getMyChartInstances } from '@/lib/db';
 import { normalizeHostname } from '@/lib/utils';
 import { autoConnectInstance } from '@/lib/mcp/auto-connect';
 import { sessionStore } from '@/lib/sessions';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function GET(req: NextRequest) {
+  sendTelemetryEvent('api_instances_list');
   try {
     const user = await requireAuth(req);
     const instances = await getMyChartInstances(user.id);
@@ -50,6 +52,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  sendTelemetryEvent('api_instance_create');
   try {
     const user = await requireAuth(req);
     const body = await req.json();

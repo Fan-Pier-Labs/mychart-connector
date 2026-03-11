@@ -3,8 +3,10 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance, updateMyChartInstance } from '@/lib/db';
 import { getSession } from '@/lib/sessions';
 import { setupTotp } from '@/lib/mychart/totp';
+import { sendTelemetryEvent } from '../../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  sendTelemetryEvent('api_totp_setup');
   try {
     const user = await requireAuth(req);
     const { id } = await params;

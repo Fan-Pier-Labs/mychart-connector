@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAppContext, type MyChartInstanceInfo } from "@/lib/app-context";
+import { track } from "@/lib/track";
 
 export default function HomePage() {
   const router = useRouter();
@@ -86,7 +87,7 @@ export default function HomePage() {
   }
 
   async function addInstance() {
-
+    track('instance_added');
     if (!newHostname || !newUsername || !newPassword) {
       toast.error("Hostname, username, and password are required.");
       return;
@@ -252,6 +253,7 @@ export default function HomePage() {
   }
 
   async function deleteInstance(id: string) {
+    track('instance_deleted');
     try {
       await fetch(`/api/mychart-instances/${id}`, { method: "DELETE" });
       if (ctx.activeInstanceId === id) {
@@ -266,6 +268,7 @@ export default function HomePage() {
   }
 
   async function startScraping() {
+    track('scrape_button_clicked');
     setLoading(true);
     setLoadingText("Scraping your MyChart data (this may take a minute)...");
 
@@ -286,6 +289,7 @@ export default function HomePage() {
   }
 
   async function generateApiKey() {
+    track('mcp_key_generated');
     setMcpLoading(true);
     try {
       const res = await fetch("/api/mcp-key", { method: "POST" });

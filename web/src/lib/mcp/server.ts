@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod/v3';
 import { MyChartRequest } from '../mychart/myChartRequest';
 import { sessionStore } from '../../../../scrapers/myChart/sessionStore';
+import { sendTelemetryEvent } from '../../../../shared/telemetry';
 import { getMyChartInstances, type MyChartInstance } from '../db';
 import { autoConnectInstance } from './auto-connect';
 import { getMyChartProfile, getEmail } from '../mychart/profile';
@@ -131,6 +132,7 @@ function registerScraperTool(server: McpServer, userId: string, name: string, de
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
     async (args: { instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: name });
       console.log(`[mcp] Tool call: ${name} (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const result = await resolveRequest(userId, args.instance);
@@ -157,6 +159,7 @@ function registerScraperTool(server: McpServer, userId: string, name: string, de
 }
 
 export function createMcpServer(userId: string): McpServer {
+  sendTelemetryEvent('mcp_server_created');
   const server = new McpServer({
     name: 'mychart-health',
     version: '1.0.0',

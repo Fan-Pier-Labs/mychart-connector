@@ -3,11 +3,13 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance } from '@/lib/db';
 import { myChartUserPassLogin } from '@/lib/mychart/login';
 import { setSession } from '@/lib/sessions';
+import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
     const { myChartInstanceId, hostname, username, password } = await req.json();
+    sendTelemetryEvent('api_login_attempt', { host: hostname || 'instance' });
 
     // If an instance ID is provided, look up credentials from DB
     if (myChartInstanceId) {
