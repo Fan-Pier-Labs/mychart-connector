@@ -20,8 +20,6 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 
 ## Key Commands
 
-- `bun run dev` — Run the app in development mode
-- `bun run build` — Build the app for production
 - `bun run lint` — Run ESLint
 - `bun run test` — Run unit tests + web tests
 - `bun run test:unit` — Run scraper unit tests only
