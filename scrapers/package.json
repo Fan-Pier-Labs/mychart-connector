@@ -10,7 +10,6 @@
     "mkdirp": "^3.0.1",
     "tough-cookie": "^5.1.2",
     "uuid": "^11.1.0",
-    "totp-generator": "^2.0.1",
-    "xlsx": "^0.18.5"
+    "totp-generator": "^2.0.1"
   }
 }

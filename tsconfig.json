@@ -27,12 +27,12 @@
     "noUnusedLocals": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["electron-app/renderer/renderer/*"],
-      "@/components/*": ["electron-app/renderer/renderer/components/*"],
-      "@/ui/*": ["electron-app/renderer/renderer/components/ui*"],
-      "@/lib/*": ["electron-app/renderer/renderer/lib/*"],
-      "@/hooks/*": ["electron-app/renderer/renderer/hooks/*"],
-      "@/pages/*": ["electron-app/renderer/renderer/pages/*"]
+      "@/*": ["web/src/*"],
+      "@/components/*": ["web/src/components/*"],
+      "@/ui/*": ["web/src/components/ui*"],
+      "@/lib/*": ["web/src/lib/*"],
+      "@/hooks/*": ["web/src/hooks/*"],
+      "@/pages/*": ["web/src/pages/*"]
     }
   },
   "include": [
@@ -40,8 +40,8 @@
     "scrapers/**/*.ts",
     "cli/**/*.ts",
     "shared/**/*.ts",
-    "electron-app/**/*.ts",
-    "electron-app/**/*.tsx",
+    "web/src/**/*.ts",
+    "web/src/**/*.tsx",
     "read-local-passwords/**/*.ts",
     "clo-to-jpg-converter/**/*.ts"
   ]

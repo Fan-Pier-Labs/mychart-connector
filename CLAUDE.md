@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Health data aggregation platform that connects to Epic MyChart portals to scrape and consolidate a patient's medical records. Supports 30+ data categories. Ships as an Electron + React desktop app with a headless CLI mode, a Next.js web demo on AWS Fargate, and an MCP server for Claude AI integration.
+Health data aggregation platform that connects to Epic MyChart portals to scrape and consolidate a patient's medical records. Supports 30+ data categories. Ships a headless CLI mode, a Next.js web demo on AWS Fargate, and an MCP server for Claude AI integration.
 
 ## License
 
@@ -11,7 +11,6 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 ## Architecture
 
 - **Scrapers** (`scrapers/`): Shared scraper code for MyChart
-- **Electron app** (`electron-app/`): Electron desktop app
 - **CLI** (`cli/cli.ts`): Headless CLI entry point. Great for Claude code to use for testing changes in the cli or scrapers.
 - **Shared types** (`shared/`): Common types and enums shared across packages
 - **Read local passwords** (`read-local-passwords/`): Browser password store extraction (Chrome, Arc, Firefox)
@@ -21,7 +20,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 
 ## Key Commands
 
-- `bun run dev` — Run the Electron app in development mode
+- `bun run dev` — Run the app in development mode
 - `bun run build` — Build the app for production
 - `bun run lint` — Run ESLint
 - `bun run test` — Run unit tests + web tests

@@ -142,7 +142,7 @@ The scrapers are shared across all entry points (web app, OpenClaw plugin, CLI).
 
 ```bash
 bun install
-bun run dev          # Electron app
+bun run dev          
 bun run cli          # CLI scraper
 bun run test         # Unit + web tests
 bun run lint         # ESLint

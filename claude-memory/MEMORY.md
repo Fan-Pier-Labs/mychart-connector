@@ -59,8 +59,6 @@ The globalThis singleton pattern is required for the sessionStore in Next.js —
 ## Monorepo Structure (Refactored 2026-03-04)
 - `scrapers/` — shared scraper code (myChart)
 - `cli/` — CLI entry point + resend 2FA
-- `electron-app/main/` — Electron main process (gmail, storage, types, processors)
-- `electron-app/renderer/renderer/` — React UI (note: double-nested renderer/)
 - `shared/` — common types (AccountStatus, CommonMyChartAccount)
 - `read-local-passwords/` — browser keystore extraction
 - `clo-to-jpg-converter/` — eUnity CLO image converter

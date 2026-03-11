@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test'
 import * as cheerio from 'cheerio'
 
 // Port the parseConvo logic for testing.
-// These types mirror the Electron-side types from src/main/scrapers/myChart/types.ts.
+// These types mirror the web/src/lib/mychart/types.ts.
 type MyChartMessage = {
   wmgId: string
   deliveryInstantISO: string

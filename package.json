@@ -6,18 +6,13 @@
   "scripts": {
     "fix": "eslint --fix",
     "lint": "eslint && cd web && eslint",
-    "vitewatch": "NODE_ENV=development vite build --watch",
-    "build": "electron-vite build --outDir dist",
-    "start": "electron-vite preview --outDir dist",
-    "dev": "bun run build && electron-vite dev --watch --outDir dist",
     "dev_mock": "MOCK_DATA=true bun run dev",
     "cli": "bun cli/entry.ts",
     "test": "bun test scrapers/myChart/__tests__/*.test.ts && bun test clo-to-jpg-converter/clo_to_jpg.test.ts && cd web && bun test",
     "test:unit": "bun test scrapers/myChart/__tests__/*.test.ts && bun test clo-to-jpg-converter/clo_to_jpg.test.ts",
     "test:unit:web": "cd web && bun test",
     "test:integration": "NODE_ENV=development bun test scrapers/myChart/__tests__/integration/",
-    "deploy_scraper_demo": "python3 node_modules/deploy/main.py --config web/deploy.yaml",
-    "package": "electron-builder"
+    "deploy": "python3 node_modules/deploy/main.py --config web/deploy.yaml"
   },
   "dependencies": {
     "@astronautlabs/amf": "^0.0.6",
@@ -52,7 +47,6 @@
     "next-themes": "^0.4.6",
     "node-fetch-cookies": "^2.1.1",
     "node-forge": "^1.3.1",
-    "playwright": "^1.58.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.1.5",
@@ -69,7 +63,6 @@
     "typescript-eslint": "^8.18.2",
     "uuid": "^11.1.0",
     "vite": "^6.0.11",
-    "xlsx": "^0.18.5",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
@@ -78,9 +71,6 @@
     "@types/node-forge": "^1.3.11",
     "autoprefixer": "^10.4.21",
     "deploy": "https://github.com/fan-Pier-Labs/deploy",
-    "electron": "^28.1.0",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^3.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.0.13",
     "ts-node": "^10.9.2",
