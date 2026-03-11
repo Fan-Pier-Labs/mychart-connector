@@ -1,11 +1,11 @@
 ---
-description: Exit current worktree (if any), create a fresh worktree, make an empty commit, and open a TBD pull request
+description: Exit current worktree (if any), create a fresh worktree, and make an empty commit
 user_invocable: true
 ---
 
-# Fresh PR from Worktree
+# Fresh Worktree
 
-Create a clean worktree with an empty commit and a placeholder PR.
+Create a clean worktree with an empty commit, ready for work.
 
 First, generate a random branch name by running:
 ```bash
@@ -60,21 +60,6 @@ EOF
 git push -u origin HEAD
 ```
 
-## Step 5: Create the PR
+## Step 5: Report back
 
-Create a pull request using `gh pr create`:
-
-```bash
-gh pr create --title "$BRANCH_NAME" --body "$(cat <<'EOF'
-## Summary
-
-TBD — work in progress.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-EOF
-)"
-```
-
-## Step 6: Report back
-
-Print the PR URL so the user can see it.
+Print the branch name and worktree path so the user knows where they are.
