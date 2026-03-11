@@ -74,7 +74,7 @@ export function createDemoMcpServer(): McpServer {
       description: 'Connect to a MyChart instance by hostname. Auto-completes 2FA if TOTP is configured.',
       inputSchema: { instance: z.string().describe('MyChart hostname to connect to') },
     },
-    // @ts-ignore zod v3/v4 compat
+    // @ts-expect-error zod v3/v4 compat
     async (_args: { instance: string }): Promise<CallToolResult> => {
       return jsonResult({ status: 'logged_in', hostname: DEMO_HOSTNAME });
     }
@@ -86,7 +86,7 @@ export function createDemoMcpServer(): McpServer {
       description: 'Check current session status and hostname for a MyChart instance',
       inputSchema: { instance: z.string().optional().describe('MyChart hostname (checks all if omitted)') },
     },
-    // @ts-ignore zod v3/v4 compat
+    // @ts-expect-error zod v3/v4 compat
     async (_args: { instance?: string }): Promise<CallToolResult> => {
       return jsonResult({ hostname: DEMO_HOSTNAME, connected: true, cookiesValid: true });
     }
@@ -101,7 +101,7 @@ export function createDemoMcpServer(): McpServer {
         instance: z.string().describe('MyChart hostname requiring 2FA'),
       },
     },
-    // @ts-ignore zod v3/v4 compat
+    // @ts-expect-error zod v3/v4 compat
     async (_args: { code: string; instance: string }): Promise<CallToolResult> => {
       return jsonResult({ status: 'logged_in', message: '2FA completed successfully' });
     }
@@ -117,7 +117,7 @@ export function createDemoMcpServer(): McpServer {
         instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
       },
     },
-    // @ts-ignore zod v3/v4 compat
+    // @ts-expect-error zod v3/v4 compat
     async (_args: { years_back?: number; instance?: string }): Promise<CallToolResult> => {
       return jsonResult(demo.demoPastVisits);
     }
@@ -131,7 +131,7 @@ export function createDemoMcpServer(): McpServer {
         description: tool.description,
         inputSchema: { instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)') },
       },
-      // @ts-ignore zod v3/v4 compat
+      // @ts-expect-error zod v3/v4 compat
       async (_args: { instance?: string }): Promise<CallToolResult> => {
         return jsonResult(tool.data);
       }
