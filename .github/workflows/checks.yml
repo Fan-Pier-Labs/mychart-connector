@@ -12,5 +12,6 @@ jobs:
       - run: cd web && bun install
       - run: bun run lint
       - run: bun run test
+      - run: cd web && bun --bun next build
       - run: docker build .
         timeout-minutes: 20
