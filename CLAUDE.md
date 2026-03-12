@@ -41,12 +41,26 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 
 ## Deployment
 
+The web app supports two deployment modes, auto-detected via the `DATABASE_URL` env var:
+
+- **If `DATABASE_URL` is set** → env-var mode (Railway / self-hosted). All config comes from env vars.
+- **If `DATABASE_URL` is not set** → AWS mode (Fargate). Config comes from AWS Secrets Manager.
+
+### AWS Fargate (primary)
+
 - **AWS account**: fanpierlabs (`aws --profile fanpierlabs`)
 - **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
   - Domain: `mychart.fanpierlabs.com` (CloudFront + ALB + Route53)
   - Region: `us-east-2`
+
+### Railway / Self-Hosted
+
+- Config: `railway.toml` (Dockerfile-based build)
+- Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_BASE_URL`
+- Optional env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth disabled without them)
+- SSL is disabled for Railway Postgres connections (not needed); AWS RDS uses `{ rejectUnauthorized: false }`
 
 ## Secrets (AWS Secrets Manager, us-east-2)
 

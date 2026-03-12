@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
-import { getDatabaseUrl, getBetterAuthSecret, getGoogleOAuthCredentials } from './mcp/config';
+import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoogleOAuth } from './mcp/config';
 import { nextCookies } from 'better-auth/next-js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -9,8 +9,8 @@ let poolInstance: Pool | null = null;
 
 async function getPool(): Promise<Pool> {
   if (poolInstance) return poolInstance;
-  const url = await getDatabaseUrl();
-  poolInstance = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
+  const opts = await getPoolOptions();
+  poolInstance = new Pool(opts);
   return poolInstance;
 }
 
@@ -20,27 +20,44 @@ export async function getAuth(): Promise<any> {
 
   const pool = await getPool();
   console.log('[Auth] Loading secrets...');
+
+  const useGoogle = hasGoogleOAuth();
   const [secret, googleOAuth] = await Promise.all([
     getBetterAuthSecret(),
-    getGoogleOAuthCredentials(),
+    useGoogle ? getGoogleOAuthCredentials() : Promise.resolve(null),
   ]);
-  const baseURL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-  console.log('[Auth] Secrets loaded. Google clientId:', googleOAuth.clientId.slice(0, 20) + '...', 'baseURL:', baseURL);
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined;
+  const baseURL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
+  if (useGoogle && googleOAuth) {
+    console.log('[Auth] Secrets loaded. Google clientId:', googleOAuth.clientId.slice(0, 20) + '...', 'baseURL:', baseURL);
+  } else {
+    console.log('[Auth] Secrets loaded. Google OAuth: disabled. baseURL:', baseURL);
+  }
+
+  // Build trusted origins list, always including the base URL
+  const trustedOrigins = ['http://localhost:2343', 'http://localhost:3000', 'https://mychartscrapers-staging.fanpierlabs.com', 'https://mychart.fanpierlabs.com'];
+  if (baseURL && !trustedOrigins.includes(baseURL)) {
+    trustedOrigins.push(baseURL);
+  }
 
   authInstance = betterAuth({
     database: pool,
     baseURL,
-    trustedOrigins: ['http://localhost:2343', 'http://localhost:3000', 'https://mychart.fanpierlabs.com'],
+    trustedOrigins,
     secret,
     emailAndPassword: {
       enabled: true,
     },
-    socialProviders: {
-      google: {
-        clientId: googleOAuth.clientId,
-        clientSecret: googleOAuth.clientSecret,
-      },
-    },
+    ...(useGoogle && googleOAuth
+      ? {
+          socialProviders: {
+            google: {
+              clientId: googleOAuth.clientId,
+              clientSecret: googleOAuth.clientSecret,
+            },
+          },
+        }
+      : {}),
     plugins: [nextCookies()],
   });
 
