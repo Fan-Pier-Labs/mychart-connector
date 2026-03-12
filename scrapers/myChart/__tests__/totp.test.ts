@@ -22,8 +22,10 @@ describe('generateTotpCode', () => {
 
   test('generates consistent codes for the same secret at the same time', async () => {
     const secret = 'JBSWY3DPEHPK3PXP';
-    const code1 = await generateTotpCode(secret);
-    const code2 = await generateTotpCode(secret);
+    // Pin timestamp to avoid flakiness at 30-second TOTP boundary
+    const timestamp = 1700000000000;
+    const code1 = await generateTotpCode(secret, timestamp);
+    const code2 = await generateTotpCode(secret, timestamp);
     expect(code1).toBe(code2);
   });
 });
