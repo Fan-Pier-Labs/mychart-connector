@@ -17,12 +17,12 @@ RUN echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new E
     echo 'export {}' > shared/gmail/util.ts
 
 # Build (NEXT_PUBLIC_* must be set at build time for Next.js inlining)
-ENV NEXT_PUBLIC_BASE_URL=https://mychart.fanpierlabs.com
+ARG NEXT_PUBLIC_BASE_URL=https://mychart.fanpierlabs.com
+ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
 RUN cd web && bun --bun next build
 
 ENV NODE_ENV=production
-ENV PORT=8080
 EXPOSE 8080
 
 WORKDIR /app/web
-CMD ["bun", "--bun", "next", "start", "-p", "8080"]
+CMD ["sh", "-c", "bun --bun next start -p ${PORT:-8080}"]

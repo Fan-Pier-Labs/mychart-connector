@@ -7,7 +7,7 @@
 
 import { getAuth } from '../src/lib/auth';
 import { Pool } from 'pg';
-import { getDatabaseUrl } from '../src/lib/mcp/config';
+import { getPoolOptions } from '../src/lib/mcp/config';
 
 async function main() {
   console.log('[migrate] Starting migrations...');
@@ -24,8 +24,8 @@ async function main() {
   }
 
   // 2. Create custom mychart_instances table
-  const url = await getDatabaseUrl();
-  const pool = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
+  const opts = await getPoolOptions();
+  const pool = new Pool(opts);
 
   console.log('[migrate] Creating mychart_instances table...');
   await pool.query(`

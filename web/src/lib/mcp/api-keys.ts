@@ -1,13 +1,13 @@
 import { randomBytes, createHash } from 'crypto';
 import { Pool } from 'pg';
-import { getDatabaseUrl } from './config';
+import { getPoolOptions } from './config';
 
 let pool: Pool | null = null;
 
 async function getPool(): Promise<Pool> {
   if (pool) return pool;
-  const url = await getDatabaseUrl();
-  pool = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
+  const opts = await getPoolOptions();
+  pool = new Pool(opts);
   return pool;
 }
 
