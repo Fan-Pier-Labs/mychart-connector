@@ -21,8 +21,8 @@ export function parseFirstPathPartFromHtml(html: string): string | null {
   return possibleFirstPathPart || null;
 }
 
-export function parseFirstPathPartFromLocation(locationHeader: string, hostname: string): string | null {
-  const url = new URL(locationHeader, 'https://' + hostname);
+export function parseFirstPathPartFromLocation(locationHeader: string, hostname: string, protocol = 'https'): string | null {
+  const url = new URL(locationHeader, protocol + '://' + hostname);
   const part = url.pathname.split('/')[1];
   return part || null;
 }
@@ -34,7 +34,7 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
     return mychartRequest;
   }
 
-  const pathResponse = await mychartRequest.makeRequest({followRedirects: false, url: 'https://' + mychartRequest.hostname })
+  const pathResponse = await mychartRequest.makeRequest({followRedirects: false, url: mychartRequest.protocol + '://' + mychartRequest.hostname })
 
   const locationResponseHeader = pathResponse.headers.get('Location')
   console.log('location response header', locationResponseHeader)
@@ -42,7 +42,7 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
   let firstPathPart;
 
   if (locationResponseHeader) {
-    firstPathPart = parseFirstPathPartFromLocation(locationResponseHeader, mychartRequest.hostname);
+    firstPathPart = parseFirstPathPartFromLocation(locationResponseHeader, mychartRequest.hostname, mychartRequest.protocol);
     console.log('first path part', firstPathPart)
   }
   else {
@@ -88,7 +88,7 @@ export type LoginResult = {
 // 2. we need 2fa code to complete login process
 // Note that this flow will trigger the 2fa code to be sent to the user's email
 // if were going the 2fa flow
-export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode}: {hostname: string, user: string, pass: string, skipSendCode?: boolean}): Promise<LoginResult> {
+export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode, protocol}: {hostname: string, user: string, pass: string, skipSendCode?: boolean, protocol?: string}): Promise<LoginResult> {
   // Fire-and-forget telemetry — never blocks or breaks the scraper
   sendTelemetryEvent('scraper_login_started', { hostname });
 
@@ -98,7 +98,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode}
   }
 
 
-  const mychartRequest = new MyChartRequest(hostname);
+  const mychartRequest = new MyChartRequest(hostname, protocol);
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest)
 
@@ -136,7 +136,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode}
     try {
       const jsUrl = loginControllerSrc.startsWith('http')
         ? loginControllerSrc
-        : 'https://' + hostname + loginControllerSrc;
+        : mychartRequest.protocol + '://' + hostname + loginControllerSrc;
       const jsResp = await mychartRequest.makeRequest({ url: jsUrl });
       const jsText = await jsResp.text();
       const credMatch = jsText.match(/Credentials:\s*\{([^}]{0,300})\}/);

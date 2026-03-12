@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 
 
 export default [
-  {ignores: ["web/**", "dist/**", "node_modules/**", ".claude/**", "out/**", "clo-to-jpg-converter/**", "sample_data/**", "pdfs/**", "*.config.*", "*.js"]},
+  {ignores: ["web/**", "dist/**", "node_modules/**", ".claude/**", "out/**", "clo-to-jpg-converter/**", "sample_data/**", "pdfs/**", "fake-mychart/**", "*.config.*", "*.js"]},
   {files: ["**/*.{ts}"]},
   {languageOptions: { globals: globals.node }},
   pluginJs.configs.recommended,
