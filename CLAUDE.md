@@ -42,7 +42,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
-  - Domain: `mychartscrapers-staging.fanpierlabs.com` (CloudFront + ALB + Route53)
+  - Domain: `mychart.fanpierlabs.com` (CloudFront + ALB + Route53)
   - Region: `us-east-2`
 
 ## Secrets (AWS Secrets Manager, us-east-2)
