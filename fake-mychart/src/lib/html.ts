@@ -895,9 +895,9 @@ export function billingSummaryPage(accounts: Array<{
         <span class="ba_card_status_due_amount moneyColor">${a.amountDue}</span>
       </div>
       <div class="meta ba_card_status_due_label">Amount Due</div>
-      <div class="meta">
+      <p class="ba_card_status_recentPaymentLabel">
         <a href="/${FIRST_PATH}/Billing/Details?ID=${a.detailsId}&Context=${a.detailsContext}&tab=3" title="View payment history">${a.lastPaid}</a>
-      </div>
+      </p>
       <div class="meta" style="margin-top:8px;">
         <span class="ba_card_header_saLabel ba_card_header_saLabel_saName">Springfield Nuclear Power Plant</span>
       </div>
