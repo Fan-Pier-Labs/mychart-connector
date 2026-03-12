@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyChart MCP - AI-Powered Health Data Access",
-  description: "Connect any MyChart portal to AI assistants via MCP. Access 30+ health data categories, send messages, and analyze your health data with AI.",
+  title: "MyChart Claude Connector - Manage your Health data with AI",
+  description: "Connect MyChart portal to Claude. Manage your health records, send messages, book appointments, request refills, and more all with AI.",
 };
 
 export default function RootLayout({
