@@ -11,6 +11,7 @@ RUN cd scrapers && bun install
 COPY web/ ./web/
 COPY scrapers/ ./scrapers/
 COPY shared/ ./shared/
+COPY clo-to-jpg-converter/ ./clo-to-jpg-converter/
 
 # Stub shared/gmail (uses googleapis which has massive types that OOM the TS checker)
 RUN echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new Error("not available in web"); }' > shared/gmail/gmail.ts && \

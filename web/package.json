@@ -33,6 +33,9 @@
     "tailwind-merge": "^3.5.0",
     "totp-generator": "^2.0.1",
     "tough-cookie": "^6.0.0",
+    "fzstd": "^0.1.1",
+    "resend": "^6.9.3",
+    "sharp": "^0.34.5",
     "zod": "4.3.6"
   },
   "devDependencies": {
