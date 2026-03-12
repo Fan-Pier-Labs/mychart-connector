@@ -11,7 +11,7 @@ mock.module('pg', () => ({
 
 // Mock config
 mock.module('../config', () => ({
-  getDatabaseUrl: () => Promise.resolve('postgresql://localhost/test'),
+  getPoolOptions: () => Promise.resolve({ connectionString: 'postgresql://localhost/test', ssl: false }),
 }));
 
 // Import after mocks

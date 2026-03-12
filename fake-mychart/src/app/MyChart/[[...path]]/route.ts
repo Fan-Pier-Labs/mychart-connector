@@ -4,6 +4,10 @@ import {
   loginPage, loginPageControllerJs, doLoginSuccess, doLoginFailed,
   secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage,
   careTeamPage, insurancePage, preventiveCarePage, billingSummaryPage, billingDetailsPage,
+  medicationsPage, allergiesPage, healthIssuesPage, immunizationsPage,
+  vitalsPage, medicalHistoryPage, testResultsPage, messagesPage, visitsPage,
+  lettersPage, goalsPage, referralsPage, careJourneysPage, documentsPage,
+  educationPage, emergencyContactsPage, profilePage,
 } from '@/lib/html';
 import * as homer from '@/data/homer';
 
@@ -39,8 +43,11 @@ function acceptAny(): boolean {
 }
 
 // ─── Route handler ──────────────────────────────────────────────────
-export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const { path } = await params;
+  if (!path || path.length === 0) {
+    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+  }
   const joined = joinPath(path);
   const lower = joined.toLowerCase();
 
@@ -127,12 +134,111 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new NextResponse(pdfBytes, { headers: { 'Content-Type': 'application/pdf' } });
   }
 
+  // ── Rich UI pages ────────────────────────────────────────────────
+  if (lower === 'clinical/medications') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(medicationsPage());
+  }
+
+  if (lower === 'clinical/allergies') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(allergiesPage());
+  }
+
+  if (lower === 'clinical/healthissues') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(healthIssuesPage());
+  }
+
+  if (lower === 'clinical/immunizations') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(immunizationsPage());
+  }
+
+  if (lower === 'trackmyhealth') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(vitalsPage());
+  }
+
+  if (lower === 'medicalhistory') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(medicalHistoryPage());
+  }
+
+  if (lower === 'testresults') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(testResultsPage());
+  }
+
+  if (lower === 'messaging') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(messagesPage());
+  }
+
+  if (lower === 'visits') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(visitsPage());
+  }
+
+  if (lower === 'letters') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(lettersPage());
+  }
+
+  if (lower === 'goals') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(goalsPage());
+  }
+
+  if (lower === 'referrals') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(referralsPage());
+  }
+
+  if (lower === 'carejourneys') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(careJourneysPage());
+  }
+
+  if (lower === 'documents') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(documentsPage());
+  }
+
+  if (lower === 'education') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(educationPage());
+  }
+
+  if (lower === 'emergencycontacts') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(emergencyContactsPage());
+  }
+
+  if (lower === 'personalinformation') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(profilePage());
+  }
+
   // ── Generic token pages (for scrapers that GET a page to extract CSRF) ──
-  if (lower === 'clinical/medications' || lower === 'clinical/allergies' ||
-      lower === 'clinical/immunizations' || lower === 'clinical/healthissues' ||
-      lower === 'personalinformation' || lower === 'questionnaire' ||
-      lower === 'community/manage' ||
-      lower.startsWith('app/')) {
+  if (lower === 'questionnaire' || lower === 'community/manage' || lower.startsWith('app/')) {
     return html(genericTokenPage('MyChart'));
   }
 
@@ -140,8 +246,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return html(genericTokenPage('MyChart'));
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const { path } = await params;
+  if (!path || path.length === 0) {
+    return json({ error: 'Not found' }, 404);
+  }
   const joined = joinPath(path);
   const lower = joined.toLowerCase();
 

@@ -5,6 +5,8 @@
  * All served from localhost:4000/e/* so the scraper sees a single-origin eUnity.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import * as homer from '@/data/homer';
 
 // ─── In-memory eUnity sessions ──────────────────────────────────────
@@ -112,45 +114,15 @@ function writeAmfString(buf: number[], str: string) {
   buf.push(...bytes);
 }
 
-// ─── Fake CLO Image Data ────────────────────────────────────────────
-/**
- * Build a fake CLOWRAPPER response (CLOHEADERZ01 + CLOCLHAAR).
- * The scraper checks:
- * - length >= 256
- * - starts with "CLO" (isCloFormat)
- * - doesn't start with "CLOERROR"
- * - contains "CLOCLHAAR" for splitFileWrite mode
- */
-function buildFakeCloWrapper(): Buffer {
-  // CLOHEADERZ01 section (fake metadata)
-  const header = Buffer.alloc(256);
-  header.write('CLOHEADERZ01###', 0, 'ascii');
-  // Fill with some fake zlib-like data (doesn't need to be valid)
-  header[12] = 0x78; header[13] = 0x9c; // zlib magic
-  for (let i = 14; i < 256; i++) header[i] = (i * 7) & 0xFF;
-
-  // CLOCLHAAR section (fake pixel data)
-  const pixelHeader = Buffer.alloc(512);
-  pixelHeader.write('CLOCLHAAR###', 0, 'ascii');
-  pixelHeader.writeUInt32LE(0xFFFFFFFF, 12);
-  // Fake dimensions (256x256)
-  pixelHeader.writeUInt32LE(256, 24);
-  pixelHeader.writeUInt32LE(256, 28);
-  // Fill rest with fake pixel data
-  for (let i = 32; i < 512; i++) pixelHeader[i] = (i * 13 + 42) & 0xFF;
-
-  return Buffer.concat([header, pixelHeader]);
-}
-
-function buildFakeCloPixel(): Buffer {
-  const buf = Buffer.alloc(512);
-  buf.write('CLOCLHAAR###', 0, 'ascii');
-  buf.writeUInt32LE(0xFFFFFFFF, 12);
-  buf.writeUInt32LE(256, 24);
-  buf.writeUInt32LE(256, 28);
-  for (let i = 32; i < 512; i++) buf[i] = (i * 17 + 99) & 0xFF;
-  return buf;
-}
+// ─── Real CLO Image Data ─────────────────────────────────────────────
+// Pre-generated using clo-to-jpg-converter/generate_clo.ts (checkerboard pattern).
+// These are valid CLO files the scraper can decode into real images.
+const CLO_DATA_DIR = join(process.cwd(), 'src/data/clo-images');
+const cloWrapper = Buffer.concat([
+  readFileSync(join(CLO_DATA_DIR, 'checkerboard_512x512_wrapper.clo')),
+  readFileSync(join(CLO_DATA_DIR, 'checkerboard_512x512_pixel.clo')),
+]);
+const cloPixel = readFileSync(join(CLO_DATA_DIR, 'checkerboard_512x512_pixel.clo'));
 
 // ─── Route handler ──────────────────────────────────────────────────
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
@@ -242,9 +214,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const requestType = formParams.get('requestType');
 
     if (requestType === 'CLOWRAPPER') {
-      return binary(buildFakeCloWrapper());
+      return binary(cloWrapper);
     } else if (requestType === 'CLOPIXEL') {
-      return binary(buildFakeCloPixel());
+      return binary(cloPixel);
     } else {
       return new NextResponse('CLOERROR: unsupported request type', { status: 400 });
     }

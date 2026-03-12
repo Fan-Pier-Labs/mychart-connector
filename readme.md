@@ -110,6 +110,32 @@ One URL works for all your MyChart accounts. If you have multiple accounts conne
 
 ## Deployment
 
+### Self-Host on Railway
+
+Deploy your own instance with one click:
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/5F69Mf?referralCode=xrxOUg)
+
+**Required env vars:**
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Auto | Injected by Railway Postgres plugin |
+| `BETTER_AUTH_SECRET` | Yes | `openssl rand -hex 32` |
+| `ENCRYPTION_KEY` | Yes | `openssl rand -hex 32` |
+| `NEXT_PUBLIC_BASE_URL` | Yes | Your Railway public domain with `https://` |
+| `GOOGLE_CLIENT_ID` | Optional | For Google OAuth sign-in |
+| `GOOGLE_CLIENT_SECRET` | Optional | For Google OAuth sign-in |
+
+**Setup:**
+
+1. Click the deploy button and attach a Postgres plugin
+2. Set the required env vars listed above
+3. Deploy — Railway runs migrations automatically
+4. Visit your domain, sign up, add your MyChart account, and generate an API key
+
+### AWS Fargate
+
 The web app deploys to AWS Fargate via a single command:
 
 ```bash
