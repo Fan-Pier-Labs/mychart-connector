@@ -22,6 +22,31 @@ describe('MyChartRequest', () => {
       const req = new MyChartRequest('mychart.example.com')
       expect(typeof req.fetchWithCookieJar).toBe('function')
     })
+
+    it('strips https:// prefix from hostname', () => {
+      const req = new MyChartRequest('https://mychart.example.com')
+      expect(req.hostname).toBe('mychart.example.com')
+    })
+
+    it('strips full URL with path to just hostname', () => {
+      const req = new MyChartRequest('https://mychart.example.com/MyChart/Home')
+      expect(req.hostname).toBe('mychart.example.com')
+    })
+
+    it('strips http:// prefix from hostname', () => {
+      const req = new MyChartRequest('http://mychart.example.com')
+      expect(req.hostname).toBe('mychart.example.com')
+    })
+
+    it('trims whitespace from hostname', () => {
+      const req = new MyChartRequest('  mychart.example.com  ')
+      expect(req.hostname).toBe('mychart.example.com')
+    })
+
+    it('leaves bare hostname unchanged', () => {
+      const req = new MyChartRequest('mychart.example.com')
+      expect(req.hostname).toBe('mychart.example.com')
+    })
   })
 
   describe('setFirstPathPart', () => {
