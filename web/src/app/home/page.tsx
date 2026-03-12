@@ -47,6 +47,11 @@ export default function HomePage() {
   // Connecting state
   const [connectingId, setConnectingId] = useState("");
 
+  // Notification preferences
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [notifIncludeContent, setNotifIncludeContent] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+
   useEffect(() => {
     if (!ctx.sessionLoading && !ctx.user) {
       router.push("/login");
@@ -66,6 +71,19 @@ export default function HomePage() {
       fetch("/api/mcp-key")
         .then(r => r.json())
         .then(data => { if (data.hasKey) setHasExistingKey(true); })
+        .catch(() => {});
+    }
+  }, [ctx.user]);
+
+  // Load notification preferences
+  useEffect(() => {
+    if (ctx.user) {
+      fetch("/api/notifications/preferences")
+        .then(r => r.json())
+        .then(data => {
+          if (typeof data.enabled === 'boolean') setNotifEnabled(data.enabled);
+          if (typeof data.includeContent === 'boolean') setNotifIncludeContent(data.includeContent);
+        })
         .catch(() => {});
     }
   }, [ctx.user]);
@@ -331,6 +349,29 @@ export default function HomePage() {
     await navigator.clipboard.writeText(ctx.mcpUrlSsl);
     setMcpSslCopied(true);
     setTimeout(() => setMcpSslCopied(false), 2000);
+  }
+
+  async function updateNotifPrefs(enabled: boolean, includeContent: boolean) {
+    setNotifLoading(true);
+    try {
+      const res = await fetch("/api/notifications/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, includeContent }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNotifEnabled(data.enabled);
+        setNotifIncludeContent(data.includeContent);
+        toast.success("Notification preferences updated.");
+      } else {
+        toast.error(data.error || "Failed to update preferences.");
+      }
+    } catch (err) {
+      toast.error("Network error: " + (err as Error).message);
+    } finally {
+      setNotifLoading(false);
+    }
   }
 
   function handleLogout() {
@@ -762,6 +803,51 @@ export default function HomePage() {
                     Revoke API Key
                   </Button>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Notifications */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Notifications</CardTitle>
+              <CardDescription>
+                Get notified by email when something changes in your MyChart account.
+                Requires at least one account with automatic sign-in (TOTP) enabled.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="notif-enabled" className="text-sm">Enable email notifications</Label>
+                <input
+                  id="notif-enabled"
+                  type="checkbox"
+                  checked={notifEnabled}
+                  disabled={notifLoading}
+                  onChange={(e) => updateNotifPrefs(e.target.checked, notifIncludeContent)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </div>
+              {notifEnabled && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="notif-content" className="text-sm">Include detailed content in emails</Label>
+                    <input
+                      id="notif-content"
+                      type="checkbox"
+                      checked={notifIncludeContent}
+                      disabled={notifLoading}
+                      onChange={(e) => updateNotifPrefs(notifEnabled, e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </div>
+                  {notifIncludeContent && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-700 text-sm">
+                      Detailed mode sends medical information (lab results, messages, X-ray images) via email.
+                      Make sure your email account is secure.
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

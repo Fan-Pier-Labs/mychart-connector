@@ -74,6 +74,26 @@ Key files:
 - `web/src/app/api/mcp/route.ts` — HTTP transport handler (authenticates via API key)
 - `web/src/app/api/mcp-key/route.ts` — API key management endpoint
 
+## Notification System
+
+Daily email notifications when MyChart account changes are detected. Users opt in via the home page UI.
+
+- **Preferences**: Per-user `notifications_enabled` and `notifications_include_content` columns on the `user` table
+- **Tracking**: `notifications_last_checked_at` on `mychart_instances` — timestamp of last check per instance
+- **Change detection**: Checks 10 categories (messages, lab results, imaging, medications, letters, visits, activity feed, documents, allergies, health issues) using timestamp comparison
+- **Email modes**: Summary (category counts + login link) or detailed (actual medical content + X-ray JPEGs as attachments)
+- **Imaging pipeline**: Downloads CLO images via `downloadImagingStudyDirect()`, converts to JPEG via `convertCloToJpg()`, attaches to email (max 5)
+- **Orchestration**: `startNotificationChecker()` in `instrumentation.ts` runs on server startup, then every 24 hours
+- **First run**: When `notifications_last_checked_at` is NULL, sets baseline without sending email
+
+Key files:
+- `web/src/lib/notifications/change-detector.ts` — Timestamp-based change detection across 10 scrapers
+- `web/src/lib/notifications/check.ts` — Orchestrator (checkAllUsers, startNotificationChecker)
+- `web/src/lib/notifications/email.ts` — Resend email sending
+- `web/src/lib/notifications/imaging.ts` — X-ray CLO→JPEG for email attachments
+- `web/src/lib/notifications/templates.ts` — HTML email templates (summary + detailed)
+- `web/src/app/api/notifications/preferences/route.ts` — GET/PUT user preferences
+
 ## OpenClaw Plugin
 
 Self-contained plugin in `openclaw-plugin/` that bundles all MyChart scraper code locally (no server needed).

@@ -51,6 +51,23 @@ async function main() {
   `);
   console.log('[migrate] mcp_api_key_hash column ready.');
 
+  // 4. Add notification preference columns to user table
+  console.log('[migrate] Adding notification columns to user table...');
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT FALSE;
+  `);
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS notifications_include_content BOOLEAN DEFAULT FALSE;
+  `);
+  console.log('[migrate] Notification preference columns ready.');
+
+  // 5. Add notification tracking column to mychart_instances
+  console.log('[migrate] Adding notifications_last_checked_at to mychart_instances...');
+  await pool.query(`
+    ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS notifications_last_checked_at TIMESTAMPTZ;
+  `);
+  console.log('[migrate] notifications_last_checked_at column ready.');
+
   await pool.end();
   console.log('[migrate] Done.');
   process.exit(0);
