@@ -40,6 +40,19 @@ export async function runMigrations(): Promise<void> {
     ALTER TABLE "user" ADD COLUMN IF NOT EXISTS mcp_api_key_hash TEXT UNIQUE;
   `);
 
+  // 4. Add notification preference columns to user table
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT FALSE;
+  `);
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS notifications_include_content BOOLEAN DEFAULT FALSE;
+  `);
+
+  // 5. Add notification tracking column to mychart_instances
+  await pool.query(`
+    ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS notifications_last_checked_at TIMESTAMPTZ;
+  `);
+
   await pool.end();
   console.log('[migrate] Database migrations complete.');
 }
