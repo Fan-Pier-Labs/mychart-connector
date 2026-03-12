@@ -39,6 +39,10 @@ import { upcomingVisits, pastVisits } from '../../visits/visits'
 import { listLabResults } from '../../labs_and_procedure_results/labResults'
 import { getBillingHistory } from '../../bills/bills'
 import { listConversations } from '../../messages/conversations'
+import { requestMedicationRefill } from '../../medicationRefill'
+import { getImagingResults } from '../../labs_and_procedure_results/labResults'
+import { followSamlChain } from '../../eunity/imagingViewer'
+import { downloadImagingStudyDirect } from '../../eunity/imagingDirectDownload'
 
 const HOST = process.env.FAKE_MYCHART_HOST ?? 'localhost:4000'
 
@@ -250,4 +254,61 @@ describe('fake-mychart integration', () => {
     expect(Array.isArray(result)).toBe(true)
     expect(result.length).toBeGreaterThan(0)
   }, 30_000)
+
+  it('requestMedicationRefill succeeds', async () => {
+    const result = await requestMedicationRefill(session, 'FAKE-MED-KEY-001')
+    expect(result.success).toBe(true)
+  }, 10_000)
+
+  it('getImagingResults returns imaging studies with report text', async () => {
+    const result = await getImagingResults(session)
+    expect(Array.isArray(result)).toBe(true)
+    expect(result.length).toBeGreaterThan(0)
+    // Should be an X-ray result
+    const xray = result.find(r => r.orderName.includes('XR'))
+    expect(xray).toBeDefined()
+    expect(xray!.reportText).toContain('Heart size')
+    expect(xray!.fdiContext).toBeDefined()
+    expect(xray!.fdiContext!.fdi).toBe('FDI-XRAY-001')
+    expect(xray!.samlUrl).toBeDefined()
+  }, 30_000)
+
+  it('followSamlChain reaches eUnity viewer', async () => {
+    // Get imaging result with FDI context
+    const results = await getImagingResults(session)
+    const xray = results.find(r => r.fdiContext)
+    expect(xray?.samlUrl).toBeDefined()
+
+    const viewerSession = await followSamlChain(session, xray!.samlUrl!)
+    expect(viewerSession).not.toBeNull()
+    expect(viewerSession!.viewerUrl).toContain('/e/viewer')
+    // jsessionId may be empty if Set-Cookie isn't propagated via fetch
+    expect(viewerSession!.jsessionId).toBeDefined()
+    // Viewer body should contain study params
+    expect(viewerSession!.viewerBody).toContain('accessionNumber')
+  }, 30_000)
+
+  it('downloadImagingStudyDirect downloads CLO image data', async () => {
+    // Get imaging result with FDI context
+    const results = await getImagingResults(session)
+    const xray = results.find(r => r.fdiContext)
+    expect(xray?.fdiContext).toBeDefined()
+
+    const result = await downloadImagingStudyDirect(
+      session,
+      xray!.fdiContext!,
+      'Homer Chest XRay',
+      '/tmp/fake-mychart-test-images',
+      { skipFileWrite: true },
+    )
+
+    expect(result.studyName).toBe('Homer Chest XRay')
+    expect(result.errors).toHaveLength(0)
+    expect(result.images.length).toBeGreaterThan(0)
+    // Should have CLO format data
+    const img = result.images[0]
+    expect(img.format).toBe('CLHAAR')
+    expect(img.pixelData).toBeDefined()
+    expect(img.pixelData!.length).toBeGreaterThan(0)
+  }, 60_000)
 })

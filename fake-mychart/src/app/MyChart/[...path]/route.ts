@@ -209,6 +209,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/medications/loadmedicationspage') {
     return json(homer.medications);
   }
+  if (lower === 'api/medications/requestrefill') {
+    return json({ success: true });
+  }
 
   // Allergies
   if (lower === 'api/allergies/loadallergies') {
@@ -308,16 +311,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Test Results / Labs
   if (lower === 'api/test-results/getlist') {
+    try {
+      const body = await request.json();
+      // groupType 2 or 3 may return imaging results
+      if (body.groupType === 2) {
+        return json(homer.imagingLabResultsList);
+      }
+    } catch { /* fall through */ }
     return json(homer.labResultsList);
   }
   if (lower === 'api/test-results/getdetails') {
+    try {
+      const body = await request.json();
+      if (body.orderKey === 'GRP-XRAY') {
+        return json(homer.imagingLabResultDetails);
+      }
+    } catch { /* fall through */ }
     return json(homer.labResultsDetails);
   }
   if (lower === 'api/past-results/getmultiplehistoricalresultcomponents') {
     return json({ historicalResults: [] });
   }
   if (lower === 'api/report-content/loadreportcontent') {
+    try {
+      const body = await request.json();
+      if (body.reportID === 'RPT-XRAY-001') {
+        return json(homer.imagingReportContent);
+      }
+    } catch { /* fall through */ }
     return json({ reportContent: '' });
+  }
+
+  // ── FdiData (bridge from MyChart to eUnity) ───────────────────
+  if (lower.startsWith('extensibility/redirection/fdidata')) {
+    const url = new URL(request.url);
+    const origin = url.origin;
+    return json({
+      url: `${origin}/e/saml-sts`,
+      launchmode: 2,
+      IsFdiPost: false,
+    });
   }
 
   // ── Visits ────────────────────────────────────────────────────

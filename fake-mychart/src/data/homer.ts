@@ -1125,3 +1125,146 @@ export const messageViewers = {
     { wprId: 'WPR-HOMER', isSelf: true },
   ],
 };
+
+// ─── Imaging / eUnity ──────────────────────────────────────────────
+
+// DICOM UIDs for Homer's shoulder X-ray study
+export const imaging = {
+  studyUID: '1.2.840.114350.2.362.2.742742.2.1234567890.1',
+  accessionNumber: 'E12345742',
+  serviceInstance: 'SPRINGFIELDstudystrategy',
+  patientId: '742$$$SPRINGFIELD',
+  series: [
+    {
+      seriesUID: '1.3.51.0.7.748833181.4805.29255.36386.22408.54239.53943',
+      instanceUID: '1.3.51.0.7.1272019023.37494.53573.32951.58539.52999.27202',
+      seriesDescription: 'CHEST PA',
+    },
+    {
+      seriesUID: '1.3.51.0.7.3271007396.35359.25929.40621.44249.10393.55955',
+      instanceUID: '1.3.51.0.7.1476580709.39260.10317.37364.41212.20646.62903',
+      seriesDescription: 'CHEST LATERAL',
+    },
+  ],
+};
+
+// Imaging lab result (X-ray) — returned when groupType=2 or when querying imaging results
+export const imagingLabResultsList = {
+  areResultsFullyLoaded: true,
+  isGroupingFullyLoaded: true,
+  groupBy: 1,
+  newResultGroups: [
+    {
+      key: 'GRP-XRAY',
+      contactType: '',
+      resultList: ['RES-XRAY'],
+      isInpatient: false,
+      isEDVisit: false,
+      isCurrentAdmission: false,
+      visitProviderID: 'PROV-HIBBERT',
+      organizationID: 'ORG-SPRINGFIELD',
+      sortDate: '2025-08-05T10:00:00',
+      formattedDate: 'Aug 5, 2025',
+      isLargeGroup: false,
+    },
+  ],
+  organizationLoadMoreInfo: {},
+  newResults: {},
+  newProviderPhotoInfo: {},
+};
+
+export const imagingLabResultDetails = {
+  orderName: 'XR Chest 2 Views',
+  key: 'RES-XRAY',
+  results: [
+    {
+      name: 'XR Chest 2 Views',
+      key: 'RES-XRAY',
+      showName: false,
+      showDetails: true,
+      orderMetadata: {
+        orderProviderName: 'Julius Hibbert, MD',
+        unreadCommentingProviderName: '',
+        readingProviderName: 'Julius Hibbert, MD',
+        resultTimestampDisplay: 'Aug 5, 2025 11:00 AM',
+        collectionTimestampsDisplay: 'Aug 5, 2025 10:00 AM',
+        specimensDisplay: '',
+        resultStatus: 'Final',
+        resultingLab: {
+          name: 'Springfield General Hospital Radiology',
+          address: ['123 Main Street', 'Springfield, NT 49007'],
+          phoneNumber: '(555) 636-3000',
+          labDirector: 'Julius Hibbert, MD',
+          cliaNumber: '',
+        },
+        resultType: 3,
+        read: 0,
+      },
+      resultComponents: [],
+      studyResult: {
+        narrative: {
+          isRTF: false,
+          hasContent: true,
+          contentAsString: 'FINDINGS: Heart size is at the upper limits of normal. Lungs are clear. No pleural effusion or pneumothorax. Bony structures are intact. Mild degenerative changes of the thoracic spine.',
+          contentAsHtml: '<p>FINDINGS: Heart size is at the upper limits of normal. Lungs are clear. No pleural effusion or pneumothorax. Bony structures are intact. Mild degenerative changes of the thoracic spine.</p>',
+          signingInstantTimestamp: '2025-08-05T11:00:00Z',
+        },
+        impression: {
+          isRTF: false,
+          hasContent: true,
+          contentAsString: 'IMPRESSION: No acute cardiopulmonary abnormality. Cardiomegaly borderline. Recommend clinical correlation.',
+          contentAsHtml: '<p>IMPRESSION: No acute cardiopulmonary abnormality. Cardiomegaly borderline. Recommend clinical correlation.</p>',
+          signingInstantTimestamp: '2025-08-05T11:00:00Z',
+        },
+        combinedRTFNarrativeImpression: { isRTF: false, hasContent: false, contentAsString: '', contentAsHtml: '', signingInstantTimestamp: '' },
+        addenda: [],
+        isCupidAddendum: false,
+        transcriptions: [],
+        ecgDiagnosis: [],
+        hasStudyContent: true,
+      },
+      shouldHideHistoricalData: false,
+      resultNote: { isRTF: false, hasContent: false, contentAsString: '', contentAsHtml: '', signingInstantTimestamp: '' },
+      reportDetails: {
+        isDownloadablePDFReport: false,
+        reportID: 'RPT-XRAY-001',
+        openRemotely: false,
+        reportContext: '',
+        reportVars: { ordId: 'ORD-XRAY-001', ordDat: 'ORD-XRAY-001-DAT' },
+      },
+      scans: [],
+      imageStudies: [
+        {
+          studyId: imaging.studyUID,
+          studyDescription: 'XR Chest 2 Views',
+          studyDate: '2025-08-05',
+          modality: 'CR',
+          viewerUrl: '',
+          numberOfImages: 2,
+        },
+      ],
+      indicators: [],
+      geneticProfileLink: '',
+      shareEverywhereLogin: false,
+      showProviderNotReviewed: false,
+      providerComments: [],
+      resultLetter: { isRTF: false, hasContent: false, contentAsString: '', contentAsHtml: '', signingInstantTimestamp: '' },
+      warningType: '',
+      warningMessage: '',
+      variants: [],
+      tooManyVariants: false,
+      hasComment: false,
+      hasAllDetails: true,
+      isAbnormal: false,
+    },
+  ],
+  orderLimitReached: false,
+  ordersDeduplicated: false,
+  hideEncInfo: false,
+};
+
+// Report content HTML with data-fdi-context for image viewer access
+export const imagingReportContent = {
+  reportContent: `<div class="report-content"><h3>XR Chest 2 Views</h3><p>FINDINGS: Heart size is at the upper limits of normal.</p><div data-fdi-context='${JSON.stringify({ fdi: 'FDI-XRAY-001', ord: 'ORD-XRAY-001' })}'><a href="#">View Images</a></div></div>`,
+  reportCss: '',
+};
