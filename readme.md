@@ -1,33 +1,16 @@
 # MyChart Connector
 
-Access your Epic MyChart health records through AI. Works as both an **OpenClaw plugin** and a hosted **MCP server** — use it with any MCP-compatible client including Claude Desktop, the Claude iOS/Android mobile app, Claude Code, or any other MCP client.
+**Let AI manage your healthcare.** Ask Claude to request a prescription refill, message your doctor to schedule an appointment, review your latest lab results, or update your insurance information — all through a natural conversation. MyChart Connector connects to MyChart and exposes 35+ tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Unlike other health MCP servers that only let you read your data, MyChart Connector has full write support — send messages, request refills, and update your insurance information, not just view it.
+
+The project is **open source** and designed to run on your own infrastructure. Deploy your own instance to [Railway](https://railway.com) with one click — it provisions a database, generates secrets, and runs migrations automatically. You'll have a fully functional MCP server in under 3 minutes with zero configuration.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/5F69Mf?referralCode=xrxOUg)
 
-## Demo MCP Server
-
-Try the MCP server with fake patient data — no account or API key required.
-
-**Demo URL:** `https://mychart.fanpierlabs.com/api/mcp/demo`
-
-Add it to Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "mychart-demo": {
-      "type": "streamableHttp",
-      "url": "https://mychart.fanpierlabs.com/api/mcp/demo"
-    }
-  }
-}
-```
-
-The demo server exposes the same 30+ tools as the real MCP server (medications, lab results, vitals, messages, etc.) but returns fictional data for a sample patient. All meta tools (list_accounts, connect_instance, check_session, complete_2fa) work as well — they just return pre-connected status.
+Or try the hosted version at [mychart.fanpierlabs.com](https://mychart.fanpierlabs.com).
 
 ## What It Does
 
-Connects to any Epic MyChart patient portal and exposes 35+ tools for reading your health data:
+Connects to any Epic MyChart patient portal and exposes 35+ tools for reading and managing your health data:
 
 - **Profile** — name, DOB, MRN, PCP, email
 - **Medications** — current meds, dosages, refill details, pharmacy info
@@ -51,15 +34,49 @@ Connects to any Epic MyChart patient portal and exposes 35+ tools for reading yo
 
 ## How It Works
 
-MyChart Connector reverse-engineers Epic's MyChart web portal APIs. It logs in with your credentials, handles 2FA automatically (via TOTP authenticator codes), and makes the same API calls your browser would. No FHIR, no OAuth, no Epic developer account needed — just your MyChart username, password, and optionally a TOTP secret for automatic 2FA.
+MyChart Connector logs in with your credentials, handles 2FA automatically (via TOTP authenticator codes), and interacts with MyChart's APIs on your behalf. No FHIR, no OAuth, no Epic developer account needed — just your MyChart username, password, and optionally a TOTP secret for automatic 2FA.
 
-Sessions are kept alive automatically (pinging MyChart every 30 seconds) and re-established on expiry.
+Sessions are kept alive automatically and re-established on expiry.
 
-## Two Ways to Use It
+## Demo MCP Server
 
-### 1. OpenClaw Plugin (Local, No Server)
+Try the MCP server with fake patient data — no account or API key required.
 
-Runs entirely on your machine. All scraping happens locally.
+**Demo URL:** `https://mychart.fanpierlabs.com/api/mcp/demo`
+
+Add it to Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mychart-demo": {
+      "type": "streamableHttp",
+      "url": "https://mychart.fanpierlabs.com/api/mcp/demo"
+    }
+  }
+}
+```
+
+The demo server exposes the same 35+ tools as the real MCP server (medications, lab results, vitals, messages, etc.) but returns fictional data for a sample patient. All meta tools (list_accounts, connect_instance, check_session, complete_2fa) work as well — they just return pre-connected status.
+
+## Getting Started
+
+### 1. Claude Desktop
+
+The fastest way to get started. Sign up, connect your MyChart account, and add the MCP server to Claude Desktop.
+
+1. Sign up at [mychart.fanpierlabs.com](https://mychart.fanpierlabs.com) (or your self-hosted instance)
+2. Add your MyChart account — hostname, username, and password
+3. Generate an MCP URL
+4. In Claude Desktop: **Settings → MCP Servers → Add** → Name: `mychart` and MCP URL: the one you copied
+
+One URL works for all your MyChart accounts. If you have multiple accounts connected, tools accept an optional `instance` parameter to target a specific hospital. TOTP-enabled instances auto-connect on first tool call.
+
+MCP servers added in Claude Desktop automatically sync to the **Claude mobile app** and any other MCP-compatible client.
+
+### 2. OpenClaw Plugin (Local, No Server)
+
+Runs entirely on your machine with no server dependency.
 
 ```bash
 # Install
@@ -77,38 +94,6 @@ openclaw mychart reset
 ```
 
 The plugin auto-logs in on first tool call, keeps the session alive, and re-authenticates when it expires. Optionally import credentials from your browser (Chrome, Arc, Firefox) during setup.
-
-### 2. Hosted MCP Server (Web App)
-
-A Next.js web app that hosts a per-user MCP server. Deploy it and connect from any MCP client.
-
-**For users:**
-
-1. Sign up at the web app (email+password or Google OAuth)
-2. Add your MyChart account(s) — hostname, username, password, and optionally a TOTP secret
-3. Generate an API key at `POST /api/mcp-key`
-4. Add the MCP server URL to your client:
-
-```
-https://your-domain.com/api/mcp?key=YOUR_API_KEY
-```
-
-One URL works for all your MyChart accounts. If you have multiple accounts connected, tools accept an optional `instance` parameter to target a specific hospital. TOTP-enabled instances auto-connect on first tool call.
-
-**Adding to Claude Desktop** (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "mychart": {
-      "type": "streamableHttp",
-      "url": "https://your-domain.com/api/mcp?key=YOUR_API_KEY"
-    }
-  }
-}
-```
-
-**Adding to Claude mobile app:** Go to Settings > MCP, add the same URL.
 
 ## Deployment
 
@@ -168,10 +153,26 @@ The scrapers are shared across all entry points (web app, OpenClaw plugin, CLI).
 
 ```bash
 bun install
-bun run dev          
-bun run cli          # CLI scraper
-bun run test         # Unit + web tests
-bun run lint         # ESLint
+
+# Web app
+cd web && bun run dev        # Next.js dev server
+cd web && bun run build      # Production build
+
+# Fake MyChart (for development without real credentials)
+cd fake-mychart && bun run dev   # Fake MyChart server on port 4000
+
+# CLI
+bun run cli                  # Run the CLI scraper
+
+# Tests
+bun run test                 # All tests (unit + web)
+bun run test:unit            # Scraper unit tests only
+bun run test:unit:web        # Web app tests only
+bun run test:fake-mychart    # Fake MyChart integration tests
+
+# Linting
+bun run lint                 # ESLint (scrapers + web)
+bun run fix                  # ESLint auto-fix
 ```
 
 ## License
