@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// GET / → 302 redirect to /MyChart/Authentication/Login
+// GET / → 302 redirect to /MyChart/
 // This is how the scraper discovers the firstPathPart
 export async function GET(request: Request) {
   const url = new URL(request.url);
