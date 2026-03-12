@@ -12,6 +12,7 @@
     "test:unit": "bun test scrapers/myChart/__tests__/*.test.ts shared/__tests__/*.test.ts",
     "test:unit:web": "cd web && bun test",
     "test:integration": "NODE_ENV=development bun test scrapers/myChart/__tests__/integration/",
+    "test:fake-mychart": "bun test scrapers/myChart/__tests__/fake-mychart/",
     "deploy": "python3 node_modules/deploy/main.py --config web/deploy.yaml"
   },
   "dependencies": {

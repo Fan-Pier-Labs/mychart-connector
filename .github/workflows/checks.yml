@@ -15,3 +15,28 @@ jobs:
       - run: cd web && bun --bun next build
       - run: docker build .
         timeout-minutes: 20
+
+  fake-mychart:
+    name: Fake MyChart integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Install fake-mychart deps
+        run: cd fake-mychart && bun install
+      - name: Build & start fake-mychart server
+        run: |
+          cd fake-mychart && bun run build && bun run start &
+          # Wait for server to be ready
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/ | grep -q '302'; then
+              echo "Server ready"
+              break
+            fi
+            echo "Waiting for server... ($i)"
+            sleep 1
+          done
+      - name: Run scrapers against fake-mychart
+        run: bun run test:fake-mychart

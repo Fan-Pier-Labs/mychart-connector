@@ -24,14 +24,18 @@ export class MyChartRequest {
   // The hostname of the MyChart site, eg. mychart.example.org
   hostname: string;
 
+  // Protocol to use for requests. Defaults to 'https'. Set to 'http' for local fake-mychart server.
+  protocol: string;
+
   // the first part of the path. For some instances, it is /MyChart-PRD. For others, it is /MyChart.
   firstPathPart: string = '';
 
-  constructor(hostname: string) {
+  constructor(hostname: string, protocol?: string) {
     this.cookieJar = new makeFetchCookie.toughCookie.CookieJar();
     this.fetchWithCookieJar = makeFetchCookie(fetch, this.cookieJar);
 
     this.hostname = MyChartRequest.normalizeHostname(hostname);
+    this.protocol = protocol ?? 'https';
   }
 
   /**
@@ -42,7 +46,9 @@ export class MyChartRequest {
     const trimmed = input.trim();
     try {
       const parsed = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
-      return parsed.hostname;
+      // Use host (includes port) instead of hostname (strips port)
+      // so that "localhost:4000" is preserved for local development
+      return parsed.host;
     } catch {
       return trimmed;
     }
@@ -61,6 +67,7 @@ export class MyChartRequest {
     return JSON.stringify({
       firstPathPart: this.firstPathPart,
       hostname: this.hostname,
+      protocol: this.protocol,
       cookies: await this.cookieJar.serialize()
     })
   }
@@ -69,7 +76,7 @@ export class MyChartRequest {
     try {
       const data = JSON.parse(serializedData);
       if (data && data.hostname && data.firstPathPart && data.cookies) {
-        const request = new MyChartRequest(data.hostname);
+        const request = new MyChartRequest(data.hostname, data.protocol);
         request.firstPathPart = data.firstPathPart;
         if (Object.keys(data.cookies).length > 0) {
           request.cookieJar = await tough.CookieJar.deserialize(data.cookies);
@@ -159,7 +166,7 @@ export class MyChartRequest {
       headers: finalHeaders
     }
 
-    const url = config.url ?? ('https://' + this.hostname + '/' + this.firstPathPart + config.path);
+    const url = config.url ?? (this.protocol + '://' + this.hostname + '/' + this.firstPathPart + config.path);
 
     let response ;
 
