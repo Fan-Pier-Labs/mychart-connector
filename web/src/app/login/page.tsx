@@ -18,6 +18,7 @@ import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/track";
 
 type AuthMode = "signin" | "signup";
+type TwoFactorMode = "totp" | "backup";
 
 const FEATURES = [
   {
@@ -124,6 +125,9 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode>("totp");
 
   const isLoggedIn = !ctx.sessionLoading && !!ctx.user;
 
@@ -160,10 +164,64 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
+      if (result.data?.twoFactorRedirect) {
+        track('auth_signin_2fa_required', { email });
+        setTwoFactorPending(true);
+        setLoading(false);
+        return;
+      }
       track('auth_signin_success', { email });
       router.push("/home");
     } catch (err) {
       toast.error("Network error: " + (err as Error).message);
+      setLoading(false);
+    }
+  }
+
+  async function handleTotpVerify() {
+    if (!totpCode) {
+      toast.error("Enter a verification code.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (twoFactorMode === "backup") {
+        const result = await authClient.twoFactor.verifyBackupCode({ code: totpCode });
+        if (result.error) {
+          toast.error(result.error.message || "Invalid backup code.");
+          setLoading(false);
+          return;
+        }
+      } else {
+        const result = await authClient.twoFactor.verifyTotp({ code: totpCode });
+        if (result.error) {
+          toast.error(result.error.message || "Invalid code.");
+          setLoading(false);
+          return;
+        }
+      }
+      track('auth_signin_2fa_success', { email });
+      router.push("/home");
+    } catch (err) {
+      toast.error("Verification failed: " + (err as Error).message);
+      setLoading(false);
+    }
+  }
+
+  async function handlePasskeySignIn() {
+    track('auth_passkey_signin_attempt');
+    setLoading(true);
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result?.error) {
+        toast.error(result.error.message || "Passkey sign-in failed.");
+        setLoading(false);
+        return;
+      }
+      track('auth_passkey_signin_success');
+      router.push("/home");
+    } catch (err) {
+      toast.error("Passkey sign-in failed: " + (err as Error).message);
       setLoading(false);
     }
   }
@@ -229,6 +287,62 @@ export default function LoginPage() {
             <p className="text-muted-foreground">
               {authMode === "signup" ? "Creating your account..." : "Signing in..."}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (twoFactorPending) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Two-Factor Authentication</CardTitle>
+            <CardDescription>
+              {twoFactorMode === "backup"
+                ? "Enter one of your backup codes."
+                : "Enter the 6-digit code from your authenticator app."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="totp-code">
+                {twoFactorMode === "backup" ? "Backup Code" : "Verification Code"}
+              </Label>
+              <Input
+                id="totp-code"
+                placeholder={twoFactorMode === "backup" ? "Backup code" : "6-digit code"}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleTotpVerify()}
+                autoFocus
+              />
+            </div>
+            <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleTotpVerify}>
+              Verify
+            </Button>
+            <div className="flex items-center justify-between">
+              <button
+                className="text-sm text-blue-600 hover:underline"
+                onClick={() => {
+                  setTwoFactorMode(twoFactorMode === "totp" ? "backup" : "totp");
+                  setTotpCode("");
+                }}
+              >
+                {twoFactorMode === "totp" ? "Use backup code" : "Use authenticator code"}
+              </button>
+              <button
+                className="text-sm text-slate-500 hover:underline"
+                onClick={() => {
+                  setTwoFactorPending(false);
+                  setTotpCode("");
+                  setTwoFactorMode("totp");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -536,6 +650,29 @@ export default function LoginPage() {
                       Sign in
                     </button>
                   </p>
+                </>
+              )}
+
+              {authMode === "signin" && (
+                <>
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-white px-2 text-slate-400">or</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handlePasskeySignIn}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33" />
+                    </svg>
+                    Sign in with Passkey
+                  </Button>
                 </>
               )}
 
