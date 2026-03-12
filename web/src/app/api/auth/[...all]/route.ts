@@ -12,8 +12,16 @@ async function ensureHandler() {
 }
 
 export async function GET(req: Request) {
-  const h = await ensureHandler();
-  return h.GET(req);
+  try {
+    const h = await ensureHandler();
+    return h.GET(req);
+  } catch (err) {
+    console.error(`[Auth Route] GET error:`, err);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 export async function POST(req: Request) {

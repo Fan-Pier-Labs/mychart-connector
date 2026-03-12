@@ -11,7 +11,7 @@ Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`.
 
 - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
 - Config: `web/deploy.yaml`
-- Domain: `mychartscrapers-staging.fanpierlabs.com` (CloudFront + ALB + Route53)
+- Domain: `mychart.fanpierlabs.com` (CloudFront + ALB + Route53)
 
 ## Secrets (AWS Secrets Manager, us-east-2)
 

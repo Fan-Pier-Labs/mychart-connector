@@ -2,7 +2,7 @@ name: CI
 on: push
 jobs:
   build:
-    name: All status checks
+    name: CI
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:

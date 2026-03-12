@@ -30,7 +30,7 @@ export async function getAuth(): Promise<any> {
   authInstance = betterAuth({
     database: pool,
     baseURL,
-    trustedOrigins: ['http://localhost:2343', 'http://localhost:3000', 'https://mychartscrapers-staging.fanpierlabs.com'],
+    trustedOrigins: ['http://localhost:2343', 'http://localhost:3000', 'https://mychart.fanpierlabs.com'],
     secret,
     emailAndPassword: {
       enabled: true,
