@@ -138,7 +138,7 @@ When reverse engineering health portal APIs (MyChart, etc.), the request headers
 
 - Always create a PR for new features — never push directly to `main`
 - CI must pass (lint, tests, build) before merging
-- Do not enable auto merge. Wait for the user to explicitly tell you to do so.
+- **NEVER merge pull requests or enable auto merge without the user's explicit permission.** Wait for the user to explicitly tell you to do so.
 - Make sure to write tests as well. Unit, and integration when appropriate. 
 
 ### Creating / Updating PRs
