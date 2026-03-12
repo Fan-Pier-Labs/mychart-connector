@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { checkForUpdate } from '../../../../shared/updateCheck';
-import pkg from '../../../../package.json';
+import { checkForUpdate } from '../../../../../shared/updateCheck';
+import pkg from '../../../../../package.json';
 
 export async function GET() {
   const result = await checkForUpdate({

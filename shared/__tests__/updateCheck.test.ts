@@ -39,21 +39,13 @@ describe('updateCheck', () => {
 
   describe('checkForUpdate', () => {
     let originalFetch: typeof globalThis.fetch;
-    let originalEnv: string | undefined;
 
     beforeEach(() => {
       originalFetch = globalThis.fetch;
-      originalEnv = process.env.NO_UPDATE_CHECK;
-      delete process.env.NO_UPDATE_CHECK;
     });
 
     afterEach(() => {
       globalThis.fetch = originalFetch;
-      if (originalEnv !== undefined) {
-        process.env.NO_UPDATE_CHECK = originalEnv;
-      } else {
-        delete process.env.NO_UPDATE_CHECK;
-      }
     });
 
     test('returns updateAvailable: true when behind', async () => {
@@ -90,12 +82,6 @@ describe('updateCheck', () => {
 
       const result = await checkForUpdate({ currentVersion: '1.0.0', packageName: 'test' });
       expect(result?.latestVersion).toBe('3.0.0');
-    });
-
-    test('returns null when NO_UPDATE_CHECK=1', async () => {
-      process.env.NO_UPDATE_CHECK = '1';
-      const result = await checkForUpdate({ currentVersion: '1.0.0', packageName: 'test' });
-      expect(result).toBeNull();
     });
 
     test('returns null on network failure', async () => {

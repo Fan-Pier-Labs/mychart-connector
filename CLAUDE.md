@@ -55,10 +55,6 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **BETTER_AUTH_URL**: Base URL for BetterAuth (defaults to `NEXT_PUBLIC_BASE_URL` or `http://localhost:3000`)
 - **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET**: Google OAuth credentials (optional, Google sign-in disabled without them)
 
-## Environment Variables
-
-- **NO_UPDATE_CHECK**: Set to `1` to disable the startup update check (CLI, OpenClaw plugin, web app)
-
 ## MyChart Login
 
 - Login field auto-detection: `LoginIdentifier` vs `Username` — detected from `loginpagecontroller.min.js`

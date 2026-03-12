@@ -1,8 +1,6 @@
 /**
  * Non-blocking update checker that compares the local version against the
  * latest GitHub release. Fire-and-forget — never throws or blocks the caller.
- *
- * Set NO_UPDATE_CHECK=1 to disable.
  */
 
 const GITHUB_RELEASES_URL =
@@ -33,8 +31,6 @@ export async function checkForUpdate(opts: {
   logger?: { warn: (msg: string) => void };
 }): Promise<UpdateCheckResult | null> {
   try {
-    if (process.env.NO_UPDATE_CHECK === '1') return null;
-
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(GITHUB_RELEASES_URL, {
