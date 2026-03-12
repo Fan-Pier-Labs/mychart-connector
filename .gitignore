@@ -41,3 +41,5 @@ typescript
 clo-to-jpg-converter/wasm/viewer.html
 clo-to-jpg-converter/input_study_one/amf_metadata.bin
 *.clo
+# Allow synthetic (non-PII) CLO test images for fake-mychart
+!fake-mychart/src/data/clo-images/*.clo
