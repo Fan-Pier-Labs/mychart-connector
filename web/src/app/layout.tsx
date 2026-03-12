@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppProvider } from "@/lib/app-context";
 import { Toaster } from "@/components/ui/toaster";
 import { AmplitudeProvider } from "@/components/AmplitudeProvider";
+import { UpdateBanner } from "@/components/UpdateBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({
       >
         <AppProvider>
           <AmplitudeProvider />
+          <UpdateBanner />
           {children}
           <Toaster />
         </AppProvider>

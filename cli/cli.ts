@@ -47,6 +47,7 @@ import { generateTotpCode } from '../scrapers/myChart/totp';
 import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
 import { sendTelemetryEvent } from '../shared/telemetry';
+import { checkForUpdate } from '../shared/updateCheck';
 
 // Note: We NEVER modify or delete macOS Keychain entries. Read-only via browser password extraction.
 
@@ -1173,6 +1174,10 @@ async function main() {
     action: cliArgs.action || 'default',
     host: cliArgs.host || 'unknown',
   });
+
+  // Fire-and-forget update check — never blocks or breaks the CLI
+  const { version } = await import('../package.json');
+  void checkForUpdate({ currentVersion: version, packageName: 'cli' });
 
   header('MyChart Scraper - Terminal');
 
