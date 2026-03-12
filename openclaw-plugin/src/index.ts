@@ -11,6 +11,8 @@ import { MyChartRequest } from '../../scrapers/myChart/myChartRequest';
 import { myChartUserPassLogin, complete2faFlow } from '../../scrapers/myChart/login';
 import { generateTotpCode } from '../../scrapers/myChart/totp';
 import { sendTelemetryEvent } from '../../shared/telemetry';
+import { checkForUpdate } from '../../shared/updateCheck';
+import pluginPkg from '../package.json';
 
 // Scraper imports
 import { getMyChartProfile, getEmail } from '../../scrapers/myChart/profile';
@@ -181,6 +183,10 @@ function makeTool(api: any, name: string, label: string, description: string, sc
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function register(api: any) {
   sendTelemetryEvent('openclaw_plugin_started');
+
+  // Fire-and-forget update check
+  void checkForUpdate({ currentVersion: pluginPkg.version, packageName: 'plugin', logger: api.logger });
+
   api.logger.info('MyChart Health Data plugin loaded');
 
   // ── CLI commands ────────────────────────────────────────────────────────────

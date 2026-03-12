@@ -21,8 +21,6 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 
 ## Key Commands
 
-- `bun run dev` — Run the app in development mode
-- `bun run build` — Build the app for production
 - `bun run lint` — Run ESLint
 - `bun run test` — Run unit tests + web tests
 - `bun run test:unit` — Run scraper unit tests only
@@ -47,7 +45,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
-  - Domain: `mychartscrapers-staging.fanpierlabs.com` (CloudFront + ALB + Route53)
+  - Domain: `mychart.fanpierlabs.com` (CloudFront + ALB + Route53)
   - Region: `us-east-2`
 
 ## Secrets (AWS Secrets Manager, us-east-2)

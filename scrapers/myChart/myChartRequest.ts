@@ -34,8 +34,24 @@ export class MyChartRequest {
     this.cookieJar = new makeFetchCookie.toughCookie.CookieJar();
     this.fetchWithCookieJar = makeFetchCookie(fetch, this.cookieJar);
 
-    this.hostname = hostname;
+    this.hostname = MyChartRequest.normalizeHostname(hostname);
     this.protocol = protocol ?? 'https';
+  }
+
+  /**
+   * Strip protocol/path from user input so only the bare hostname remains.
+   * e.g. "https://mychart.example.org/MyChart" → "mychart.example.org"
+   */
+  static normalizeHostname(input: string): string {
+    const trimmed = input.trim();
+    try {
+      const parsed = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+      // Use host (includes port) instead of hostname (strips port)
+      // so that "localhost:4000" is preserved for local development
+      return parsed.host;
+    } catch {
+      return trimmed;
+    }
   }
 
   getCookieInfo(): { count: number; names: string[] } {

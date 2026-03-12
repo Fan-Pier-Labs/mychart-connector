@@ -2,7 +2,7 @@ name: CI
 on: push
 jobs:
   build:
-    name: All status checks
+    name: CI
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -12,7 +12,7 @@ jobs:
       - run: cd web && bun install
       - run: bun run lint
       - run: bun run test
-      - run: bun run build
+      - run: cd web && bun --bun next build
       - run: docker build .
         timeout-minutes: 20
 
