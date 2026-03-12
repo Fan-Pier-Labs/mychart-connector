@@ -20,20 +20,26 @@ function isEnvVarMode(): boolean {
   return !!process.env.DATABASE_URL;
 }
 
+let _smClient: SecretsManagerClient | null = null;
+function getSmClient(): SecretsManagerClient {
+  if (!_smClient) {
+    _smClient = new SecretsManagerClient({
+      region: AWS_REGION,
+      // Use fanpierlabs profile for local dev; in Fargate the task role provides creds automatically
+      ...(process.env.NODE_ENV === 'development' ? { profile: 'fanpierlabs' } : {}),
+    });
+  }
+  return _smClient;
+}
+
 // Cache resolved secrets in memory
 let cachedDbPassword: string | null = null;
 let cachedEncryptionKey: string | null = null;
 let cachedBetterAuthSecret: string | null = null;
 let cachedGoogleOAuth: { clientId: string; clientSecret: string } | null = null;
 
-const client = new SecretsManagerClient({
-  region: AWS_REGION,
-  // Use fanpierlabs profile for local dev; in Fargate the task role provides creds automatically
-  ...(process.env.NODE_ENV === 'development' ? { profile: 'fanpierlabs' } : {}),
-});
-
 async function getSecretValue(arn: string): Promise<string> {
-  const resp = await client.send(new GetSecretValueCommand({ SecretId: arn }));
+  const resp = await getSmClient().send(new GetSecretValueCommand({ SecretId: arn }));
   if (!resp.SecretString) throw new Error(`Secret ${arn} has no string value`);
   return resp.SecretString;
 }
