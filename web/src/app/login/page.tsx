@@ -261,7 +261,7 @@ export default function LoginPage() {
               Access 30+ health data categories, send messages to your care team, and analyze your
               medical data with AI — including data that FHIR APIs don&apos;t expose.
             </p>
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
+            <div className="mt-10 flex flex-col sm:flex-row gap-4 items-start">
               <Button
                 size="lg"
                 className="bg-blue-600 hover:bg-blue-500 text-white text-base px-8 h-12"
@@ -271,6 +271,18 @@ export default function LoginPage() {
               >
                 Get Started
               </Button>
+              <a
+                href="https://railway.com/deploy/5F69Mf?referralCode=xrxOUg"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://railway.com/button.svg"
+                  alt="Deploy on Railway"
+                  className="h-12"
+                />
+              </a>
               <Button
                 size="lg"
                 variant="outline"
