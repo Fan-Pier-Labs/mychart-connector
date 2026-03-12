@@ -60,7 +60,7 @@ export function createDemoMcpServer(): McpServer {
       return jsonResult([
         {
           hostname: DEMO_HOSTNAME,
-          username: 'sarahchen88',
+          username: 'homersimpson742',
           connected: true,
           hasTotpSecret: true,
         },
