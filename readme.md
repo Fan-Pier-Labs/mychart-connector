@@ -44,19 +44,6 @@ Try the MCP server with fake patient data — no account or API key required.
 
 **Demo URL:** `https://mychart.fanpierlabs.com/api/mcp/demo`
 
-Add it to Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "mychart-demo": {
-      "type": "streamableHttp",
-      "url": "https://mychart.fanpierlabs.com/api/mcp/demo"
-    }
-  }
-}
-```
-
 The demo server exposes the same 35+ tools as the real MCP server (medications, lab results, vitals, messages, etc.) but returns fictional data for a sample patient. All meta tools (list_accounts, connect_instance, check_session, complete_2fa) work as well — they just return pre-connected status.
 
 ## Getting Started
