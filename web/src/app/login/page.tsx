@@ -362,37 +362,35 @@ export default function LoginPage() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400"></span>
               </span>
-              Open-source MCP server for health data
+              Open-source Claude {"<->"} MyChart connector
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-[1.1]">
-              Your entire health record,{" "}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-[1.1] max-w-xl">
+              Manage your health data with{" "}
               <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                accessible to AI
+                Claude AI
               </span>
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-slate-300 leading-relaxed max-w-2xl">
-              Connect any MyChart portal to Claude, ChatGPT, or any MCP-compatible AI assistant.
-              Access 30+ health data categories, send messages to your care team, and analyze your
-              medical data with AI — including data that FHIR APIs don&apos;t expose.
+              Connect MyChart portal to Claude (or other AI assistants).<br />
+              Manage your health records, send messages, book appointments, request refills, and more all with AI.<br /><br />
+              Open-source. 2 minute setup on Railway.
             </p>
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
-              <Button
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-500 text-white text-base px-8 h-12"
-                onClick={() => {
-                  document.getElementById("get-started")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Get Started
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white text-base px-8 h-12"
-                onClick={loadDemo}
-              >
-                View Demo
-              </Button>
+            <div className="mt-10 flex flex-col sm:flex-row gap-4 items-start">
+              <a 
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ cursor: "pointer" }}
+                href="https://railway.com/deploy/5F69Mf?referralCode=xrxOUg"
+                >
+                <Button
+                  style={{ cursor: "pointer" }}
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-base px-8 h-12"
+                >
+                  Set it up on Railway →
+                </Button>
+              </a>
+              
               <a
                 href="https://github.com/Fan-Pier-Labs/mychart-connector"
                 target="_blank"
@@ -498,34 +496,6 @@ export default function LoginPage() {
                 </p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Self-Host */}
-      <section className="bg-white py-20 sm:py-28 border-t border-slate-200">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-              Self-host in one click
-            </h2>
-            <p className="mt-4 text-lg text-slate-500">
-              Deploy your own instance and keep full control of your data.
-            </p>
-          </div>
-          <div className="flex justify-center">
-            <a
-              href="https://railway.com/template/mychart-mcp?referralCode=fan-pier-labs"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                src="https://railway.com/button.svg"
-                alt="Deploy on Railway"
-                height="44"
-                style={{ height: 44 }}
-              />
-            </a>
           </div>
         </div>
       </section>
