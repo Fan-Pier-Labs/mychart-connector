@@ -3,6 +3,6 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "bun --bun next start -p ${PORT:-8080}"
+startCommand = "sh -c 'bun --bun next start -p ${PORT:-8080}'"
 healthcheckPath = "/"
 restartPolicyType = "on_failure"
