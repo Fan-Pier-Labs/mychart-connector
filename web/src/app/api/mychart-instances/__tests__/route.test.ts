@@ -60,7 +60,7 @@ mock.module('@/lib/sessions', () => ({
 }));
 
 // Mock auto-connect
-const mockAutoConnect = mock(() => Promise.resolve('logged_in' as const));
+const mockAutoConnect = mock(() => Promise.resolve({ state: 'logged_in' as const }));
 mock.module('@/lib/mcp/auto-connect', () => ({
   autoConnectInstance: mockAutoConnect,
 }));
@@ -105,7 +105,7 @@ describe('GET /api/mychart-instances', () => {
     mockGetInstances.mockResolvedValueOnce([inst]);
     mockAutoConnect.mockImplementationOnce(async () => {
       entryStore.set('user-1:inst-1', { status: 'logged_in', request: {} });
-      return 'logged_in';
+      return { state: 'logged_in' };
     });
 
     const res = await GET(makeRequest() as never);
@@ -143,7 +143,7 @@ describe('GET /api/mychart-instances', () => {
   it('reports connected=false when auto-connect fails', async () => {
     const inst = makeInstance({ totpSecret: 'ABCDEF' });
     mockGetInstances.mockResolvedValueOnce([inst]);
-    mockAutoConnect.mockResolvedValueOnce('error');
+    mockAutoConnect.mockResolvedValueOnce({ state: 'error' });
 
     const res = await GET(makeRequest() as never);
     const body = await res.json();
