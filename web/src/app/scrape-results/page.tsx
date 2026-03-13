@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAppContext } from "@/lib/app-context";
-import { DataRow, DataSection, ArraySection, BillingVisits, VisitsCard, VisitItem, LabItem } from "@/components/data-display";
+import { DataRow, DataSection, ArraySection, BillingVisits, VisitsCard, VisitItem, LabItem, safeText } from "@/components/data-display";
 import { CorrelatedTimeline } from "@/components/correlated-timeline";
 import type {
   MedicationType,
@@ -350,7 +350,7 @@ export default function ScrapeResultsPage() {
               {cov.groupNumber && <span>Group: {cov.groupNumber}</span>}
             </div>
             {cov.details?.map((d: string, j: number) => (
-              <p key={j} className="text-xs text-muted-foreground">{d}</p>
+              <p key={j} className="text-xs text-muted-foreground">{safeText(d)}</p>
             ))}
           </div>
         ))}
@@ -361,8 +361,8 @@ export default function ScrapeResultsPage() {
         {Array.isArray(results.careTeam) && results.careTeam.map((m: CareTeamMemberType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-medium">{m.name}</span>
-            {m.role && <Badge variant="outline" className="text-[10px] ml-2">{m.role}</Badge>}
-            {m.specialty && <p className="text-xs text-muted-foreground mt-1">{m.specialty}</p>}
+            {m.role && <Badge variant="outline" className="text-[10px] ml-2">{safeText(m.role)}</Badge>}
+            {m.specialty && <p className="text-xs text-muted-foreground mt-1">{safeText(m.specialty)}</p>}
           </div>
         ))}
       </ArraySection>
@@ -374,7 +374,7 @@ export default function ScrapeResultsPage() {
             <div className="flex items-center gap-2">
               <span className="font-medium">{ref.referredByProviderName} → {ref.referredToProviderName}</span>
               <Badge variant={ref.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">
-                {ref.statusString}
+                {safeText(ref.statusString)}
               </Badge>
             </div>
             <div className="text-xs text-muted-foreground mt-1">
@@ -608,7 +608,7 @@ export default function ScrapeResultsPage() {
               <p className="text-xs text-muted-foreground">{item.date}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
+              <Badge variant="outline" className="text-[10px]">{safeText(item.type)}</Badge>
               {!item.isRead && <Badge variant="default" className="text-[10px]">New</Badge>}
             </div>
           </div>
@@ -977,9 +977,9 @@ export default function ScrapeResultsPage() {
               <details key={i} className="bg-muted rounded-md">
                 <summary className="p-3 text-sm cursor-pointer hover:bg-muted/80">
                   <div className="inline">
-                    <span className="font-medium">{convo.subject}</span>
+                    <span className="font-medium">{safeText(convo.subject)}</span>
                     <span className="text-xs text-muted-foreground ml-2">
-                      {convo.senderName} - {convo.lastMessageDate}
+                      {safeText(convo.senderName)} - {safeText(convo.lastMessageDate)}
                     </span>
                     {convo.messages && convo.messages.length > 0 && (
                       <Badge variant="outline" className="text-[10px] ml-2">
@@ -1004,12 +1004,12 @@ export default function ScrapeResultsPage() {
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-medium">
-                            {msg.senderName}
+                            {safeText(msg.senderName)}
                             {msg.isFromPatient && (
                               <span className="text-blue-600 ml-1">(you)</span>
                             )}
                           </span>
-                          <span className="text-muted-foreground">{msg.sentDate}</span>
+                          <span className="text-muted-foreground">{safeText(msg.sentDate)}</span>
                         </div>
                         <div
                           className="text-xs whitespace-pre-wrap"
