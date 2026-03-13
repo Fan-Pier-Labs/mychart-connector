@@ -112,6 +112,7 @@ type Visit = {
   VisitTypeName: string;
   PrimaryProviderName?: string;
   PrimaryDepartment?: { Name: string };
+  Location?: string;
 };
 
 export function VisitsCard({ title, data, getVisits }: { title: string; data: DataWithError; getVisits: (d: NonNullable<DataWithError>) => Visit[] }) {
@@ -141,7 +142,10 @@ export function VisitItem({ visit }: { visit: Visit }) {
       <div className="text-xs text-muted-foreground mt-1">
         {visit.PrimaryProviderName && <span>Provider: {safeText(visit.PrimaryProviderName)}</span>}
         {visit.PrimaryDepartment?.Name && (
-          <span className="ml-3">Location: {safeText(visit.PrimaryDepartment.Name)}</span>
+          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment.Name)}</span>
+        )}
+        {visit.Location && (
+          <span className="ml-3">Location: {safeText(visit.Location)}</span>
         )}
       </div>
     </div>

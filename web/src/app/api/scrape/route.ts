@@ -43,9 +43,13 @@ function normalizeVisit(raw: any): {
   VisitTypeName: string;
   PrimaryProviderName?: string;
   PrimaryDepartment?: { Name: string };
+  Location?: string;
 } {
   // Already in standard format
   if (typeof raw.VisitTypeName === 'string') {
+    // Standard Epic visits store location info in PrimaryDepartment.Address
+    const deptAddr = raw.PrimaryDepartment?.Address;
+    const location = Array.isArray(deptAddr) ? deptAddr.filter(Boolean).join(', ') : undefined;
     return {
       Date: String(raw.Date ?? ''),
       Time: raw.Time != null ? String(raw.Time) : undefined,
@@ -54,21 +58,26 @@ function normalizeVisit(raw: any): {
       PrimaryDepartment: raw.PrimaryDepartment?.Name
         ? { Name: String(raw.PrimaryDepartment.Name) }
         : undefined,
+      Location: location || undefined,
     };
   }
 
   // Alternate format: {Patient, Physician, Department, Date, Time}
-  // Map alternate field names to canonical shape
+  // Department = clinical specialty (e.g. "Internal Medicine")
+  // Location = physical place (e.g. "Springfield General Hospital")
   const visitType = [raw.VisitType, raw.VisitTypeName, raw.Type, raw.type]
     .find(v => typeof v === 'string' && v.trim());
+  const dept = typeof raw.Department === 'string' ? raw.Department.trim() : undefined;
+  const location = typeof raw.Location === 'string' ? raw.Location.trim() : undefined;
   return {
     Date: String(raw.Date ?? ''),
     Time: raw.Time != null ? String(raw.Time) : undefined,
     VisitTypeName: visitType ?? 'Visit',
     PrimaryProviderName: String(raw.Physician ?? raw.Provider ?? raw.PrimaryProviderName ?? raw.provider ?? '').trim() || undefined,
-    PrimaryDepartment: (raw.Department || raw.Location || raw.PrimaryDepartment?.Name)
-      ? { Name: String(raw.Department ?? raw.Location ?? raw.PrimaryDepartment?.Name ?? '') }
+    PrimaryDepartment: (dept || raw.PrimaryDepartment?.Name)
+      ? { Name: String(dept ?? raw.PrimaryDepartment?.Name ?? '') }
       : undefined,
+    Location: location || undefined,
   };
 }
 
