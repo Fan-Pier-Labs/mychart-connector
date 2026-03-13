@@ -40,6 +40,7 @@ export async function autoConnectInstance(
       hostname: instance.hostname,
       user: instance.username,
       pass: instance.password,
+      skipSendCode: !!instance.totpSecret,
     });
   } catch (err) {
     const error = err as Error;
