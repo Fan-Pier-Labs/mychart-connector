@@ -286,8 +286,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return html(doLoginFailed());
       }
 
-      // Check if 2FA is required (controlled by env var)
-      const require2fa = process.env.FAKE_MYCHART_REQUIRE_2FA !== 'false';
+      // Check if 2FA is required (opt-in via env var, off by default)
+      const require2fa = process.env.FAKE_MYCHART_REQUIRE_2FA === 'true';
       if (require2fa) {
         // Return 2FA page — don't create session yet
         const sessionId = createSession();
