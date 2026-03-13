@@ -16,6 +16,54 @@ jobs:
       - run: docker build .
         timeout-minutes: 20
 
+  web-server-smoke:
+    name: Web server smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: cd web && bun install
+      - name: Build web app
+        run: cd web && bun --bun next build
+      - name: Start web server and verify health check
+        run: |
+          cd web && PORT=3000 bun run start &
+          SERVER_PID=$!
+
+          # Wait for server to be ready (up to 30s)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Server failed to start within 30s"
+              kill $SERVER_PID 2>/dev/null || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Verify health endpoint response
+          RESPONSE=$(curl -sf http://localhost:3000/api/health)
+          echo "Health check response: $RESPONSE"
+          echo "$RESPONSE" | grep -q '"status":"ok"'
+
+          # Verify the home page loads (should redirect to login)
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/)
+          echo "Home page status: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Expected 200, got $HTTP_CODE"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+
+          # Clean up
+          kill $SERVER_PID 2>/dev/null || true
+          echo "Web server smoke test passed"
+
   fake-mychart:
     name: Fake MyChart integration tests
     runs-on: ubuntu-latest
