@@ -89,8 +89,8 @@ async function resolveRequest(
     const autoConnectResults: { hostname: string; result: string }[] = [];
     for (const inst of totpInstances) {
       const result = await autoConnectInstance(userId, inst);
-      autoConnectResults.push({ hostname: inst.hostname, result });
-      console.log(`[mcp] resolveRequest: auto-connect ${inst.hostname} => ${result}`);
+      autoConnectResults.push({ hostname: inst.hostname, result: result.state });
+      console.log(`[mcp] resolveRequest: auto-connect ${inst.hostname} => ${result.state}`);
     }
 
     connected = getConnected();
@@ -213,8 +213,8 @@ export function createMcpServer(userId: string): McpServer {
 
         console.log(`[mcp] connect_instance: attempting auto-connect to ${inst.hostname} (hasTOTP=${!!inst.totpSecret})`);
         const result = await autoConnectInstance(userId, inst);
-        console.log(`[mcp] connect_instance: result=${result} for ${inst.hostname}`);
-        return jsonResult({ status: result, hostname: inst.hostname });
+        console.log(`[mcp] connect_instance: result=${result.state} for ${inst.hostname}`);
+        return jsonResult({ status: result.state, hostname: inst.hostname });
       } catch (err) {
         const error = err as Error;
         console.error(`[mcp] connect_instance: error -`, error.message, error.stack);

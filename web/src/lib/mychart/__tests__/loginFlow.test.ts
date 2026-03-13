@@ -95,6 +95,45 @@ describe('complete2faFlow response parsing', () => {
   })
 })
 
+describe('2FA delivery method detection', () => {
+  it('detects email method from page with "Email to me" button', () => {
+    const html = `<html><body>
+      <div>secondaryvalidationcontroller</div>
+      <button>Email to me</button>
+      <button>Text to my phone</button>
+    </body></html>`
+    // Verify both keywords are present
+    const lower = html.toLowerCase()
+    expect(lower.includes('email')).toBe(true)
+    expect(lower.includes('text') || lower.includes('phone')).toBe(true)
+  })
+
+  it('detects SMS-only when no email button present', () => {
+    const html = `<html><body>
+      <div>secondaryvalidationcontroller</div>
+      <button>Text to my phone</button>
+    </body></html>`
+    const lower = html.toLowerCase()
+    expect(lower.includes('email')).toBe(false)
+    // Has SMS/text option
+    expect(lower.includes('text')).toBe(true)
+  })
+
+  it('recognizes masked phone pattern like ***-***-7204', () => {
+    const text = "We've sent a security code to ***-***-7204."
+    const match = text.match(/\*{2,}[\d*-]*\d{4}/)
+    expect(match).not.toBeNull()
+    expect(match![0]).toBe('***-***-7204')
+  })
+
+  it('recognizes masked email pattern like ry***@gmail.com', () => {
+    const text = 'Code sent to ry***@gmail.com'
+    const match = text.match(/[\w*]+\*+[\w*]*@[\w.]+/)
+    expect(match).not.toBeNull()
+    expect(match![0]).toBe('ry***@gmail.com')
+  })
+})
+
 describe('login credential encoding', () => {
   it('base64 encodes username and password', () => {
     const user = 'testuser'

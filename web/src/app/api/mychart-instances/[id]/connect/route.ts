@@ -26,14 +26,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     console.log(`[connect] Attempting auto-connect for ${instance.hostname} (user=${user.id}, hasTOTP=${!!instance.totpSecret})`);
     const result = await autoConnectInstance(user.id, instance);
-    console.log(`[connect] Auto-connect result: ${result} for ${instance.hostname}`);
+    console.log(`[connect] Auto-connect result: ${result.state} for ${instance.hostname}`);
 
-    if (result === 'error') {
+    if (result.state === 'error') {
       return NextResponse.json({ state: 'error', error: `Login failed for ${instance.hostname}. Check your credentials.` });
     }
 
-    if (result === 'need_2fa') {
-      return NextResponse.json({ state: 'need_2fa', sessionKey });
+    if (result.state === 'need_2fa') {
+      return NextResponse.json({ state: 'need_2fa', sessionKey, twoFaDelivery: result.twoFaDelivery });
     }
 
     return NextResponse.json({ state: 'logged_in', sessionKey });
