@@ -30,6 +30,82 @@ import { getEhiExportTemplates } from '@/lib/mychart/ehiExport';
 import { getImagingResults } from '@/lib/mychart/imagingResults';
 import { getLinkedMyChartAccounts } from '@/lib/mychart/linkedMyChartAccounts';
 
+/**
+ * Normalize a raw visit object from any MyChart instance into the canonical
+ * UpcomingVisit shape. Some instances (e.g. UCLA) return simplified objects
+ * with keys like {Patient, Physician, Department, Date, Time} instead of the
+ * standard Epic format {Date, Time, VisitTypeName, PrimaryProviderName, PrimaryDepartment, ...}.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeVisit(raw: any): {
+  Date: string;
+  Time?: string;
+  VisitTypeName: string;
+  PrimaryProviderName?: string;
+  PrimaryDepartment?: { Name: string };
+} {
+  // Already in standard format
+  if (typeof raw.VisitTypeName === 'string') {
+    return {
+      Date: String(raw.Date ?? ''),
+      Time: raw.Time != null ? String(raw.Time) : undefined,
+      VisitTypeName: raw.VisitTypeName,
+      PrimaryProviderName: typeof raw.PrimaryProviderName === 'string' ? raw.PrimaryProviderName : undefined,
+      PrimaryDepartment: raw.PrimaryDepartment?.Name
+        ? { Name: String(raw.PrimaryDepartment.Name) }
+        : undefined,
+    };
+  }
+
+  // Alternate format: {Patient, Physician, Department, Date, Time}
+  // Map alternate field names to canonical shape
+  const visitType = [raw.VisitType, raw.VisitTypeName, raw.Type, raw.type]
+    .find(v => typeof v === 'string' && v.trim());
+  return {
+    Date: String(raw.Date ?? ''),
+    Time: raw.Time != null ? String(raw.Time) : undefined,
+    VisitTypeName: visitType ?? 'Visit',
+    PrimaryProviderName: String(raw.Physician ?? raw.Provider ?? raw.PrimaryProviderName ?? raw.provider ?? '').trim() || undefined,
+    PrimaryDepartment: (raw.Department || raw.Location || raw.PrimaryDepartment?.Name)
+      ? { Name: String(raw.Department ?? raw.Location ?? raw.PrimaryDepartment?.Name ?? '') }
+      : undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeVisitList(visits: any): any[] | undefined {
+  if (!Array.isArray(visits)) return undefined;
+  return visits.map(normalizeVisit);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeUpcomingVisits(raw: any) {
+  if (!raw || raw.error) return raw;
+  return {
+    ...raw,
+    LaterVisitsList: normalizeVisitList(raw.LaterVisitsList),
+    NextNDaysVisits: normalizeVisitList(raw.NextNDaysVisits),
+    InProgressVisits: normalizeVisitList(raw.InProgressVisits),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizePastVisits(raw: any) {
+  if (!raw || raw.error) return raw;
+  const list = raw.List;
+  if (!list || typeof list !== 'object') return raw;
+  const normalized: Record<string, { List: ReturnType<typeof normalizeVisit>[] }> = {};
+  for (const [orgKey, org] of Object.entries(list)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgData = org as any;
+    normalized[orgKey] = {
+      ...orgData,
+      List: Array.isArray(orgData.List) ? orgData.List.map(normalizeVisit) : [],
+    };
+  }
+  return { ...raw, List: normalized };
+}
+
 export async function POST(req: NextRequest) {
   sendTelemetryEvent('api_scrape_start', { categories_count: 29 });
   // Validate BetterAuth session
@@ -99,10 +175,16 @@ export async function POST(req: NextRequest) {
   );
 
 
+  // Normalize visit data — different MyChart instances return different field names
+  if (data.upcomingVisits && !data.upcomingVisits.error) {
+    data.upcomingVisits = normalizeUpcomingVisits(data.upcomingVisits);
+  }
+  if (data.pastVisits && !data.pastVisits.error) {
+    data.pastVisits = normalizePastVisits(data.pastVisits);
+  }
+
   // Don't delete session here — user may still need it for MCP URL generation
   // Sessions will expire naturally from the in-memory store
-
-
 
   return NextResponse.json(data);
 }
