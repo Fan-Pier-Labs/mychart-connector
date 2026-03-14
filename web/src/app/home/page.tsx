@@ -40,6 +40,7 @@ export default function HomePage() {
   const [twofaSessionKey, setTwofaSessionKey] = useState("");
   const [twofaCode, setTwofaCode] = useState("");
   const [twofaLoading, setTwofaLoading] = useState(false);
+  const [twofaDelivery, setTwofaDelivery] = useState<{ method: string; contact?: string } | null>(null);
 
   // TOTP setup state
   const [totpPromptInstanceId, setTotpPromptInstanceId] = useState("");
@@ -166,6 +167,7 @@ export default function HomePage() {
 
       if (data.state === "need_2fa") {
         setTwofaSessionKey(data.sessionKey);
+        setTwofaDelivery(data.twoFaDelivery || null);
         setConnectingId("");
         return;
       }
@@ -219,6 +221,7 @@ export default function HomePage() {
       ctx.setProfile(null);
       setTwofaSessionKey("");
       setTwofaCode("");
+      setTwofaDelivery(null);
       await ctx.refreshInstances();
 
       // Offer TOTP setup if the instance doesn't have one
@@ -545,7 +548,9 @@ export default function HomePage() {
           <CardHeader>
             <CardTitle>Two-Factor Authentication</CardTitle>
             <CardDescription>
-              A verification code has been sent to your email. Enter it below.
+              {twofaDelivery?.method === "sms"
+                ? `A verification code has been sent via text message${twofaDelivery.contact ? ` to ${twofaDelivery.contact}` : ""}. Enter it below.`
+                : `A verification code has been sent to your email${twofaDelivery?.contact ? ` (${twofaDelivery.contact})` : ""}. Enter it below.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -571,7 +576,7 @@ export default function HomePage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => { setTwofaSessionKey(""); setTwofaCode(""); }}
+              onClick={() => { setTwofaSessionKey(""); setTwofaCode(""); setTwofaDelivery(null); }}
             >
               Cancel
             </Button>
