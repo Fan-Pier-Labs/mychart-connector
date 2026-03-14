@@ -15,6 +15,8 @@ import * as homer from '@/data/homer';
 // Deep-clone so mutations don't affect the seed module
 // eslint-disable-next-line prefer-const
 let conversationsState = JSON.parse(JSON.stringify(homer.conversations));
+let emergencyContactsState = JSON.parse(JSON.stringify(homer.emergencyContacts));
+let ecIdCounter = 100;
 let composeIdCounter = 1000;
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -415,7 +417,49 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Emergency Contacts
   if (lower === 'api/personalinformation/getrelationships') {
-    return json(homer.emergencyContacts);
+    return json(emergencyContactsState);
+  }
+  if (lower === 'api/personalinformation/addrelationship') {
+    try {
+      const body = await request.json();
+      ecIdCounter++;
+      const newContact = {
+        id: `EC-${ecIdCounter}`,
+        name: body.name || '',
+        relationshipType: body.relationshipType || '',
+        phoneNumber: body.phoneNumber || '',
+        isEmergencyContact: body.isEmergencyContact ?? true,
+      };
+      emergencyContactsState.relationships.push(newContact);
+      return json({ success: true, id: newContact.id });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
+  }
+  if (lower === 'api/personalinformation/updaterelationship') {
+    try {
+      const body = await request.json();
+      const idx = emergencyContactsState.relationships.findIndex(
+        (r: { id?: string; name?: string }) => r.id === body.id || r.name === body.id
+      );
+      if (idx === -1) return json({ error: 'Contact not found' }, 404);
+      const existing = emergencyContactsState.relationships[idx];
+      emergencyContactsState.relationships[idx] = { ...existing, ...body };
+      return json({ success: true });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
+  }
+  if (lower === 'api/personalinformation/removerelationship') {
+    try {
+      const body = await request.json();
+      emergencyContactsState.relationships = emergencyContactsState.relationships.filter(
+        (r: { id?: string; name?: string }) => r.id !== body.id && r.name !== body.id
+      );
+      return json({ success: true });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
   }
 
   // Upcoming Orders

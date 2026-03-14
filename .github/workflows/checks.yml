@@ -76,7 +76,7 @@ jobs:
         run: cd fake-mychart && bun install
       - name: Build & start fake-mychart server
         run: |
-          cd fake-mychart && bun run build && bun run start &
+          cd fake-mychart && bun run build && bun run start -p 4000 &
           # Wait for server to be ready
           for i in $(seq 1 30); do
             if curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/ | grep -q '302'; then
