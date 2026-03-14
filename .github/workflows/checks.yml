@@ -92,3 +92,29 @@ jobs:
           done
       - name: Run scrapers against fake-mychart
         run: bun run test:fake-mychart
+
+  fake-mychart-terms:
+    name: Fake MyChart T&C integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Install fake-mychart deps
+        run: cd fake-mychart && bun install
+      - name: Build & start fake-mychart server with T&C required
+        run: |
+          cd fake-mychart && bun run build
+          FAKE_MYCHART_REQUIRE_TERMS=true PORT=4001 bun run start &
+          # Wait for server to be ready
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w '%{http_code}' http://localhost:4001/ | grep -q '302'; then
+              echo "Server ready"
+              break
+            fi
+            echo "Waiting for server... ($i)"
+            sleep 1
+          done
+      - name: Run T&C integration tests
+        run: FAKE_MYCHART_TERMS_HOST=localhost:4001 bun run test:fake-mychart-terms

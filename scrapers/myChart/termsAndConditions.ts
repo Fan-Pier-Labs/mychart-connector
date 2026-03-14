@@ -58,13 +58,25 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
     postPath = '/Authentication/TermsConditions';
   }
 
+  // If the form action starts with "/" it's a root-relative path that already
+  // includes the firstPathPart (e.g. "/MyChart/Authentication/TermsConditions").
+  // Convert it to an absolute URL to avoid makeRequest prepending firstPathPart again.
   const isAbsolute = postPath.startsWith('http');
+  const isRootRelative = postPath.startsWith('/');
+  let requestConfig: { url?: string; path?: string };
+  if (isAbsolute) {
+    requestConfig = { url: postPath };
+  } else if (isRootRelative) {
+    requestConfig = { url: `${mychartRequest.protocol}://${mychartRequest.hostname}${postPath}` };
+  } else {
+    requestConfig = { path: postPath };
+  }
 
   console.log('[terms] Posting T&C acceptance to:', postPath);
   console.log('[terms] Form fields:', Object.keys(formFields).join(', '));
 
   const acceptResp = await mychartRequest.makeRequest({
-    ...(isAbsolute ? { url: postPath } : { path: postPath }),
+    ...requestConfig,
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -102,9 +114,16 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
   for (const link of acceptLinks) {
     console.log('[terms] Trying accept link:', link);
     const linkIsAbsolute = link.startsWith('http');
-    const linkResp = await mychartRequest.makeRequest({
-      ...(linkIsAbsolute ? { url: link } : { path: link }),
-    });
+    const linkIsRootRelative = link.startsWith('/');
+    let linkConfig: { url?: string; path?: string };
+    if (linkIsAbsolute) {
+      linkConfig = { url: link };
+    } else if (linkIsRootRelative) {
+      linkConfig = { url: `${mychartRequest.protocol}://${mychartRequest.hostname}${link}` };
+    } else {
+      linkConfig = { path: link };
+    }
+    const linkResp = await mychartRequest.makeRequest(linkConfig);
     const linkBody = await linkResp.text();
     const linkUrl = linkResp.url || '';
 

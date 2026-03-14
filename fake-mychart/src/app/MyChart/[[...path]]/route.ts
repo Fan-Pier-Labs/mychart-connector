@@ -320,7 +320,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Successful login without 2FA — create session and set cookie
       const sessionId = createSession();
-      const response = html(doLoginSuccess());
+      // If terms are required, return the T&C page instead of the home page
+      const response = requireTerms()
+        ? html(termsConditionsPage())
+        : html(doLoginSuccess());
       response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
       return response;
 
