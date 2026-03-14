@@ -12,7 +12,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAppContext } from "@/lib/app-context";
-import { DataRow, DataSection, ArraySection, BillingVisits, VisitsCard, VisitItem, LabItem } from "@/components/data-display";
+import { DataRow, DataSection, ArraySection, BillingVisits, VisitsCard, VisitItem, LabItem, safeText } from "@/components/data-display";
+import { SectionErrorBoundary } from "@/components/error-boundary";
 import { CorrelatedTimeline } from "@/components/correlated-timeline";
 import type {
   MedicationType,
@@ -249,7 +250,9 @@ export default function ScrapeResultsPage() {
       )}
 
       {/* Correlated Timeline */}
-      <CorrelatedTimeline data={results} />
+      <SectionErrorBoundary fallbackTitle="Timeline rendering error">
+        <CorrelatedTimeline data={results} />
+      </SectionErrorBoundary>
 
       {/* Profile */}
       {results.profile && !results.profile.error && (
@@ -289,113 +292,127 @@ export default function ScrapeResultsPage() {
       </DataSection>
 
       {/* Medications */}
+      <SectionErrorBoundary fallbackTitle="Medications rendering error">
       <DataSection title="Medications" data={results.medications} count={results.medications?.medications?.length}>
         {results.medications?.medications?.map((med: MedicationType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{med.name}</span>
+              <span className="font-medium">{safeText(med.name)}</span>
               {med.isRefillable && <Badge variant="outline" className="text-[10px]">Refillable</Badge>}
               {med.isPatientReported && <Badge variant="secondary" className="text-[10px]">Self-reported</Badge>}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{med.sig}</p>
+            <p className="text-xs text-muted-foreground mt-1">{safeText(med.sig)}</p>
             <div className="flex gap-4 text-xs text-muted-foreground mt-1">
-              {med.authorizingProviderName && <span>Prescriber: {med.authorizingProviderName}</span>}
-              {med.pharmacy?.name && <span>Pharmacy: {med.pharmacy.name}</span>}
+              {med.authorizingProviderName && <span>Prescriber: {safeText(med.authorizingProviderName)}</span>}
+              {med.pharmacy?.name && <span>Pharmacy: {safeText(med.pharmacy.name)}</span>}
             </div>
           </div>
         ))}
       </DataSection>
+      </SectionErrorBoundary>
 
       {/* Allergies */}
+      <SectionErrorBoundary fallbackTitle="Allergies rendering error">
       <DataSection title="Allergies" data={results.allergies} count={results.allergies?.allergies?.length}>
         {results.allergies?.allergies?.map((a: AllergyType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
-              <span className="font-medium">{a.name}</span>
-              <span className="text-xs text-muted-foreground ml-2">({a.type})</span>
-              {a.reaction && <p className="text-xs text-muted-foreground">Reaction: {a.reaction}</p>}
+              <span className="font-medium">{safeText(a.name)}</span>
+              <span className="text-xs text-muted-foreground ml-2">({safeText(a.type)})</span>
+              {a.reaction && <p className="text-xs text-muted-foreground">Reaction: {safeText(a.reaction)}</p>}
             </div>
             {a.severity && (
               <Badge variant={a.severity === 'Severe' ? 'destructive' : 'outline'} className="text-[10px]">
-                {a.severity}
+                {safeText(a.severity)}
               </Badge>
             )}
           </div>
         ))}
       </DataSection>
+      </SectionErrorBoundary>
 
       {/* Immunizations */}
+      <SectionErrorBoundary fallbackTitle="Immunizations rendering error">
       <ArraySection title="Immunizations" data={results.immunizations}>
         {Array.isArray(results.immunizations) && results.immunizations.map((imm: ImmunizationType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
-            <span className="font-medium">{imm.name}</span>
+            <span className="font-medium">{safeText(imm.name)}</span>
             <p className="text-xs text-muted-foreground mt-1">
-              Dates: {imm.administeredDates.join(', ')}
+              Dates: {Array.isArray(imm.administeredDates) ? imm.administeredDates.map(d => safeText(d)).join(', ') : safeText(imm.administeredDates)}
             </p>
             {imm.organizationName && (
-              <p className="text-xs text-muted-foreground">Facility: {imm.organizationName}</p>
+              <p className="text-xs text-muted-foreground">Facility: {safeText(imm.organizationName)}</p>
             )}
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Insurance */}
+      <SectionErrorBoundary fallbackTitle="Insurance rendering error">
       <DataSection title="Insurance" data={results.insurance} count={results.insurance?.coverages?.length}>
         {results.insurance?.coverages?.map((cov: InsuranceCoverageType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
-            <span className="font-medium">{cov.planName}</span>
+            <span className="font-medium">{safeText(cov.planName)}</span>
             <div className="grid grid-cols-2 gap-1 mt-1 text-xs text-muted-foreground">
-              {cov.subscriberName && <span>Subscriber: {cov.subscriberName}</span>}
-              {cov.memberId && <span>Member ID: {cov.memberId}</span>}
-              {cov.groupNumber && <span>Group: {cov.groupNumber}</span>}
+              {cov.subscriberName && <span>Subscriber: {safeText(cov.subscriberName)}</span>}
+              {cov.memberId && <span>Member ID: {safeText(cov.memberId)}</span>}
+              {cov.groupNumber && <span>Group: {safeText(cov.groupNumber)}</span>}
             </div>
             {cov.details?.map((d: string, j: number) => (
-              <p key={j} className="text-xs text-muted-foreground">{d}</p>
+              <p key={j} className="text-xs text-muted-foreground">{safeText(d)}</p>
             ))}
           </div>
         ))}
       </DataSection>
+      </SectionErrorBoundary>
 
       {/* Care Team */}
+      <SectionErrorBoundary fallbackTitle="Care Team rendering error">
       <ArraySection title="Care Team" data={results.careTeam}>
         {Array.isArray(results.careTeam) && results.careTeam.map((m: CareTeamMemberType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
-            <span className="font-medium">{m.name}</span>
-            {m.role && <Badge variant="outline" className="text-[10px] ml-2">{m.role}</Badge>}
-            {m.specialty && <p className="text-xs text-muted-foreground mt-1">{m.specialty}</p>}
+            <span className="font-medium">{safeText(m.name)}</span>
+            {m.role && <Badge variant="outline" className="text-[10px] ml-2">{safeText(m.role)}</Badge>}
+            {m.specialty && <p className="text-xs text-muted-foreground mt-1">{safeText(m.specialty)}</p>}
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Referrals */}
+      <SectionErrorBoundary fallbackTitle="Referrals rendering error">
       <ArraySection title="Referrals" data={results.referrals}>
         {Array.isArray(results.referrals) && results.referrals.map((ref: ReferralType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{ref.referredByProviderName} → {ref.referredToProviderName}</span>
+              <span className="font-medium">{safeText(ref.referredByProviderName)} → {safeText(ref.referredToProviderName)}</span>
               <Badge variant={ref.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">
-                {ref.statusString}
+                {safeText(ref.statusString)}
               </Badge>
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              {ref.referredToFacility && <span>Facility: {ref.referredToFacility}</span>}
-              {ref.startDate && <span className="ml-3">{ref.startDate} - {ref.endDate}</span>}
+              {ref.referredToFacility && <span>Facility: {safeText(ref.referredToFacility)}</span>}
+              {ref.startDate && <span className="ml-3">{safeText(ref.startDate)} - {safeText(ref.endDate)}</span>}
             </div>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Health Issues */}
+      <SectionErrorBoundary fallbackTitle="Health Issues rendering error">
       <ArraySection title="Health Issues" data={results.healthIssues}>
         {Array.isArray(results.healthIssues) && results.healthIssues.map((hi: HealthIssueType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
-              <span className="font-medium">{hi.name}</span>
-              {hi.formattedDateNoted && <span className="text-xs text-muted-foreground ml-2">Noted: {hi.formattedDateNoted}</span>}
+              <span className="font-medium">{safeText(hi.name)}</span>
+              {hi.formattedDateNoted && <span className="text-xs text-muted-foreground ml-2">Noted: {safeText(hi.formattedDateNoted)}</span>}
             </div>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Vitals */}
       <ArraySection title="Vitals" data={results.vitals}>
@@ -599,23 +616,26 @@ export default function ScrapeResultsPage() {
       </ArraySection>
 
       {/* Activity Feed */}
+      <SectionErrorBoundary fallbackTitle="Activity Feed rendering error">
       <ArraySection title="Activity Feed" data={results.activityFeed}>
         {Array.isArray(results.activityFeed) && results.activityFeed.map((item: ActivityFeedItemType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
-              <span className="font-medium">{item.title}</span>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
-              <p className="text-xs text-muted-foreground">{item.date}</p>
+              <span className="font-medium">{safeText(item.title)}</span>
+              <p className="text-xs text-muted-foreground">{safeText(item.description)}</p>
+              <p className="text-xs text-muted-foreground">{safeText(item.date)}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
+              <Badge variant="outline" className="text-[10px]">{safeText(item.type)}</Badge>
               {!item.isRead && <Badge variant="default" className="text-[10px]">New</Badge>}
             </div>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Billing */}
+      <SectionErrorBoundary fallbackTitle="Billing rendering error">
       {results.billing && Array.isArray(results.billing) && results.billing.length > 0 && (
         <Card>
           <CardHeader>
@@ -650,10 +670,10 @@ export default function ScrapeResultsPage() {
                           return (
                             <div key={j} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
                               <div>
-                                <span className="font-medium">{stmt.Description || 'Statement'}</span>
+                                <span className="font-medium">{safeText(stmt.Description) || 'Statement'}</span>
                                 <p className="text-xs text-muted-foreground">
-                                  {stmt.FormattedDateDisplay || stmt.DateDisplay}
-                                  {stmt.StatementAmountDisplay && ` - ${stmt.StatementAmountDisplay}`}
+                                  {safeText(stmt.FormattedDateDisplay || stmt.DateDisplay)}
+                                  {stmt.StatementAmountDisplay && ` - ${safeText(stmt.StatementAmountDisplay)}`}
                                 </p>
                               </div>
                               {!isDemo && account.encBillingId && (
@@ -700,8 +720,10 @@ export default function ScrapeResultsPage() {
           </CardContent>
         </Card>
       )}
+      </SectionErrorBoundary>
 
       {/* Upcoming Visits */}
+      <SectionErrorBoundary fallbackTitle="Upcoming Visits rendering error">
       <VisitsCard
         title="Upcoming Visits"
         data={results.upcomingVisits}
@@ -714,8 +736,10 @@ export default function ScrapeResultsPage() {
           ];
         }}
       />
+      </SectionErrorBoundary>
 
       {/* Past Visits */}
+      <SectionErrorBoundary fallbackTitle="Past Visits rendering error">
       {results.pastVisits && !results.pastVisits?.error && results.pastVisits?.List && (
         <Card>
           <CardHeader>
@@ -731,8 +755,10 @@ export default function ScrapeResultsPage() {
           </CardContent>
         </Card>
       )}
+      </SectionErrorBoundary>
 
       {/* Lab Results */}
+      <SectionErrorBoundary fallbackTitle="Lab Results rendering error">
       {results.labResults && Array.isArray(results.labResults) && results.labResults.length > 0 && (
         <Card>
           <CardHeader>
@@ -745,8 +771,10 @@ export default function ScrapeResultsPage() {
           </CardContent>
         </Card>
       )}
+      </SectionErrorBoundary>
 
       {/* Imaging Results */}
+      <SectionErrorBoundary fallbackTitle="Imaging Results rendering error">
       <ArraySection title="Imaging Results" data={results.imagingResults}>
         {Array.isArray(results.imagingResults) && results.imagingResults.map((img: ImagingResultType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
@@ -772,100 +800,114 @@ export default function ScrapeResultsPage() {
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Upcoming Orders */}
+      <SectionErrorBoundary fallbackTitle="Upcoming Orders rendering error">
       <ArraySection title="Upcoming Orders" data={results.upcomingOrders}>
         {Array.isArray(results.upcomingOrders) && results.upcomingOrders.map((order: UpcomingOrderType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{order.orderName}</span>
-              <Badge variant="outline" className="text-[10px]">{order.orderType}</Badge>
-              <Badge variant="secondary" className="text-[10px]">{order.status}</Badge>
+              <span className="font-medium">{safeText(order.orderName)}</span>
+              <Badge variant="outline" className="text-[10px]">{safeText(order.orderType)}</Badge>
+              <Badge variant="secondary" className="text-[10px]">{safeText(order.status)}</Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {order.orderedByProvider} - {order.orderedDate}
-              {order.facilityName && ` | ${order.facilityName}`}
+              {safeText(order.orderedByProvider)} - {safeText(order.orderedDate)}
+              {order.facilityName && ` | ${safeText(order.facilityName)}`}
             </p>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Questionnaires */}
+      <SectionErrorBoundary fallbackTitle="Questionnaires rendering error">
       <ArraySection title="Questionnaires" data={results.questionnaires}>
         {Array.isArray(results.questionnaires) && results.questionnaires.map((q: QuestionnaireType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
-              <span className="font-medium">{q.name}</span>
-              {q.dueDate && <p className="text-xs text-muted-foreground">Due: {q.dueDate}</p>}
-              {q.completedDate && <p className="text-xs text-muted-foreground">Completed: {q.completedDate}</p>}
+              <span className="font-medium">{safeText(q.name)}</span>
+              {q.dueDate && <p className="text-xs text-muted-foreground">Due: {safeText(q.dueDate)}</p>}
+              {q.completedDate && <p className="text-xs text-muted-foreground">Completed: {safeText(q.completedDate)}</p>}
             </div>
             <Badge variant={q.status === 'Pending' ? 'default' : 'secondary'} className="text-[10px]">
-              {q.status}
+              {safeText(q.status)}
             </Badge>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Care Journeys */}
+      <SectionErrorBoundary fallbackTitle="Care Journeys rendering error">
       <ArraySection title="Care Journeys" data={results.careJourneys}>
         {Array.isArray(results.careJourneys) && results.careJourneys.map((cj: CareJourneyType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{cj.name}</span>
-              <Badge variant="outline" className="text-[10px]">{cj.status}</Badge>
+              <span className="font-medium">{safeText(cj.name)}</span>
+              <Badge variant="outline" className="text-[10px]">{safeText(cj.status)}</Badge>
             </div>
-            {cj.description && <p className="text-xs text-muted-foreground mt-1">{cj.description}</p>}
-            {cj.providerName && <p className="text-xs text-muted-foreground">Provider: {cj.providerName}</p>}
+            {cj.description && <p className="text-xs text-muted-foreground mt-1">{safeText(cj.description)}</p>}
+            {cj.providerName && <p className="text-xs text-muted-foreground">Provider: {safeText(cj.providerName)}</p>}
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Education Materials */}
+      <SectionErrorBoundary fallbackTitle="Education Materials rendering error">
       <ArraySection title="Education Materials" data={results.educationMaterials}>
         {Array.isArray(results.educationMaterials) && results.educationMaterials.map((ed: EducationMaterialType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
-            <span className="font-medium">{ed.title}</span>
+            <span className="font-medium">{safeText(ed.title)}</span>
             <div className="text-xs text-muted-foreground mt-1">
-              {ed.category && <span>{ed.category}</span>}
-              {ed.providerName && <span className="ml-3">Assigned by: {ed.providerName}</span>}
-              {ed.assignedDate && <span className="ml-3">{ed.assignedDate}</span>}
+              {ed.category && <span>{safeText(ed.category)}</span>}
+              {ed.providerName && <span className="ml-3">Assigned by: {safeText(ed.providerName)}</span>}
+              {ed.assignedDate && <span className="ml-3">{safeText(ed.assignedDate)}</span>}
             </div>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* EHI Export */}
+      <SectionErrorBoundary fallbackTitle="Health Information Export rendering error">
       <ArraySection title="Health Information Export" data={results.ehiExport}>
         {Array.isArray(results.ehiExport) && results.ehiExport.map((t: EhiTemplateType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{t.name}</span>
-              <Badge variant="outline" className="text-[10px]">{t.format}</Badge>
+              <span className="font-medium">{safeText(t.name)}</span>
+              <Badge variant="outline" className="text-[10px]">{safeText(t.format)}</Badge>
             </div>
-            {t.description && <p className="text-xs text-muted-foreground mt-1">{t.description}</p>}
+            {t.description && <p className="text-xs text-muted-foreground mt-1">{safeText(t.description)}</p>}
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Linked MyChart Accounts */}
+      <SectionErrorBoundary fallbackTitle="Linked MyChart Accounts rendering error">
       <ArraySection title="Linked MyChart Accounts" data={results.linkedMyChartAccounts}>
         {Array.isArray(results.linkedMyChartAccounts) && results.linkedMyChartAccounts.map((acct: LinkedMyChartAccountType, i: number) => (
           <div key={i} className="flex items-center gap-3 bg-muted rounded-md p-3 text-sm">
             {acct.logoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={acct.logoUrl} alt={acct.name} className="h-8 w-8 object-contain" />
+              <img src={acct.logoUrl} alt={safeText(acct.name)} className="h-8 w-8 object-contain" />
             )}
             <div>
-              <span className="font-medium">{acct.name}</span>
+              <span className="font-medium">{safeText(acct.name)}</span>
               {acct.lastEncounter && (
-                <p className="text-xs text-muted-foreground">Last encounter: {acct.lastEncounter}</p>
+                <p className="text-xs text-muted-foreground">Last encounter: {safeText(acct.lastEncounter)}</p>
               )}
             </div>
           </div>
         ))}
       </ArraySection>
+      </SectionErrorBoundary>
 
       {/* Messages / Conversations */}
+      <SectionErrorBoundary fallbackTitle="Conversations rendering error">
       {results.messages && !results.messages?.error && (
         <Card>
           <CardHeader>
@@ -1082,6 +1124,7 @@ export default function ScrapeResultsPage() {
           </CardContent>
         </Card>
       )}
+      </SectionErrorBoundary>
 
       {/* Raw JSON */}
       <Card>

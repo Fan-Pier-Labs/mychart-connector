@@ -14,6 +14,7 @@ import {
   type CorrelatedGroup,
   type MedicalEvent,
 } from "@/lib/correlation";
+import { safeText } from "@/components/data-display";
 import type { ScrapeResults } from "@/types/scrape-results";
 
 function EventBadge({ event }: { event: MedicalEvent }) {
@@ -52,10 +53,10 @@ function GroupCard({ group }: { group: CorrelatedGroup }) {
               <EventBadge event={event} />
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-medium truncate">{event.title}</div>
+              <div className="text-sm font-medium truncate">{safeText(event.title)}</div>
               {event.provider && (
                 <div className="text-xs text-muted-foreground">
-                  {event.provider}
+                  {safeText(event.provider)}
                 </div>
               )}
             </div>
