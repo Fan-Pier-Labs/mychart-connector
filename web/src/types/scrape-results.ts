@@ -252,6 +252,8 @@ export type UpcomingVisit = {
   VisitTypeName: string;
   PrimaryProviderName?: string;
   PrimaryDepartment?: { Name: string };
+  /** Physical location (e.g. "Springfield General Hospital, Suite 200") — separate from department/specialty */
+  Location?: string;
 };
 
 /** Organization entry in pastVisits.List */
