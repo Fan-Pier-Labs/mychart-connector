@@ -2,6 +2,8 @@ import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoogleOAuth } from './mcp/config';
 import { nextCookies } from 'better-auth/next-js';
+import { twoFactor } from 'better-auth/plugins/two-factor';
+import { passkey } from '@better-auth/passkey';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let authInstance: any = null;
@@ -58,7 +60,17 @@ export async function getAuth(): Promise<any> {
           },
         }
       : {}),
-    plugins: [nextCookies()],
+    plugins: [
+      nextCookies(),
+      twoFactor({
+        issuer: 'MyChart MCP',
+      }),
+      passkey({
+        rpID: new URL(baseURL).hostname,
+        rpName: 'MyChart MCP',
+        origin: baseURL,
+      }),
+    ],
   });
 
   return authInstance;

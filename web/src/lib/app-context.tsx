@@ -24,7 +24,7 @@ export interface MyChartInstanceInfo {
 
 interface AppContextType {
   // BetterAuth user
-  user: { id: string; name: string; email: string; image?: string | null } | null;
+  user: { id: string; name: string; email: string; image?: string | null; twoFactorEnabled?: boolean } | null;
   userLoading: boolean;
 
   // MyChart instances
@@ -138,6 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     name: session.user.name,
     email: session.user.email,
     image: session.user.image,
+    twoFactorEnabled: (session.user as Record<string, unknown>).twoFactorEnabled as boolean | undefined,
   } : null;
 
   return (
