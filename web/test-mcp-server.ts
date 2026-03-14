@@ -6,7 +6,6 @@
  *   npx tsx test-mcp-server.ts <mcp-url>
  *
  * Example:
- *   npx tsx test-mcp-server.ts https://localhost:3001/api/mcp?session=abc-123
  *   npx tsx test-mcp-server.ts http://localhost:3000/api/mcp?session=abc-123
  */
 
@@ -34,9 +33,6 @@ const EXPECTED_TOOLS = [
   "get_medical_history",
   "get_letters",
 ];
-
-// For self-signed certs (mkcert)
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 interface TestResult {
   name: string;
@@ -76,7 +72,7 @@ async function main() {
   if (!url) {
     console.error("Usage: npx tsx test-mcp-server.ts <mcp-url>");
     console.error(
-      "Example: npx tsx test-mcp-server.ts https://localhost:3001/api/mcp?session=abc-123"
+      "Example: npx tsx test-mcp-server.ts http://localhost:3000/api/mcp?session=abc-123"
     );
     process.exit(1);
   }
