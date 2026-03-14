@@ -1,7 +1,6 @@
 node_modules
 .next
 .git
-*.pem
 *.md
 deploy.yaml
 dev-https-proxy.mjs

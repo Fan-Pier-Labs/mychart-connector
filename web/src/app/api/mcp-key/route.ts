@@ -26,15 +26,7 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${req.nextUrl.protocol}//${req.nextUrl.host}`;
     const mcpUrl = `${baseUrl}/api/mcp?key=${key}`;
 
-    const response: Record<string, string> = { key, mcpUrl };
-
-    if (process.env.NODE_ENV === 'development') {
-      const httpPort = parseInt(req.nextUrl.port || '3000');
-      const sslPort = process.env.HTTPS_PORT || String(httpPort + 1);
-      response.mcpUrlSsl = `https://localhost:${sslPort}/api/mcp?key=${key}`;
-    }
-
-    return NextResponse.json(response);
+    return NextResponse.json({ key, mcpUrl });
   } catch (err) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

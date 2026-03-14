@@ -312,6 +312,15 @@ async function login(creds: { hostname: string; username: string; password: stri
         console.log('  Using 2FA code from --2fa arg');
         twofaCodeArray = [{ code: cliArgs.twofa, score: 1 }];
       } else {
+        // Show where the code was sent
+        if (loginResult.twoFaDelivery) {
+          const { method, contact } = loginResult.twoFaDelivery;
+          if (method === 'sms') {
+            console.log(`  2FA code sent via text message${contact ? ` to ${contact}` : ''}`);
+          } else {
+            console.log(`  2FA code sent via email${contact ? ` to ${contact}` : ''}`);
+          }
+        }
         console.log('  Waiting for 2FA code via Resend...');
         const resendCodes = await get2FaCodeFromResend(Date.now(), creds.hostname);
         if (resendCodes.length === 0) {

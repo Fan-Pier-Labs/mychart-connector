@@ -65,7 +65,7 @@ describe('autoConnectInstance', () => {
   it('returns logged_in if already connected with logged_in status', async () => {
     mockGetEntry.mockReturnValueOnce({ status: 'logged_in', request: {} });
     const result = await autoConnectInstance('user-1', makeInstance());
-    expect(result).toBe('logged_in');
+    expect(result.state).toBe('logged_in');
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
@@ -73,7 +73,7 @@ describe('autoConnectInstance', () => {
     mockGetEntry.mockReturnValueOnce({ status: 'need_2fa', request: {} });
     mockLogin.mockResolvedValueOnce({ state: 'logged_in', mychartRequest: {} as never });
     const result = await autoConnectInstance('user-1', makeInstance());
-    expect(result).toBe('logged_in');
+    expect(result.state).toBe('logged_in');
     expect(mockDelete).toHaveBeenCalled();
     expect(mockLogin).toHaveBeenCalled();
   });
@@ -82,7 +82,7 @@ describe('autoConnectInstance', () => {
     mockGetEntry.mockReturnValueOnce({ status: 'expired', request: {} });
     mockLogin.mockResolvedValueOnce({ state: 'logged_in', mychartRequest: {} as never });
     const result = await autoConnectInstance('user-1', makeInstance());
-    expect(result).toBe('logged_in');
+    expect(result.state).toBe('logged_in');
     expect(mockDelete).toHaveBeenCalled();
     expect(mockLogin).toHaveBeenCalled();
   });
@@ -91,7 +91,7 @@ describe('autoConnectInstance', () => {
     mockGetEntry.mockReturnValueOnce(undefined);
     mockLogin.mockResolvedValueOnce({ state: 'logged_in', mychartRequest: {} as never });
     const result = await autoConnectInstance('user-1', makeInstance());
-    expect(result).toBe('logged_in');
+    expect(result.state).toBe('logged_in');
     expect(mockSetSession).toHaveBeenCalled();
   });
 
@@ -99,7 +99,7 @@ describe('autoConnectInstance', () => {
     mockGetEntry.mockReturnValueOnce(undefined);
     mockLogin.mockResolvedValueOnce({ state: 'invalid_login' } as never);
     const result = await autoConnectInstance('user-1', makeInstance());
-    expect(result).toBe('error');
+    expect(result.state).toBe('error');
   });
 
   it('auto-completes 2FA with TOTP secret', async () => {
@@ -108,7 +108,7 @@ describe('autoConnectInstance', () => {
     mockComplete2fa.mockResolvedValueOnce({ state: 'logged_in', mychartRequest: {} as never });
 
     const result = await autoConnectInstance('user-1', makeInstance({ totpSecret: 'ABCDEF' }));
-    expect(result).toBe('logged_in');
+    expect(result.state).toBe('logged_in');
     expect(mockComplete2fa).toHaveBeenCalled();
   });
 
@@ -117,7 +117,7 @@ describe('autoConnectInstance', () => {
     mockLogin.mockResolvedValueOnce({ state: 'need_2fa', mychartRequest: {} as never });
 
     const result = await autoConnectInstance('user-1', makeInstance({ totpSecret: null }));
-    expect(result).toBe('need_2fa');
+    expect(result.state).toBe('need_2fa');
     // need_2fa path stores via sessionStore.set(), not setSession()
     expect(mockSetSession).not.toHaveBeenCalled();
   });

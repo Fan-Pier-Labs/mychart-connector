@@ -137,9 +137,10 @@ export const allergies = {
 export const healthIssues = {
   dataList: [
     { healthIssueItem: { name: 'Obesity', id: 'HI-001', formattedDateNoted: '01/15/2000', isReadOnly: false } },
-    { healthIssueItem: { name: 'Hypertension', id: 'HI-002', formattedDateNoted: '03/20/2010', isReadOnly: false } },
-    { healthIssueItem: { name: 'Hypercholesterolemia', id: 'HI-003', formattedDateNoted: '03/20/2010', isReadOnly: false } },
-    { healthIssueItem: { name: 'Radiation exposure, occupational', id: 'HI-004', formattedDateNoted: '08/01/1990', isReadOnly: false } },
+    { healthIssueItem: { name: 'High blood pressure', id: 'HI-002', formattedDateNoted: '03/20/2010', isReadOnly: false } },
+    { healthIssueItem: { name: 'High cholesterol', id: 'HI-003', formattedDateNoted: '03/20/2010', isReadOnly: false } },
+    { healthIssueItem: { name: 'Chronic radiation exposure (nuclear plant, Sector 7-G)', id: 'HI-004', formattedDateNoted: '08/01/1990', isReadOnly: false } },
+    { healthIssueItem: { name: 'Foreign body in brain (crayon, lodged since childhood)', id: 'HI-005', formattedDateNoted: '05/09/1972', isReadOnly: false } },
   ],
 };
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSession, validateSession, sessionCookieHeader } from '@/lib/session';
 import {
-  loginPage, loginPageControllerJs, doLoginSuccess, doLoginFailed,
-  secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage,
+  loginPage, loginPageControllerJs, doLoginSuccess, doLoginNeed2FA, doLoginFailed,
+  secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage, get2faMethods,
   careTeamPage, insurancePage, preventiveCarePage, billingSummaryPage, billingDetailsPage,
   medicationsPage, allergiesPage, healthIssuesPage, immunizationsPage,
   vitalsPage, medicalHistoryPage, testResultsPage, messagesPage, visitsPage,
@@ -288,7 +288,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return html(doLoginFailed());
       }
 
-      // Successful login — create session and set cookie
+      // Check if 2FA is required (opt-in via env var, off by default)
+      const require2fa = process.env.FAKE_MYCHART_REQUIRE_2FA === 'true';
+      if (require2fa) {
+        // Return 2FA page — don't create session yet
+        const sessionId = createSession();
+        const response = html(doLoginNeed2FA());
+        response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
+        return response;
+      }
+
+      // Successful login without 2FA — create session and set cookie
       const sessionId = createSession();
       const response = html(doLoginSuccess());
       response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
@@ -301,7 +311,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── 2FA ────────────────────────────────────────────────────────
   if (lower.startsWith('authentication/secondaryvalidation/sendcode')) {
-    return html('Code sent');
+    const body = await request.text();
+    const isEmail = body.includes('deliveryMethodEmail=true');
+    const maskedEmail = 'ho***@springfield.net';
+    const maskedPhone = '***-***-7890';
+    const contact = isEmail ? maskedEmail : maskedPhone;
+    return html(`Code sent to ${contact}`);
   }
 
   if (lower.startsWith('authentication/secondaryvalidation/validate')) {
