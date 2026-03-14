@@ -39,6 +39,14 @@ export async function getAuth(): Promise<any> {
   if (baseURL && !trustedOrigins.includes(baseURL)) {
     trustedOrigins.push(baseURL);
   }
+  // Allow additional trusted origins via env var (comma-separated)
+  if (process.env.TRUSTED_ORIGINS) {
+    for (const origin of process.env.TRUSTED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)) {
+      if (!trustedOrigins.includes(origin)) {
+        trustedOrigins.push(origin);
+      }
+    }
+  }
 
   authInstance = betterAuth({
     database: pool,
