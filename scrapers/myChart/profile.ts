@@ -118,18 +118,37 @@ export type ProfileData = {
 export function parseProfileHtml(body: string): ProfileData | null {
   const $ = cheerio.load(body)
   const printheaderDiv = $('.printheader').text()
-  const regex = /Name: (.+) \| DOB: (\d{1,2}\/\d{1,2}\/\d{4}) \| MRN: (\d+) \| PCP: (.*)/;
-  const matches = printheaderDiv.match(regex)
-  if (!matches) {
-    console.log('Could not find MRN on /Home page, no regex match', printheaderDiv)
-    return null;
+
+  // Full format: Name | DOB | MRN | PCP (most MyChart instances)
+  const fullRegex = /Name: (.+) \| DOB: (\d{1,2}\/\d{1,2}\/\d{4}) \| MRN: (\d+) \| PCP: (.*)/;
+  const fullMatch = printheaderDiv.match(fullRegex)
+  if (fullMatch) {
+    return {
+      name: fullMatch[1].trim(),
+      dob: fullMatch[2],
+      mrn: fullMatch[3],
+      pcp: fullMatch[4].trim(),
+    }
   }
-  return {
-    name: matches[1],
-    dob: matches[2],
-    mrn: matches[3],
-    pcp: matches[4],
+
+  // Partial format: Name | DOB only (e.g. MyChart Central at central.mychart.org)
+  const partialRegex = /Name: (.+?) \| DOB: (\d{1,2}\/\d{1,2}\/\d{4})/;
+  const partialMatch = printheaderDiv.match(partialRegex)
+  if (partialMatch) {
+    // Try to pick up MRN and PCP if present after DOB with different formats
+    const afterDob = printheaderDiv.slice(partialMatch.index! + partialMatch[0].length)
+    const mrnMatch = afterDob.match(/MRN:\s*(\d+)/)
+    const pcpMatch = afterDob.match(/PCP:\s*(.*)/)
+    return {
+      name: partialMatch[1].trim(),
+      dob: partialMatch[2],
+      mrn: mrnMatch?.[1] || '',
+      pcp: pcpMatch?.[1]?.trim() || '',
+    }
   }
+
+  console.log('Could not parse profile from /Home page, no regex match', printheaderDiv.trim())
+  return null;
 }
 
 export async function getMyChartProfile(mychartRequest: MyChartRequest): Promise<ProfileData | null> {
