@@ -476,25 +476,17 @@ export default function HomePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              By clicking &quot;Accept&quot;, you agree to MyChart&apos;s{" "}
+              By clicking &quot;Accept&quot;, you agree to the MyChart Terms and Conditions
+              presented by your healthcare provider. You can review Epic&apos;s{" "}
               <a
-                href="https://www.mychart.org/LegalTermsofUse"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Terms of Use
-              </a>{" "}
-              and{" "}
-              <a
-                href="https://www.mychart.org/PrivacyPolicy"
+                href="https://www.epic.com/privacypolicies"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline"
               >
                 Privacy Policy
               </a>
-              .
+              {" "}for more information.
             </p>
             <div className="flex gap-3">
               <Button
