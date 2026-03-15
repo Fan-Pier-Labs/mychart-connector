@@ -2,6 +2,11 @@ import { MyChartRequest } from './myChartRequest';
 import { getRequestVerificationTokenFromBody } from './util';
 import { generateTotpCode } from './totp';
 
+function logUnexpectedResponse(label: string, resp: Response) {
+  console.log(`  ${label} unexpected status: ${resp.status}`);
+  console.log(`  ${label} response headers:`, Object.fromEntries(resp.headers.entries()));
+}
+
 /**
  * Get a CSRF token required for MyChart API endpoints.
  */
@@ -9,7 +14,13 @@ async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | nu
   const res = await mychartRequest.makeRequest({
     path: '/Home/CSRFToken?noCache=' + Math.random(),
   });
-  const token = getRequestVerificationTokenFromBody(await res.text());
+  const body = await res.text();
+  // If we landed on the T&C page instead of getting a CSRF token, that's a problem
+  if (body.toLowerCase().includes('termsconditions') || body.toLowerCase().includes('terms and conditions')) {
+    console.log('  CSRF token request landed on Terms & Conditions page');
+    return null;
+  }
+  const token = getRequestVerificationTokenFromBody(body);
   return token || null;
 }
 
@@ -47,6 +58,12 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
     headers: apiHeaders,
     body: '{}',
   });
+  if (twoFactorInfoResp.status !== 200) {
+    logUnexpectedResponse('GetTwoFactorInfo', twoFactorInfoResp);
+    const body = await twoFactorInfoResp.text();
+    console.log('  GetTwoFactorInfo unexpected response body:', body);
+    return null;
+  }
   const twoFactorInfo = await twoFactorInfoResp.json();
   console.log('  2FA info:', JSON.stringify(twoFactorInfo));
 
@@ -65,6 +82,12 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
     headers: apiHeaders,
     body: JSON.stringify({ Password: password }),
   });
+  if (verifyResp.status !== 200) {
+    logUnexpectedResponse('VerifyPasswordAndUpdateContact', verifyResp);
+    const body = await verifyResp.text();
+    console.log('  VerifyPasswordAndUpdateContact unexpected response body:', body);
+    return null;
+  }
   const verifyResult = await verifyResp.json();
 
   if (verifyResult.IsPasswordValid === false || verifyResult.isPasswordValid === false) {
@@ -81,6 +104,12 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
     headers: apiHeaders,
     body: '{}',
   });
+  if (qrResp.status !== 200) {
+    logUnexpectedResponse('TotpQrCode', qrResp);
+    const body = await qrResp.text();
+    console.log('  TotpQrCode unexpected response body:', body);
+    return null;
+  }
   const qrResult = await qrResp.json();
 
   // The secret key may be in various fields depending on the MyChart version

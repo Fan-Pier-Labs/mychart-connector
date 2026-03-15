@@ -34,6 +34,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ state: 'error', error: 'Error completing 2FA' });
     }
 
+    if (result.state === 'need_terms_acceptance') {
+      const metadata = getSessionMetadata(sessionKey);
+      setSession(sessionKey, result.mychartRequest, metadata ?? undefined);
+      const { sessionStore } = await import('../../../../../scrapers/myChart/sessionStore');
+      sessionStore.setStatus(sessionKey, 'need_terms_acceptance');
+      return NextResponse.json({ state: 'need_terms_acceptance', sessionKey });
+    }
+
     const infoAfter = result.mychartRequest.getCookieInfo();
     console.log(`[2fa] Cookies after 2FA: ${infoAfter.count} (was ${infoBefore.count})`);
 

@@ -78,7 +78,7 @@ export type TwoFaDeliveryInfo = {
 }
 
 export type LoginResult = {
-  state: 'logged_in' | 'need_2fa' | 'invalid_login' | 'error'
+  state: 'logged_in' | 'need_2fa' | 'need_terms_acceptance' | 'invalid_login' | 'error'
   error?: string
   mychartRequest: MyChartRequest;
 
@@ -331,6 +331,15 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
     }
   }
 
+  // Check if we landed on Terms & Conditions page (not 2FA, not home)
+  if (bodyLower.includes('termsconditions') || bodyLower.includes('terms and conditions')) {
+    console.log('Landed on Terms & Conditions page after login');
+    return {
+      state: 'need_terms_acceptance',
+      mychartRequest
+    }
+  }
+
   console.log('i am at some page, i dont know what to do!')
   console.log('Response URL:', responseUrl)
   console.log('Page snippet (first 500 chars):', secondaryAuthPage.substring(0, 500))
@@ -348,7 +357,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
 // then we have full access to the user's mychart account.
 
 export type TwoFaResult = {
-  state: 'logged_in' | 'invalid_2fa' | 'error'
+  state: 'logged_in' | 'need_terms_acceptance' | 'invalid_2fa' | 'error'
   mychartRequest: MyChartRequest
 }
 
@@ -400,7 +409,18 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
     const respBody = await resp.json()
 
     if (respBody.Success === true) {
-      await mychartRequest.makeRequest({path: '/inside.asp'})
+      const insideResp = await mychartRequest.makeRequest({path: '/inside.asp'})
+      const insideBody = await insideResp.text();
+      const insideBodyLower = insideBody.toLowerCase();
+
+      // Check if we landed on Terms & Conditions page
+      if (insideBodyLower.includes('termsconditions') || insideBodyLower.includes('terms and conditions')) {
+        console.log('Landed on Terms & Conditions page after 2FA');
+        return {
+          state: 'need_terms_acceptance',
+          mychartRequest
+        };
+      }
 
       return {
         state: 'logged_in',

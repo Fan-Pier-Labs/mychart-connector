@@ -36,6 +36,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ state: 'need_2fa', sessionKey, twoFaDelivery: result.twoFaDelivery });
     }
 
+    if (result.state === 'need_terms_acceptance') {
+      return NextResponse.json({ state: 'need_terms_acceptance', sessionKey });
+    }
+
     return NextResponse.json({ state: 'logged_in', sessionKey });
   } catch (err) {
     if (err instanceof AuthError) {
