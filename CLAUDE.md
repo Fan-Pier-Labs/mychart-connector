@@ -38,6 +38,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **[Deployment details](docs/deployment.md)** — Additional infrastructure notes
 - **[MyChart features](MYCHART_FEATURES.md)** — Full inventory of MyChart features and scraper coverage
 - **[MyChart TOTP](docs/mychart-totp.md)** — TOTP authenticator app 2FA setup, API endpoints, CLI flags
+- **[Self-hosting](SELF_HOSTING.md)** — Run locally with PostgreSQL, ngrok/Cloudflare Tunnel, and env-var config
 
 ## Deployment
 
