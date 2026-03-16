@@ -1183,6 +1183,23 @@ export function profilePage(): string {
   `);
 }
 
+// ─── Terms & Conditions ──────────────────────────────────────────────
+export function termsConditionsPage(): string {
+  const token = generateCsrfToken();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><title>MyChart - Terms and Conditions</title></head>
+<body>
+  <div>Terms and Conditions</div>
+  <p>Please review and accept the MyChart Terms and Conditions to continue.</p>
+  <form method="POST" action="/${FIRST_PATH}/Authentication/TermsConditions">
+    <input name="__RequestVerificationToken" type="hidden" value="${token}" />
+    <p>By clicking Accept, you agree to the MyChart Terms of Use and Privacy Policy.</p>
+    <button type="submit">I Accept</button>
+  </form>
+</body></html>`;
+}
+
 // ─── Token-only pages (backward compat for scrapers) ──────────────────
 export function csrfTokenPage(): string {
   const token = generateCsrfToken();

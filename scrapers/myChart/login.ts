@@ -5,6 +5,7 @@ import fs from 'fs';
 import { getRequestVerificationTokenFromBody } from "./util";
 import { changeDirToPackageRoot } from "../../shared/util";
 import { sendTelemetryEvent } from "../../shared/telemetry";
+import { acceptTermsAndConditions } from "./termsAndConditions";
 
 
 // Just for testing / local development
@@ -331,6 +332,24 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
     }
   }
 
+  // Check if we landed on Terms & Conditions page — auto-accept silently
+  if (bodyLower.includes('termsconditions') || bodyLower.includes('terms and conditions')) {
+    console.log('Landed on Terms & Conditions page after login, auto-accepting');
+    const accepted = await acceptTermsAndConditions(mychartRequest);
+    if (accepted) {
+      return {
+        state: 'logged_in',
+        mychartRequest
+      }
+    }
+    console.log('Failed to auto-accept Terms & Conditions');
+    return {
+      state: 'error',
+      error: 'Failed to accept MyChart Terms & Conditions',
+      mychartRequest
+    }
+  }
+
   console.log('i am at some page, i dont know what to do!')
   console.log('Response URL:', responseUrl)
   console.log('Page snippet (first 500 chars):', secondaryAuthPage.substring(0, 500))
@@ -400,7 +419,22 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
     const respBody = await resp.json()
 
     if (respBody.Success === true) {
-      await mychartRequest.makeRequest({path: '/inside.asp'})
+      const insideResp = await mychartRequest.makeRequest({path: '/inside.asp'})
+      const insideBody = await insideResp.text();
+      const insideBodyLower = insideBody.toLowerCase();
+
+      // Check if we landed on Terms & Conditions page — auto-accept silently
+      if (insideBodyLower.includes('termsconditions') || insideBodyLower.includes('terms and conditions')) {
+        console.log('Landed on Terms & Conditions page after 2FA, auto-accepting');
+        const accepted = await acceptTermsAndConditions(mychartRequest);
+        if (!accepted) {
+          console.log('Failed to auto-accept Terms & Conditions after 2FA');
+          return {
+            state: 'error',
+            mychartRequest
+          };
+        }
+      }
 
       return {
         state: 'logged_in',

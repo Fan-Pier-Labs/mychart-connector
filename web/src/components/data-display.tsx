@@ -16,12 +16,22 @@ import type {
   OrderMetadata,
 } from "../../../scrapers/myChart/labs_and_procedure_results/labtestresulttype";
 
-export function DataRow({ label, value }: { label: string; value: string }) {
+/** Safely convert any value to a renderable string. Prevents React error #31 when
+ *  a MyChart API returns an object where we expect a primitive. */
+export function safeText(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+export function DataRow({ label, value }: { label: string; value: unknown }) {
   if (!value) return null;
+  const text = safeText(value);
+  if (!text) return null;
   return (
     <>
       <span className="text-muted-foreground font-medium">{label}</span>
-      <span>{value}</span>
+      <span>{text}</span>
     </>
   );
 }
@@ -74,17 +84,17 @@ export function BillingVisits({ visits }: { visits: BillingVisit[] }) {
       {visits.slice(0, 15).map((v, i) => (
         <div key={i} className="bg-muted rounded-md p-3 text-sm">
           <div className="font-medium">
-            {v.StartDateDisplay || "N/A"} - {v.Description || "No description"}
+            {safeText(v.StartDateDisplay) || "N/A"} - {safeText(v.Description) || "No description"}
           </div>
           <div className="grid grid-cols-2 gap-1 mt-1 text-xs text-muted-foreground">
-            {v.Provider && <span>Provider: {v.Provider}</span>}
-            {v.ChargeAmount && <span>Charge: {v.ChargeAmount}</span>}
-            {v.SelfAmountDue && <span>You Owe: {v.SelfAmountDue}</span>}
-            {v.PrimaryPayer && <span>Insurance: {v.PrimaryPayer}</span>}
+            {v.Provider && <span>Provider: {safeText(v.Provider)}</span>}
+            {v.ChargeAmount && <span>Charge: {safeText(v.ChargeAmount)}</span>}
+            {v.SelfAmountDue && <span>You Owe: {safeText(v.SelfAmountDue)}</span>}
+            {v.PrimaryPayer && <span>Insurance: {safeText(v.PrimaryPayer)}</span>}
           </div>
           {v.ProcedureList?.map((p, j) => (
             <div key={j} className="text-xs text-muted-foreground mt-1">
-              - {p.Description}: {p.Amount} (you owe: {p.SelfAmountDue})
+              - {safeText(p.Description)}: {safeText(p.Amount)} (you owe: {safeText(p.SelfAmountDue)})
             </div>
           ))}
         </div>
@@ -102,6 +112,7 @@ type Visit = {
   VisitTypeName: string;
   PrimaryProviderName?: string;
   PrimaryDepartment?: { Name: string };
+  Location?: string;
 };
 
 export function VisitsCard({ title, data, getVisits }: { title: string; data: DataWithError; getVisits: (d: NonNullable<DataWithError>) => Visit[] }) {
@@ -126,12 +137,15 @@ export function VisitItem({ visit }: { visit: Visit }) {
   return (
     <div className="bg-muted rounded-md p-3 text-sm">
       <div className="font-medium">
-        {visit.Date} {visit.Time || ""} - {visit.VisitTypeName}
+        {safeText(visit.Date)} {safeText(visit.Time)} {visit.VisitTypeName ? `- ${safeText(visit.VisitTypeName)}` : ''}
       </div>
       <div className="text-xs text-muted-foreground mt-1">
-        {visit.PrimaryProviderName && <span>Provider: {visit.PrimaryProviderName}</span>}
+        {visit.PrimaryProviderName && <span>Provider: {safeText(visit.PrimaryProviderName)}</span>}
         {visit.PrimaryDepartment?.Name && (
-          <span className="ml-3">Location: {visit.PrimaryDepartment.Name}</span>
+          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment.Name)}</span>
+        )}
+        {visit.Location && (
+          <span className="ml-3">Location: {safeText(visit.Location)}</span>
         )}
       </div>
     </div>
