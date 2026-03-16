@@ -40,10 +40,6 @@ export default function HomePage() {
   const [twofaLoading, setTwofaLoading] = useState(false);
   const [twofaDelivery, setTwofaDelivery] = useState<{ method: string; contact?: string } | null>(null);
 
-  // Terms & Conditions acceptance state
-  const [termsSessionKey, setTermsSessionKey] = useState("");
-  const [termsLoading, setTermsLoading] = useState(false);
-
   // TOTP setup state
   const [totpPromptInstanceId, setTotpPromptInstanceId] = useState("");
   const [totpSetupLoading, setTotpSetupLoading] = useState(false);
@@ -158,12 +154,6 @@ export default function HomePage() {
         return;
       }
 
-      if (data.state === "need_terms_acceptance") {
-        setTermsSessionKey(data.sessionKey);
-        setConnectingId("");
-        return;
-      }
-
       // logged_in
       ctx.setActiveSessionKey(data.sessionKey);
       ctx.setActiveInstanceId(instance.id);
@@ -201,15 +191,6 @@ export default function HomePage() {
 
       if (data.state === "error") {
         toast.error(data.error || "2FA error.");
-        setTwofaLoading(false);
-        return;
-      }
-
-      if (data.state === "need_terms_acceptance") {
-        setTwofaSessionKey("");
-        setTwofaCode("");
-        setTwofaDelivery(null);
-        setTermsSessionKey(data.sessionKey);
         setTwofaLoading(false);
         return;
       }
@@ -272,45 +253,6 @@ export default function HomePage() {
 
   function handleTotpRetry() {
     setTotpWarning(false);
-  }
-
-  async function handleAcceptTerms() {
-    setTermsLoading(true);
-    try {
-      const res = await fetch("/api/accept-terms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionKey: termsSessionKey }),
-      });
-      const data = await res.json();
-
-      if (data.state === "error") {
-        toast.error(data.error || "Failed to accept terms.");
-        setTermsLoading(false);
-        return;
-      }
-
-      ctx.setActiveSessionKey(data.sessionKey);
-      const instanceId = data.instanceId || data.sessionKey.split(":")[1];
-      ctx.setActiveInstanceId(instanceId);
-      const inst = ctx.instances.find((i) => i.id === instanceId);
-      if (inst) ctx.setHostname(inst.hostname);
-      ctx.setProfile(null);
-      setTermsSessionKey("");
-      await ctx.refreshInstances();
-
-      if (data.offerTotpSetup && instanceId) {
-        setTotpPromptInstanceId(instanceId);
-      }
-    } catch (err) {
-      toast.error("Network error: " + (err as Error).message);
-    } finally {
-      setTermsLoading(false);
-    }
-  }
-
-  function handleDeclineTerms() {
-    setTermsSessionKey("");
   }
 
   async function deleteInstance(id: string) {
@@ -457,54 +399,6 @@ export default function HomePage() {
             >
               Cancel
             </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Terms & Conditions acceptance prompt
-  if (termsSessionKey) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>MyChart Terms & Conditions</CardTitle>
-            <CardDescription>
-              This MyChart portal requires you to accept their Terms and Conditions before continuing.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              By clicking &quot;Accept&quot;, you agree to the MyChart Terms and Conditions
-              presented by your healthcare provider. You can review Epic&apos;s{" "}
-              <a
-                href="https://www.epic.com/privacypolicies"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Privacy Policy
-              </a>
-              {" "}for more information.
-            </p>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={handleDeclineTerms}
-                disabled={termsLoading}
-              >
-                Return to Home
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleAcceptTerms}
-                disabled={termsLoading}
-              >
-                {termsLoading ? "Accepting..." : "Accept MyChart ToS"}
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>

@@ -123,6 +123,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
 
   const isLoggedIn = !ctx.sessionLoading && !!ctx.user;
@@ -491,9 +492,33 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        id="tos"
+                        checked={tosAccepted}
+                        onChange={(e) => setTosAccepted(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <Label htmlFor="tos" className="text-sm font-medium leading-tight cursor-pointer">
+                        I agree to the Terms of Service
+                      </Label>
+                    </div>
+                    <ul className="text-xs text-slate-500 space-y-1 ml-6 list-disc">
+                      <li>This software is provided as-is with no warranty</li>
+                      <li>This is beta software and may not work or may break at any time</li>
+                      <li>We are not associated with, endorsed by, or affiliated with Epic Systems or MyChart</li>
+                      <li>By using this service, you agree to MyChart&apos;s Terms of Use — we will accept these on your behalf when connecting</li>
+                      <li>AI is not perfect — when used to edit or update medical records (e.g. sending messages, requesting refills), it can make mistakes. Always review AI-generated actions before they are sent.</li>
+                      <li>This tool is not a substitute for professional medical advice</li>
+                      <li>Use at your own risk</li>
+                    </ul>
+                  </div>
                   <Button
                     className="w-full bg-blue-600 hover:bg-blue-500"
                     onClick={handleEmailSignUp}
+                    disabled={!tosAccepted}
                   >
                     Create Account
                   </Button>

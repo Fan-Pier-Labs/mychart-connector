@@ -9,8 +9,8 @@ import { getRequestVerificationTokenFromBody } from './util';
  * after login/2FA that must be accepted before any other page or API will work.
  * Every request redirects to /Authentication/TermsConditions until accepted.
  *
- * This should only be called after the user has explicitly consented to accept
- * the terms in the web app UI.
+ * This is called automatically during login/2FA when the T&C page is detected.
+ * The user consents to this at signup via the app-level Terms of Service checkbox.
  *
  * Returns true if T&C was accepted successfully, false if it failed.
  */

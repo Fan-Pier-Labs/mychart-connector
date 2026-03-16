@@ -21,7 +21,7 @@ const KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30 seconds, matches MyChart's own JS
 export interface SessionEntry {
   request: MyChartRequest;
   hostname: string;
-  status: 'logged_in' | 'need_2fa' | 'need_terms_acceptance' | 'expired' | 'error';
+  status: 'logged_in' | 'need_2fa' | 'expired' | 'error';
   createdAt: Date;
 }
 
