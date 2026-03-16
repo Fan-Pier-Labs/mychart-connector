@@ -4,7 +4,7 @@ node_modules
 .cookie-cache
 cli
 read-local-passwords
-clo-to-jpg-converter
+scrapers/myChart/clo-to-jpg-converter
 web/node_modules
 web/.next
 *.dmg
