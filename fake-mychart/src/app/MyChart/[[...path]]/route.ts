@@ -567,11 +567,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         (c: { hthId: string }) => c.hthId === body.conversationId
       );
       if (conv) {
+        const replyBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || body.body || '');
         conv.messages.push({
           wmgId: `MSG-${Date.now()}`,
           author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
           deliveryInstantISO: new Date().toISOString(),
-          body: body.messageBody || body.body || '',
+          body: replyBody,
         });
       }
       return json({ success: true });
@@ -594,11 +595,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
       const body = await request.json();
       const newConvId = `CONV-${Date.now()}`;
+      const msgBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || '');
+      const msgSubject = body.messageSubject || body.subject || 'New Message';
+      const recipientName = body.recipient?.displayName || body.recipientName || 'Provider';
       conversationsState.conversations.unshift({
         hthId: newConvId,
-        subject: body.subject || 'New Message',
-        previewText: body.messageBody || '',
-        audience: [{ name: body.recipientName || 'Provider' }],
+        subject: msgSubject,
+        previewText: msgBody,
+        audience: [{ name: recipientName }],
         hasMoreMessages: false,
         userOverrideNames: {},
         messages: [
@@ -606,7 +610,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             wmgId: `MSG-${Date.now()}`,
             author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
             deliveryInstantISO: new Date().toISOString(),
-            body: body.messageBody || '',
+            body: msgBody,
           },
         ],
       });
