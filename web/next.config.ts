@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
     // Type checking runs separately in CI; skip during Docker build to avoid OOM
     ignoreBuildErrors: true,
   },
+  // Scrapers live outside web/ and import packages from root node_modules.
+  // Tell Next.js to resolve these as external server packages so Turbopack
+  // doesn't fail when it can't find them in web/node_modules.
+  serverExternalPackages: ["cheerio", "tough-cookie", "fetch-cookie"],
 };
 
 export default nextConfig;
