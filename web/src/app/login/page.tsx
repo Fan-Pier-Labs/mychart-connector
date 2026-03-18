@@ -800,7 +800,7 @@ export default function LoginPage() {
                             </Label>
                           </div>
                           <ul className="text-xs text-slate-500 space-y-1 ml-6 list-disc">
-                            <li>This software is provided as-is with no warranty — use at your own risk</li>
+                            <li>This software is provided as-is with no warranty. Use at your own risk</li>
                             <li>This is beta software and may not work or may break at any time</li>
                             <li>We are not associated with, endorsed by, or affiliated with Epic Systems or MyChart</li>
                           </ul>
