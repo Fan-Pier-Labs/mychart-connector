@@ -429,7 +429,7 @@ export default function LoginPage() {
         {/* Data Types Marquee */}
         <section className="flex flex-col w-full max-w-[1400px] border-slate-200/30 border-t mx-auto pt-16 pb-16 items-center justify-center overflow-hidden">
           <div
-            className="w-full relative flex items-center overflow-hidden"
+            className="w-full relative flex items-center overflow-hidden py-2"
             style={{
               maskImage: "linear-gradient(to right, transparent, black 15%, black 85%, transparent)",
               WebkitMaskImage: "linear-gradient(to right, transparent, black 15%, black 85%, transparent)",
