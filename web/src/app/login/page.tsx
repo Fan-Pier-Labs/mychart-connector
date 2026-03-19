@@ -125,7 +125,7 @@ const FEATURES = [
     description: "Access data that standard FHIR APIs don't expose — imaging reports with full narratives, billing claims, care journeys, questionnaires, education materials, activity feeds, and EHI exports.",
     span: "md:col-span-2",
     visual: (
-      <div className="mt-8 flex gap-4 overflow-hidden h-28 relative">
+      <div className="mt-8 flex gap-4 h-32 relative">
         <div className="w-24 bg-white/60 border border-white/80 rounded-xl p-3 shadow-sm transform group-hover:-translate-y-2 group-hover:-rotate-3 transition-transform duration-500 relative z-20">
           <div className="w-6 h-6 rounded bg-slate-100 mb-3 flex items-center justify-center">
             <Icon icon="solar:file-text-linear" width={14} height={14} />
@@ -359,7 +359,7 @@ export default function LoginPage() {
                 rel="noopener noreferrer"
                 className="hidden sm:inline-flex items-center gap-2 justify-center px-6 py-2.5 text-xs font-medium text-slate-700 uppercase tracking-widest bg-white/60 border border-slate-200/60 rounded-full hover:bg-white transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
               >
-                <Icon icon="solar:code-circle-linear" width={16} height={16} />
+                <Icon icon="mdi:github" width={16} height={16} />
                 GitHub
               </a>
               <button
@@ -412,7 +412,7 @@ export default function LoginPage() {
                 rel="noopener noreferrer"
                 className="px-6 py-3 rounded-full text-sm font-medium text-slate-700 bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_10px_30px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] hover:bg-white/60 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)] transition-all duration-300 flex items-center gap-2"
               >
-                <Icon icon="solar:code-circle-linear" width={18} height={18} />
+                <Icon icon="mdi:github" width={18} height={18} />
                 GitHub
               </a>
             </div>
@@ -613,7 +613,7 @@ export default function LoginPage() {
                   className="text-slate-400 hover:text-slate-900 transition-colors"
                   aria-label="GitHub"
                 >
-                  <Icon icon="solar:code-circle-linear" width={22} height={22} />
+                  <Icon icon="mdi:github" width={22} height={22} />
                 </a>
               </div>
             </div>
