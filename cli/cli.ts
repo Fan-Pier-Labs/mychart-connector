@@ -103,8 +103,9 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--set-up-totp') parsed.setupTotp = true;
     else if (args[i] === '--use-saved-totp') parsed.useSavedTotp = true;
     else if (args[i] === '--disable-totp') parsed.disableTotp = true;
+    else if (args[i] === '--local') parsed.local = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; local?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -286,6 +287,7 @@ async function login(creds: { hostname: string; username: string; password: stri
       user: creds.username,
       pass: creds.password,
       skipSendCode: !!useTotpSecret,
+      protocol: cliArgs.local ? 'http' : undefined,
     });
 
     if (loginResult.state === 'invalid_login') {
