@@ -43,3 +43,6 @@ scrapers/myChart/clo-to-jpg-converter/input_study_one/amf_metadata.bin
 *.clo
 # Allow synthetic (non-PII) CLO test images for fake-mychart
 !fake-mychart/src/data/clo-images/*.clo
+
+# Marketing docs live in a separate private repo (fan-pier-labs/mychart-connector-marketing)
+marketing/
