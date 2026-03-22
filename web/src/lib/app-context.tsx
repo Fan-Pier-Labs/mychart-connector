@@ -70,6 +70,7 @@ interface AppContextType {
   password: string;
   setPassword: (password: string) => void;
 
+  refreshSession: () => Promise<void>;
   resetAll: () => void;
   sessionLoading: boolean;
 }
@@ -77,7 +78,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { data: session, isPending: userLoading } = authClient.useSession();
+  const { data: session, isPending: userLoading, refetch: refreshSession } = authClient.useSession();
 
   const [instances, setInstances] = useState<MyChartInstanceInfo[]>([]);
   const [activeSessionKey, setActiveSessionKey] = useState("");
@@ -158,6 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isDemo, setIsDemo,
         mcpUrl, setMcpUrl,
         mcpUrlSsl, setMcpUrlSsl,
+        refreshSession: async () => { await refreshSession(); },
         resetAll,
         sessionLoading,
       }}

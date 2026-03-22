@@ -413,6 +413,7 @@ export default function HomePage() {
       setAppTotpURI("");
       setAppBackupCodes([]);
       setAppTotpVerifyCode("");
+      await ctx.refreshSession();
     } catch (err) {
       toast.error("Verification failed: " + (err as Error).message);
     } finally {
@@ -436,6 +437,7 @@ export default function HomePage() {
       toast.success("Two-factor authentication disabled.");
       setAppTotpPasswordPrompt(null);
       setAppTotpPassword("");
+      await ctx.refreshSession();
     } catch (err) {
       toast.error("Failed: " + (err as Error).message);
     } finally {
