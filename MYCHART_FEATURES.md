@@ -240,6 +240,9 @@ All endpoints are POST requests to `https://<hostname>/<firstPathPart>/api/...`:
 | `api/personalInformation/GetContactInformation` | Contact info |
 | `api/personalInformation/GetDetailsAboutMeInformation` | Demographics |
 | `api/personalInformation/GetRelationships` | Emergency contacts, relationships |
+| `api/personalInformation/AddRelationship` | Add emergency contact |
+| `api/personalInformation/UpdateRelationship` | Update emergency contact |
+| `api/personalInformation/RemoveRelationship` | Remove emergency contact |
 | `api/personalInformation/GetContextIds` | Context IDs for patient |
 | `api/central-jump-card/FetchCentralLink` | MyChart Central linking |
 

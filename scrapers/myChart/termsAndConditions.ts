@@ -5,7 +5,7 @@ import { getRequestVerificationTokenFromBody } from './util';
 /**
  * Accept MyChart's Terms & Conditions on behalf of the user.
  *
- * Some MyChart instances (e.g. mychart.minuteclinic.com) present a T&C page
+ * Some MyChart instances present a T&C page
  * after login/2FA that must be accepted before any other page or API will work.
  * Every request redirects to /Authentication/TermsConditions until accepted.
  *

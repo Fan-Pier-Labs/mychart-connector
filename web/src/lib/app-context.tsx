@@ -24,7 +24,7 @@ export interface MyChartInstanceInfo {
 
 interface AppContextType {
   // BetterAuth user
-  user: { id: string; name: string; email: string; image?: string | null } | null;
+  user: { id: string; name: string; email: string; image?: string | null; twoFactorEnabled?: boolean } | null;
   userLoading: boolean;
 
   // MyChart instances
@@ -70,6 +70,7 @@ interface AppContextType {
   password: string;
   setPassword: (password: string) => void;
 
+  refreshSession: () => Promise<void>;
   resetAll: () => void;
   sessionLoading: boolean;
 }
@@ -77,7 +78,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { data: session, isPending: userLoading } = authClient.useSession();
+  const { data: session, isPending: userLoading, refetch: refreshSession } = authClient.useSession();
 
   const [instances, setInstances] = useState<MyChartInstanceInfo[]>([]);
   const [activeSessionKey, setActiveSessionKey] = useState("");
@@ -138,6 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     name: session.user.name,
     email: session.user.email,
     image: session.user.image,
+    twoFactorEnabled: (session.user as Record<string, unknown>).twoFactorEnabled as boolean | undefined,
   } : null;
 
   return (
@@ -157,6 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isDemo, setIsDemo,
         mcpUrl, setMcpUrl,
         mcpUrlSsl, setMcpUrlSsl,
+        refreshSession: async () => { await refreshSession(); },
         resetAll,
         sessionLoading,
       }}

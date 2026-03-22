@@ -54,6 +54,9 @@ You have access to tools that retrieve health data from the user's Epic MyChart 
 - `mychart_get_insurance` — Insurance coverage details
 - `mychart_get_billing` — Billing history and account details
 - `mychart_get_emergency_contacts` — Emergency contact information
+- `mychart_add_emergency_contact` — Add a new emergency contact (params: `name`, `relationship_type`, `phone_number`)
+- `mychart_update_emergency_contact` — Update an existing emergency contact (params: `id`, optional: `name`, `relationship_type`, `phone_number`)
+- `mychart_remove_emergency_contact` — Remove an emergency contact (param: `id`)
 - `mychart_get_linked_accounts` — Linked MyChart accounts from other healthcare organizations
 - `mychart_get_activity_feed` — Recent activity feed items
 

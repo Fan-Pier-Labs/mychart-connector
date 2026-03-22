@@ -16,6 +16,8 @@ import * as homer from '@/data/homer';
 // Deep-clone so mutations don't affect the seed module
 // eslint-disable-next-line prefer-const
 let conversationsState = JSON.parse(JSON.stringify(homer.conversations));
+let emergencyContactsState = JSON.parse(JSON.stringify(homer.emergencyContacts));
+let ecIdCounter = 100;
 let composeIdCounter = 1000;
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -448,7 +450,49 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Emergency Contacts
   if (lower === 'api/personalinformation/getrelationships') {
-    return json(homer.emergencyContacts);
+    return json(emergencyContactsState);
+  }
+  if (lower === 'api/personalinformation/addrelationship') {
+    try {
+      const body = await request.json();
+      ecIdCounter++;
+      const newContact = {
+        id: `EC-${ecIdCounter}`,
+        name: body.name || '',
+        relationshipType: body.relationshipType || '',
+        phoneNumber: body.phoneNumber || '',
+        isEmergencyContact: body.isEmergencyContact ?? true,
+      };
+      emergencyContactsState.relationships.push(newContact);
+      return json({ success: true, id: newContact.id });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
+  }
+  if (lower === 'api/personalinformation/updaterelationship') {
+    try {
+      const body = await request.json();
+      const idx = emergencyContactsState.relationships.findIndex(
+        (r: { id?: string; name?: string }) => r.id === body.id || r.name === body.id
+      );
+      if (idx === -1) return json({ error: 'Contact not found' }, 404);
+      const existing = emergencyContactsState.relationships[idx];
+      emergencyContactsState.relationships[idx] = { ...existing, ...body };
+      return json({ success: true });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
+  }
+  if (lower === 'api/personalinformation/removerelationship') {
+    try {
+      const body = await request.json();
+      emergencyContactsState.relationships = emergencyContactsState.relationships.filter(
+        (r: { id?: string; name?: string }) => r.id !== body.id && r.name !== body.id
+      );
+      return json({ success: true });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
   }
 
   // Upcoming Orders
@@ -563,20 +607,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/conversations/sendreply') {
     try {
       const body = await request.json();
+      const convId = body.conversationId || '';
       const conv = conversationsState.conversations.find(
-        (c: { hthId: string }) => c.hthId === body.conversationId
+        (c: { hthId: string }) => c.hthId === convId
       );
       if (conv) {
+        const replyBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || body.body || '');
         conv.messages.push({
           wmgId: `MSG-${Date.now()}`,
           author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
           deliveryInstantISO: new Date().toISOString(),
-          body: body.messageBody || body.body || '',
+          body: replyBody,
         });
       }
-      return json({ success: true });
+      // Real MyChart returns the conversation ID as a plain JSON string
+      return json(convId);
     } catch {
-      return json({ success: true });
+      return json('');
     }
   }
 
@@ -594,11 +641,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
       const body = await request.json();
       const newConvId = `CONV-${Date.now()}`;
+      const msgBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || '');
+      const msgSubject = body.messageSubject || body.subject || 'New Message';
+      const recipientName = body.recipient?.displayName || body.recipientName || 'Provider';
       conversationsState.conversations.unshift({
         hthId: newConvId,
-        subject: body.subject || 'New Message',
-        previewText: body.messageBody || '',
-        audience: [{ name: body.recipientName || 'Provider' }],
+        subject: msgSubject,
+        previewText: msgBody,
+        audience: [{ name: recipientName }],
         hasMoreMessages: false,
         userOverrideNames: {},
         messages: [
@@ -606,7 +656,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             wmgId: `MSG-${Date.now()}`,
             author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
             deliveryInstantISO: new Date().toISOString(),
-            body: body.messageBody || '',
+            body: msgBody,
           },
         ],
       });
