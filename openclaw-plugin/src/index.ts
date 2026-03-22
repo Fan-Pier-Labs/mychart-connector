@@ -37,7 +37,7 @@ import { getReferrals } from '../../scrapers/myChart/referrals';
 import { getMedicalHistory } from '../../scrapers/myChart/medicalHistory';
 import { getLetters } from '../../scrapers/myChart/letters';
 import { getDocuments } from '../../scrapers/myChart/documents';
-import { getEmergencyContacts } from '../../scrapers/myChart/emergencyContacts';
+import { getEmergencyContacts, addEmergencyContact, updateEmergencyContact, removeEmergencyContact } from '../../scrapers/myChart/emergencyContacts';
 import { getGoals } from '../../scrapers/myChart/goals';
 import { getUpcomingOrders } from '../../scrapers/myChart/upcomingOrders';
 import { getQuestionnaires } from '../../scrapers/myChart/questionnaires';
@@ -270,6 +270,45 @@ export default function register(api: any) {
     makeTool(api, 'mychart_get_letters', 'Letters', 'Get letters (after-visit summaries, clinical documents)', (req) => getLetters(req)),
     makeTool(api, 'mychart_get_documents', 'Documents', 'Get clinical documents', (req) => getDocuments(req)),
     makeTool(api, 'mychart_get_emergency_contacts', 'Emergency Contacts', 'Get emergency contacts', (req) => getEmergencyContacts(req)),
+    makeTool(api, 'mychart_add_emergency_contact', 'Add Emergency Contact', 'Add a new emergency contact', async (req, params) => {
+      return addEmergencyContact(req, {
+        name: params.name as string,
+        relationshipType: params.relationship_type as string,
+        phoneNumber: params.phone_number as string,
+      });
+    }, {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Full name of the emergency contact' },
+        relationship_type: { type: 'string', description: 'Relationship to patient (e.g. Spouse, Parent, Friend, Sibling)' },
+        phone_number: { type: 'string', description: 'Phone number' },
+      },
+      required: ['name', 'relationship_type', 'phone_number'],
+    }),
+    makeTool(api, 'mychart_update_emergency_contact', 'Update Emergency Contact', 'Update an existing emergency contact', async (req, params) => {
+      return updateEmergencyContact(req, {
+        id: params.id as string,
+        name: params.name as string | undefined,
+        relationshipType: params.relationship_type as string | undefined,
+        phoneNumber: params.phone_number as string | undefined,
+      });
+    }, {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Contact ID to update (from get_emergency_contacts)' },
+        name: { type: 'string', description: 'New full name' },
+        relationship_type: { type: 'string', description: 'New relationship type' },
+        phone_number: { type: 'string', description: 'New phone number' },
+      },
+      required: ['id'],
+    }),
+    makeTool(api, 'mychart_remove_emergency_contact', 'Remove Emergency Contact', 'Remove an emergency contact', async (req, params) => {
+      return removeEmergencyContact(req, params.id as string);
+    }, {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Contact ID to remove (from get_emergency_contacts)' } },
+      required: ['id'],
+    }),
     makeTool(api, 'mychart_get_goals', 'Goals', 'Get care team and patient goals', (req) => getGoals(req)),
     makeTool(api, 'mychart_get_upcoming_orders', 'Upcoming Orders', 'Get upcoming orders (labs, imaging, procedures)', (req) => getUpcomingOrders(req)),
     makeTool(api, 'mychart_get_questionnaires', 'Questionnaires', 'Get questionnaires and health assessments', (req) => getQuestionnaires(req)),

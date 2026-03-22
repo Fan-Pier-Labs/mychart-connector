@@ -25,7 +25,7 @@ import { getReferrals } from '../mychart/referrals';
 import { getMedicalHistory } from '../mychart/medicalHistory';
 import { getLetters } from '../mychart/letters';
 import { getVitals } from '../mychart/vitals';
-import { getEmergencyContacts } from '../mychart/emergencyContacts';
+import { getEmergencyContacts, addEmergencyContact, updateEmergencyContact, removeEmergencyContact } from '../mychart/emergencyContacts';
 import { getDocuments } from '../mychart/documents';
 import { getGoals } from '../mychart/goals';
 import { getUpcomingOrders } from '../mychart/upcomingOrders';
@@ -609,6 +609,102 @@ export function createMcpServer(userId: string): McpServer {
   registerScraperTool(server, userId, 'get_letters', 'Get letters (after-visit summaries, clinical documents)', getLetters);
   registerScraperTool(server, userId, 'get_vitals', 'Get vitals and track-my-health flowsheet data (weight, blood pressure, etc.)', getVitals);
   registerScraperTool(server, userId, 'get_emergency_contacts', 'Get emergency contacts', getEmergencyContacts);
+
+  server.registerTool(
+    'add_emergency_contact',
+    {
+      description: 'Add a new emergency contact',
+      inputSchema: {
+        name: z.string().describe('Full name of the emergency contact'),
+        relationship_type: z.string().describe('Relationship to patient (e.g. Spouse, Parent, Friend, Sibling)'),
+        phone_number: z.string().describe('Phone number'),
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+    async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'add_emergency_contact' });
+      console.log(`[mcp] Tool call: add_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await addEmergencyContact(result.mychartRequest, {
+          name: args.name,
+          relationshipType: args.relationship_type,
+          phoneNumber: args.phone_number,
+        });
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] add_emergency_contact: error -`, error.message, error.stack);
+        return errorResult(`Error adding emergency contact: ${error.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    'update_emergency_contact',
+    {
+      description: 'Update an existing emergency contact. Get the contact ID from get_emergency_contacts first.',
+      inputSchema: {
+        id: z.string().describe('Contact ID to update'),
+        name: z.string().optional().describe('New full name'),
+        relationship_type: z.string().optional().describe('New relationship type'),
+        phone_number: z.string().optional().describe('New phone number'),
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+    async (args: { id: string; name?: string; relationship_type?: string; phone_number?: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'update_emergency_contact' });
+      console.log(`[mcp] Tool call: update_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await updateEmergencyContact(result.mychartRequest, {
+          id: args.id,
+          name: args.name,
+          relationshipType: args.relationship_type,
+          phoneNumber: args.phone_number,
+        });
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] update_emergency_contact: error -`, error.message, error.stack);
+        return errorResult(`Error updating emergency contact: ${error.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    'remove_emergency_contact',
+    {
+      description: 'Remove an emergency contact. Get the contact ID from get_emergency_contacts first.',
+      inputSchema: {
+        id: z.string().describe('Contact ID to remove'),
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+    async (args: { id: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'remove_emergency_contact' });
+      console.log(`[mcp] Tool call: remove_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await removeEmergencyContact(result.mychartRequest, args.id);
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] remove_emergency_contact: error -`, error.message, error.stack);
+        return errorResult(`Error removing emergency contact: ${error.message}`);
+      }
+    }
+  );
+
   registerScraperTool(server, userId, 'get_documents', 'Get clinical documents', getDocuments);
   registerScraperTool(server, userId, 'get_goals', 'Get care team and patient goals', getGoals);
   registerScraperTool(server, userId, 'get_upcoming_orders', 'Get upcoming orders (labs, imaging, procedures)', getUpcomingOrders);
