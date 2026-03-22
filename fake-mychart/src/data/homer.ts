@@ -214,8 +214,8 @@ export const insurance = [
 // ─── Emergency Contacts ─────────────────────────────────────────────
 export const emergencyContacts = {
   relationships: [
-    { name: 'Marge Simpson', relationshipType: 'Spouse', phoneNumber: '(555) 636-2701', isEmergencyContact: true },
-    { name: 'Barney Gumble', relationshipType: 'Friend', phoneNumber: '(555) 636-2800', isEmergencyContact: true },
+    { id: 'EC-1', name: 'Marge Simpson', relationshipType: 'Spouse', phoneNumber: '(555) 636-2701', isEmergencyContact: true },
+    { id: 'EC-2', name: 'Barney Gumble', relationshipType: 'Friend', phoneNumber: '(555) 636-2800', isEmergencyContact: true },
   ],
 };
 
