@@ -20,7 +20,7 @@ function getDeviceId(): string {
 /** Read a git config value, returns null on failure. */
 function getGitConfig(key: string): string | null {
   try {
-    return execSync(`git config ${key}`, { encoding: 'utf8', timeout: 2000 }).trim() || null;
+    return execSync(`git config ${key}`, { encoding: 'utf8', timeout: 2000, stdio: 'pipe' }).trim() || null;
   } catch {
     return null;
   }

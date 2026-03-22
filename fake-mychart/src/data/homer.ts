@@ -214,8 +214,8 @@ export const insurance = [
 // ─── Emergency Contacts ─────────────────────────────────────────────
 export const emergencyContacts = {
   relationships: [
-    { name: 'Marge Simpson', relationshipType: 'Spouse', phoneNumber: '(555) 636-2701', isEmergencyContact: true },
-    { name: 'Barney Gumble', relationshipType: 'Friend', phoneNumber: '(555) 636-2800', isEmergencyContact: true },
+    { id: 'EC-1', name: 'Marge Simpson', relationshipType: 'Spouse', phoneNumber: '(555) 636-2701', isEmergencyContact: true },
+    { id: 'EC-2', name: 'Barney Gumble', relationshipType: 'Friend', phoneNumber: '(555) 636-2800', isEmergencyContact: true },
   ],
 };
 
@@ -1110,15 +1110,33 @@ export const totpQrCode = {
 // ─── Message Compose ────────────────────────────────────────────────
 export const subtopics = {
   topicList: [
-    { id: 'TOPIC-001', name: 'Medical Question' },
-    { id: 'TOPIC-002', name: 'Medication Refill' },
-    { id: 'TOPIC-003', name: 'Appointment Request' },
+    { displayName: 'Medical Question', value: 'TOPIC-001' },
+    { displayName: 'Medication Refill', value: 'TOPIC-002' },
+    { displayName: 'Appointment Request', value: 'TOPIC-003' },
   ],
 };
 
 export const messageRecipients = [
-  { id: 'PROV-HIBBERT', name: 'Julius Hibbert, MD', specialty: 'Internal Medicine' },
-  { id: 'PROV-NICK', name: 'Nick Riviera, MD', specialty: 'General Surgery' },
+  {
+    recipientType: 1,
+    displayName: 'Julius Hibbert, MD',
+    specialty: 'Internal Medicine',
+    userId: 'PROV-HIBBERT',
+    departmentId: 'DEP-001',
+    poolId: 'POOL-001',
+    providerId: 'PROV-HIBBERT',
+    organizationId: '',
+  },
+  {
+    recipientType: 1,
+    displayName: 'Nick Riviera, MD',
+    specialty: 'General Surgery',
+    userId: 'PROV-NICK',
+    departmentId: 'DEP-002',
+    poolId: 'POOL-002',
+    providerId: 'PROV-NICK',
+    organizationId: '',
+  },
 ];
 
 export const messageViewers = {

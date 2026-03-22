@@ -26,7 +26,7 @@ import { getReferrals } from '../../referrals'
 import { getMedicalHistory } from '../../medicalHistory'
 import { getPreventiveCare } from '../../preventiveCare'
 import { getLetters } from '../../letters'
-import { getEmergencyContacts } from '../../emergencyContacts'
+import { getEmergencyContacts, addEmergencyContact, updateEmergencyContact, removeEmergencyContact } from '../../emergencyContacts'
 import { getGoals } from '../../goals'
 import { getDocuments } from '../../documents'
 import { getUpcomingOrders } from '../../upcomingOrders'
@@ -173,6 +173,51 @@ describe('fake-mychart integration', () => {
     const result = await getEmergencyContacts(session)
     expect(Array.isArray(result)).toBe(true)
     expect(result.length).toBeGreaterThan(0)
+    expect(result[0].name).toBe('Marge Simpson')
+    expect(result[0].id).toBeDefined()
+  }, 10_000)
+
+  it('addEmergencyContact adds a new contact', async () => {
+    const result = await addEmergencyContact(session, {
+      name: 'Ned Flanders',
+      relationshipType: 'Neighbor',
+      phoneNumber: '(555) 636-2900',
+    })
+    expect(result.success).toBe(true)
+
+    const contacts = await getEmergencyContacts(session)
+    const ned = contacts.find(c => c.name === 'Ned Flanders')
+    expect(ned).toBeDefined()
+    expect(ned!.relationshipType).toBe('Neighbor')
+    expect(ned!.phoneNumber).toBe('(555) 636-2900')
+  }, 10_000)
+
+  it('updateEmergencyContact updates an existing contact', async () => {
+    const contacts = await getEmergencyContacts(session)
+    const barney = contacts.find(c => c.name === 'Barney Gumble')
+    expect(barney).toBeDefined()
+
+    const result = await updateEmergencyContact(session, {
+      id: barney!.id!,
+      phoneNumber: '(555) 999-0000',
+    })
+    expect(result.success).toBe(true)
+
+    const updated = await getEmergencyContacts(session)
+    const updatedBarney = updated.find(c => c.name === 'Barney Gumble')
+    expect(updatedBarney!.phoneNumber).toBe('(555) 999-0000')
+  }, 10_000)
+
+  it('removeEmergencyContact removes a contact', async () => {
+    const contacts = await getEmergencyContacts(session)
+    const ned = contacts.find(c => c.name === 'Ned Flanders')
+    expect(ned).toBeDefined()
+
+    const result = await removeEmergencyContact(session, ned!.id!)
+    expect(result.success).toBe(true)
+
+    const after = await getEmergencyContacts(session)
+    expect(after.find(c => c.name === 'Ned Flanders')).toBeUndefined()
   }, 10_000)
 
   it('getGoals returns goals', async () => {

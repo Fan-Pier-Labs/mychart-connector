@@ -141,3 +141,98 @@
 .animate-scroll:hover {
   animation-play-state: paused;
 }
+
+/* Landing page styles */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  display: flex;
+  animation: marquee 45s linear infinite;
+}
+
+.marquee-track span {
+  white-space: nowrap;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+}
+
+.glass-panel:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+}
+
+/* Timeline animations */
+.tl-title,
+.tl-step {
+  opacity: 0;
+  transform: translateY(14px);
+  filter: blur(6px);
+  transition: opacity 900ms ease, transform 900ms ease, filter 900ms ease;
+  will-change: opacity, transform, filter;
+}
+
+.is-inview > .tl-title,
+.tl-title.is-inview,
+.tl-step.is-inview {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+.tl-spine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.55), rgba(148, 163, 184, 0));
+  transform-origin: top;
+  transform: scaleY(0);
+  filter: blur(0.2px);
+  transition: transform 1300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.is-inview .tl-spine::after {
+  transform: scaleY(1);
+}
+
+.tl-node {
+  transition: transform 700ms ease, box-shadow 900ms ease, border-color 900ms ease;
+  will-change: transform, box-shadow;
+}
+
+.tl-step.is-inview .tl-node {
+  transform: scale(1.08);
+  border-color: rgba(226, 232, 240, 0.95);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.06), inset 0 2px 4px rgba(255, 255, 255, 0.95);
+}
+
+.tl-halo {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 900ms ease, transform 900ms ease;
+}
+
+.tl-step.is-inview .tl-halo {
+  opacity: 1;
+  transform: scale(1);
+}
