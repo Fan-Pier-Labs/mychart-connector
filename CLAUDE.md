@@ -81,6 +81,23 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - Do not ask the user for 2FA codes — retrieve them automatically via the Resend API (see [CLI docs](docs/cli.md#automatic-2fa-via-resend))
 - Session expiration: a 302 redirect to the Login page means cookies are dead
 
+## App Authentication & 2FA
+
+BetterAuth handles email+password and Google OAuth sign-in. Two additional auth methods are supported:
+
+- **Passkeys (WebAuthn)**: Users can register passkeys (Touch ID, Face ID, security keys) from the Security card on the home page. Sign-in with passkey is available on the login page.
+- **TOTP 2FA (Authenticator App)**: Users can enable TOTP-based two-factor authentication from the Security card. When enabled, sign-in with email+password requires a 6-digit code from an authenticator app. Backup codes are provided during setup.
+
+Key files:
+- `web/src/lib/auth.ts` — Server config with `twoFactor()` and `passkey()` plugins
+- `web/src/lib/auth-client.ts` — Client config with `twoFactorClient()` and `passkeyClient()` plugins
+- `web/src/app/login/page.tsx` — Passkey sign-in button + TOTP verification step
+- `web/src/app/home/page.tsx` — Security settings card (enable/disable TOTP, manage passkeys)
+
+Database tables (`twoFactor`, `passkey`) are auto-created by `runMigrations()`.
+
+Note: This is separate from MyChart portal TOTP (used for auto-connecting to health portals).
+
 ## MCP Server
 
 The web app exposes a per-user MCP server at `/api/mcp?key={apiKey}` for Claude AI integration. Users generate a long-lived API key (SHA-256 hash stored in `user.mcp_api_key_hash`) via `POST /api/mcp-key`. One MCP URL works for all of a user's MyChart accounts — tools accept an optional `instance` parameter to target a specific hostname when multiple accounts are connected. Auto-connects TOTP-enabled instances on first tool call.
