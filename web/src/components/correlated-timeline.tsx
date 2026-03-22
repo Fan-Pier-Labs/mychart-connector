@@ -67,7 +67,14 @@ function GroupCard({ group }: { group: CorrelatedGroup }) {
 }
 
 export function CorrelatedTimeline({ data }: { data: ScrapeResults }) {
-  const groups = useMemo(() => correlateEvents(data), [data]);
+  const groups = useMemo(() => {
+    try {
+      return correlateEvents(data);
+    } catch (err) {
+      console.error('[CorrelatedTimeline] Error correlating events:', err);
+      return [];
+    }
+  }, [data]);
 
   if (groups.length === 0) return null;
 

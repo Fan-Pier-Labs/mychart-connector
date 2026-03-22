@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, validateSession, sessionCookieHeader } from '@/lib/session';
+import { createSession, validateSession, sessionCookieHeader, hasAcceptedTerms, acceptTerms } from '@/lib/session';
 import {
   loginPage, loginPageControllerJs, doLoginSuccess, doLoginNeed2FA, doLoginFailed,
   secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage, get2faMethods,
+  termsConditionsPage,
   careTeamPage, insurancePage, preventiveCarePage, billingSummaryPage, billingDetailsPage,
   medicationsPage, allergiesPage, healthIssuesPage, immunizationsPage,
   vitalsPage, medicalHistoryPage, testResultsPage, messagesPage, visitsPage,
@@ -44,6 +45,17 @@ function acceptAny(): boolean {
   return process.env.FAKE_MYCHART_ACCEPT_ANY === 'true';
 }
 
+function requireTerms(): boolean {
+  return process.env.FAKE_MYCHART_REQUIRE_TERMS === 'true';
+}
+
+function requireTermsRedirect(request: NextRequest): NextResponse | null {
+  if (!requireTerms()) return null;
+  const cookie = request.headers.get('cookie');
+  if (hasAcceptedTerms(cookie)) return null;
+  return NextResponse.redirect(new URL('/MyChart/Authentication/TermsConditions', request.url), 302);
+}
+
 // ─── Route handler ──────────────────────────────────────────────────
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const { path } = await params;
@@ -70,7 +82,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return html('OK');
   }
 
+  if (lower === 'authentication/termsconditions') {
+    return html(termsConditionsPage());
+  }
+
   if (lower === 'inside.asp') {
+    const termsRedirect = requireTermsRedirect(request);
+    if (termsRedirect) return termsRedirect;
     return html('Welcome to MyChart');
   }
 
@@ -80,10 +98,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!validateSession(cookie)) {
       return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
     }
+    const termsRedirect = requireTermsRedirect(request);
+    if (termsRedirect) return termsRedirect;
     return html(homePage(homer.profile.name, homer.profile.dob, homer.profile.mrn, homer.profile.pcp));
   }
 
   if (lower.startsWith('home/csrftoken')) {
+    const termsRedirect = requireTermsRedirect(request);
+    if (termsRedirect) return termsRedirect;
     return html(csrfTokenPage());
   }
 
@@ -300,13 +322,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Successful login without 2FA — create session and set cookie
       const sessionId = createSession();
-      const response = html(doLoginSuccess());
+      // If terms are required, return the T&C page instead of the home page
+      const response = requireTerms()
+        ? html(termsConditionsPage())
+        : html(doLoginSuccess());
       response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
       return response;
 
     } catch {
       return html(doLoginFailed());
     }
+  }
+
+  // ── Terms & Conditions acceptance ──────────────────────────────
+  if (lower === 'authentication/termsconditions') {
+    const cookie = request.headers.get('cookie');
+    acceptTerms(cookie);
+    // Redirect to home after accepting
+    return NextResponse.redirect(new URL('/MyChart/Home', request.url), 302);
   }
 
   // ── 2FA ────────────────────────────────────────────────────────
@@ -574,20 +607,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/conversations/sendreply') {
     try {
       const body = await request.json();
+      const convId = body.conversationId || '';
       const conv = conversationsState.conversations.find(
-        (c: { hthId: string }) => c.hthId === body.conversationId
+        (c: { hthId: string }) => c.hthId === convId
       );
       if (conv) {
+        const replyBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || body.body || '');
         conv.messages.push({
           wmgId: `MSG-${Date.now()}`,
           author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
           deliveryInstantISO: new Date().toISOString(),
-          body: body.messageBody || body.body || '',
+          body: replyBody,
         });
       }
-      return json({ success: true });
+      // Real MyChart returns the conversation ID as a plain JSON string
+      return json(convId);
     } catch {
-      return json({ success: true });
+      return json('');
     }
   }
 
@@ -605,11 +641,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
       const body = await request.json();
       const newConvId = `CONV-${Date.now()}`;
+      const msgBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || '');
+      const msgSubject = body.messageSubject || body.subject || 'New Message';
+      const recipientName = body.recipient?.displayName || body.recipientName || 'Provider';
       conversationsState.conversations.unshift({
         hthId: newConvId,
-        subject: body.subject || 'New Message',
-        previewText: body.messageBody || '',
-        audience: [{ name: body.recipientName || 'Provider' }],
+        subject: msgSubject,
+        previewText: msgBody,
+        audience: [{ name: recipientName }],
         hasMoreMessages: false,
         userOverrideNames: {},
         messages: [
@@ -617,7 +656,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             wmgId: `MSG-${Date.now()}`,
             author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
             deliveryInstantISO: new Date().toISOString(),
-            body: body.messageBody || '',
+            body: msgBody,
           },
         ],
       });

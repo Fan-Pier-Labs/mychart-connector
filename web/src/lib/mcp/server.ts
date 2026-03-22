@@ -13,6 +13,9 @@ import { getHealthIssues } from '../mychart/healthIssues';
 import { upcomingVisits, pastVisits } from '../mychart/visits/visits';
 import { listLabResults } from '../mychart/labs/labResults';
 import { listConversations } from '../mychart/messages/conversations';
+import { sendNewMessage, getMessageTopics, getMessageRecipients, getVerificationToken } from '../mychart/messages/sendMessage';
+import type { MessageRecipient, MessageTopic } from '../mychart/messages/sendMessage';
+import { sendReply } from '../mychart/messages/sendReply';
 import { getBillingHistory } from '../mychart/bills/bills';
 import { getCareTeam } from '../mychart/careTeam';
 import { getInsurance } from '../mychart/insurance';
@@ -427,6 +430,139 @@ export function createMcpServer(userId: string): McpServer {
         const error = err as Error;
         console.error(`[mcp] get_messages: error -`, error.message, error.stack);
         return errorResult(`Error fetching get_messages: ${error.message}`);
+      }
+    }
+  );
+
+  // Message recipients + topics
+  server.registerTool(
+    'get_message_recipients',
+    {
+      description: 'Get list of available message recipients (providers) and message topics/categories',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_message_recipients' });
+      console.log(`[mcp] Tool call: get_message_recipients (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const token = await getVerificationToken(result.mychartRequest);
+        if (!token) return errorResult('Could not get verification token');
+        const [recipients, topics] = await Promise.all([
+          getMessageRecipients(result.mychartRequest, token),
+          getMessageTopics(result.mychartRequest, token),
+        ]);
+        return jsonResult({ recipients, topics });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_message_recipients: error -`, error.message, error.stack);
+        return errorResult(`Error fetching message recipients: ${error.message}`);
+      }
+    }
+  );
+
+  // Send new message
+  server.registerTool(
+    'send_message',
+    {
+      description: 'Send a new message to a provider, starting a new conversation thread',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        recipient_name: z.string().describe('Name of the recipient provider (fuzzy matched against available recipients)'),
+        topic: z.string().describe('Message topic/category (fuzzy matched against available topics)'),
+        subject: z.string().describe('Message subject line'),
+        message_body: z.string().describe('Message body text'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; recipient_name: string; topic: string; subject: string; message_body: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_message' });
+      console.log(`[mcp] Tool call: send_message (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const token = await getVerificationToken(result.mychartRequest);
+        if (!token) return errorResult('Could not get verification token');
+
+        const [recipients, topics] = await Promise.all([
+          getMessageRecipients(result.mychartRequest, token),
+          getMessageTopics(result.mychartRequest, token),
+        ]);
+
+        // Fuzzy-match recipient by case-insensitive includes
+        const recipientQuery = args.recipient_name.toLowerCase();
+        const matchedRecipients = recipients.filter((r: MessageRecipient) =>
+          r.displayName.toLowerCase().includes(recipientQuery)
+        );
+        if (matchedRecipients.length === 0) {
+          const available = recipients.map((r: MessageRecipient) => r.displayName).join(', ');
+          return errorResult(`No recipient matching "${args.recipient_name}". Available: ${available}`);
+        }
+        if (matchedRecipients.length > 1) {
+          const matches = matchedRecipients.map((r: MessageRecipient) => r.displayName).join(', ');
+          return errorResult(`Multiple recipients match "${args.recipient_name}": ${matches}. Please be more specific.`);
+        }
+        const recipient = matchedRecipients[0];
+
+        // Fuzzy-match topic, default to first if no match
+        const topicQuery = args.topic.toLowerCase();
+        let matchedTopic = topics.find((t: MessageTopic) =>
+          t.displayName.toLowerCase().includes(topicQuery)
+        );
+        if (!matchedTopic && topics.length > 0) {
+          matchedTopic = topics[0];
+        }
+        if (!matchedTopic) {
+          return errorResult('No message topics available');
+        }
+
+        const sendResult = await sendNewMessage(result.mychartRequest, {
+          recipient,
+          topic: matchedTopic,
+          subject: args.subject,
+          messageBody: args.message_body,
+        });
+
+        return jsonResult(sendResult);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] send_message: error -`, error.message, error.stack);
+        return errorResult(`Error sending message: ${error.message}`);
+      }
+    }
+  );
+
+  // Send reply to existing conversation
+  server.registerTool(
+    'send_reply',
+    {
+      description: 'Reply to an existing message conversation',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        conversation_id: z.string().describe('The conversation ID (hthId from get_messages) to reply to'),
+        message_body: z.string().describe('Reply message body text'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; conversation_id: string; message_body: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_reply' });
+      console.log(`[mcp] Tool call: send_reply (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const replyResult = await sendReply(result.mychartRequest, {
+          conversationId: args.conversation_id,
+          messageBody: args.message_body,
+        });
+        return jsonResult(replyResult);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] send_reply: error -`, error.message, error.stack);
+        return errorResult(`Error sending reply: ${error.message}`);
       }
     }
   );

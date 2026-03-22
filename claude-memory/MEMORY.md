@@ -61,7 +61,7 @@ The globalThis singleton pattern is required for the sessionStore in Next.js —
 - `cli/` — CLI entry point + resend 2FA
 - `shared/` — common types (AccountStatus, CommonMyChartAccount)
 - `read-local-passwords/` — browser keystore extraction
-- `clo-to-jpg-converter/` — eUnity CLO image converter
+- `scrapers/myChart/clo-to-jpg-converter/` — eUnity CLO image converter
 - `web/` — Next.js web app (still has its own scraper copies in `web/src/lib/mychart/`)
 - Tests: `bun test scrapers/myChart/__tests__/*.test.ts` (132 unit) + `cd web && bun test` (295 web)
 - Node 25 + ESLint crashes (SIGABRT) — pre-existing issue, not refactor-related
