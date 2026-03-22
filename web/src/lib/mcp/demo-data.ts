@@ -67,12 +67,11 @@ export const demoAllergies = [
 ];
 
 export const demoHealthIssues = [
-  { condition: 'Obesity (Class II)', status: 'Active', onsetDate: '2005-03-10', provider: 'Dr. Julius Hibbert' },
-  { condition: 'Essential Hypertension', status: 'Active', onsetDate: '2018-06-14', provider: 'Dr. Julius Hibbert' },
-  { condition: 'Hyperlipidemia', status: 'Active', onsetDate: '2019-01-22', provider: 'Dr. Julius Hibbert' },
-  { condition: 'Gastroesophageal Reflux Disease (GERD)', status: 'Active', onsetDate: '2020-09-05', provider: 'Dr. Julius Hibbert' },
-  { condition: 'Type 2 Diabetes Mellitus', status: 'Active', onsetDate: '2023-11-15', provider: 'Dr. Julius Hibbert' },
-  { condition: 'Crayon Lodged in Brain (frontal lobe)', status: 'Resolved', onsetDate: '2024-04-01', resolvedDate: '2024-04-03', provider: 'Dr. Nick Riviera' },
+  { condition: 'Obesity', status: 'Active', onsetDate: '2000-01-15', provider: 'Dr. Julius Hibbert' },
+  { condition: 'High blood pressure', status: 'Active', onsetDate: '2010-03-20', provider: 'Dr. Julius Hibbert' },
+  { condition: 'High cholesterol', status: 'Active', onsetDate: '2010-03-20', provider: 'Dr. Julius Hibbert' },
+  { condition: 'Chronic radiation exposure (nuclear plant, Sector 7-G)', status: 'Active', onsetDate: '1990-08-01', provider: 'Dr. Julius Hibbert' },
+  { condition: 'Crayon lodged in brain (frontal lobe, since childhood)', status: 'Active', onsetDate: '1972-05-09', provider: 'Dr. Nick Riviera' },
 ];
 
 export const demoUpcomingVisits = [

@@ -38,8 +38,8 @@ typescript
 .claude/worktrees/
 
 # PII: these files are important for reverse engineering but contain real patient data
-clo-to-jpg-converter/wasm/viewer.html
-clo-to-jpg-converter/input_study_one/amf_metadata.bin
+scrapers/myChart/clo-to-jpg-converter/wasm/viewer.html
+scrapers/myChart/clo-to-jpg-converter/input_study_one/amf_metadata.bin
 *.clo
 # Allow synthetic (non-PII) CLO test images for fake-mychart
 !fake-mychart/src/data/clo-images/*.clo

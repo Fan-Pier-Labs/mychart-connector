@@ -14,7 +14,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAppContext, type MyChartInstanceInfo } from "@/lib/app-context";
+import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/track";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function HomePage() {
   const router = useRouter();
@@ -38,6 +40,7 @@ export default function HomePage() {
   const [twofaSessionKey, setTwofaSessionKey] = useState("");
   const [twofaCode, setTwofaCode] = useState("");
   const [twofaLoading, setTwofaLoading] = useState(false);
+  const [twofaDelivery, setTwofaDelivery] = useState<{ method: string; contact?: string } | null>(null);
 
   // TOTP setup state
   const [totpPromptInstanceId, setTotpPromptInstanceId] = useState("");
@@ -51,6 +54,22 @@ export default function HomePage() {
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifIncludeContent, setNotifIncludeContent] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+
+  // App 2FA (BetterAuth TOTP) state
+  const [appTotpLoading, setAppTotpLoading] = useState(false);
+  const [appTotpURI, setAppTotpURI] = useState("");
+  const [appBackupCodes, setAppBackupCodes] = useState<string[]>([]);
+  const [appTotpVerifyCode, setAppTotpVerifyCode] = useState("");
+  const [appTotpPasswordPrompt, setAppTotpPasswordPrompt] = useState<"enable" | "disable" | null>(null);
+  const [appTotpPassword, setAppTotpPassword] = useState("");
+  const [backupCodesPassword, setBackupCodesPassword] = useState("");
+  const [showBackupCodesPrompt, setShowBackupCodesPrompt] = useState(false);
+
+  // Passkey state
+  const [passkeys, setPasskeys] = useState<Array<{ id: string; name?: string | null; createdAt: string }>>([]);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [addPasskeyName, setAddPasskeyName] = useState("");
+  const [showAddPasskey, setShowAddPasskey] = useState(false);
 
   useEffect(() => {
     if (!ctx.sessionLoading && !ctx.user) {
@@ -166,6 +185,7 @@ export default function HomePage() {
 
       if (data.state === "need_2fa") {
         setTwofaSessionKey(data.sessionKey);
+        setTwofaDelivery(data.twoFaDelivery || null);
         setConnectingId("");
         return;
       }
@@ -219,6 +239,7 @@ export default function HomePage() {
       ctx.setProfile(null);
       setTwofaSessionKey("");
       setTwofaCode("");
+      setTwofaDelivery(null);
       await ctx.refreshInstances();
 
       // Offer TOTP setup if the instance doesn't have one
@@ -339,6 +360,171 @@ export default function HomePage() {
     }
   }
 
+  // Load passkeys when user is available
+  useEffect(() => {
+    if (ctx.user) {
+      authClient.passkey.listUserPasskeys().then((result) => {
+        if (result?.data) {
+          setPasskeys(result.data.map((p: Record<string, unknown>) => ({
+            id: p.id as string,
+            name: p.name as string | null,
+            createdAt: p.createdAt as string,
+          })));
+        }
+      }).catch(() => {});
+    }
+  }, [ctx.user]);
+
+  async function loadPasskeys() {
+    try {
+      const result = await authClient.passkey.listUserPasskeys();
+      if (result?.data) {
+        setPasskeys(result.data.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: p.name as string | null,
+          createdAt: p.createdAt as string,
+        })));
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
+  async function handleEnableTotp() {
+    if (!appTotpPassword) {
+      toast.error("Password is required.");
+      return;
+    }
+    setAppTotpLoading(true);
+    try {
+      const result = await authClient.twoFactor.enable({ password: appTotpPassword });
+      if (result.error) {
+        toast.error(result.error.message || "Failed to enable 2FA.");
+        setAppTotpLoading(false);
+        return;
+      }
+      setAppTotpURI(result.data?.totpURI || "");
+      setAppBackupCodes(result.data?.backupCodes || []);
+      setAppTotpPasswordPrompt(null);
+      setAppTotpPassword("");
+    } catch (err) {
+      toast.error("Failed: " + (err as Error).message);
+    } finally {
+      setAppTotpLoading(false);
+    }
+  }
+
+  async function handleVerifyTotpSetup() {
+    if (!appTotpVerifyCode) {
+      toast.error("Enter a code from your authenticator app.");
+      return;
+    }
+    setAppTotpLoading(true);
+    try {
+      const result = await authClient.twoFactor.verifyTotp({ code: appTotpVerifyCode });
+      if (result.error) {
+        toast.error(result.error.message || "Invalid code.");
+        setAppTotpLoading(false);
+        return;
+      }
+      toast.success("Two-factor authentication enabled!");
+      setAppTotpURI("");
+      setAppBackupCodes([]);
+      setAppTotpVerifyCode("");
+      await ctx.refreshSession();
+    } catch (err) {
+      toast.error("Verification failed: " + (err as Error).message);
+    } finally {
+      setAppTotpLoading(false);
+    }
+  }
+
+  async function handleDisableTotp() {
+    if (!appTotpPassword) {
+      toast.error("Password is required.");
+      return;
+    }
+    setAppTotpLoading(true);
+    try {
+      const result = await authClient.twoFactor.disable({ password: appTotpPassword });
+      if (result.error) {
+        toast.error(result.error.message || "Failed to disable 2FA.");
+        setAppTotpLoading(false);
+        return;
+      }
+      toast.success("Two-factor authentication disabled.");
+      setAppTotpPasswordPrompt(null);
+      setAppTotpPassword("");
+      await ctx.refreshSession();
+    } catch (err) {
+      toast.error("Failed: " + (err as Error).message);
+    } finally {
+      setAppTotpLoading(false);
+    }
+  }
+
+  async function handleRegenerateBackupCodes() {
+    if (!backupCodesPassword) {
+      toast.error("Password is required.");
+      return;
+    }
+    setAppTotpLoading(true);
+    try {
+      const result = await authClient.twoFactor.generateBackupCodes({ password: backupCodesPassword });
+      if (result.error) {
+        toast.error(result.error.message || "Failed to regenerate backup codes.");
+        setAppTotpLoading(false);
+        return;
+      }
+      setAppBackupCodes(result.data?.backupCodes || []);
+      setShowBackupCodesPrompt(false);
+      setBackupCodesPassword("");
+      toast.success("New backup codes generated.");
+    } catch (err) {
+      toast.error("Failed: " + (err as Error).message);
+    } finally {
+      setAppTotpLoading(false);
+    }
+  }
+
+  async function handleAddPasskey() {
+    setPasskeyLoading(true);
+    try {
+      const result = await authClient.passkey.addPasskey({ name: addPasskeyName || undefined });
+      if (result?.error) {
+        toast.error(result.error.message || "Failed to add passkey.");
+        setPasskeyLoading(false);
+        return;
+      }
+      toast.success("Passkey added!");
+      setShowAddPasskey(false);
+      setAddPasskeyName("");
+      await loadPasskeys();
+    } catch (err) {
+      toast.error("Failed to add passkey: " + (err as Error).message);
+    } finally {
+      setPasskeyLoading(false);
+    }
+  }
+
+  async function handleDeletePasskey(id: string) {
+    setPasskeyLoading(true);
+    try {
+      const result = await authClient.passkey.deletePasskey({ id });
+      if (result?.error) {
+        toast.error(result.error.message || "Failed to remove passkey.");
+        setPasskeyLoading(false);
+        return;
+      }
+      toast.success("Passkey removed.");
+      await loadPasskeys();
+    } catch (err) {
+      toast.error("Failed: " + (err as Error).message);
+    } finally {
+      setPasskeyLoading(false);
+    }
+  }
+
   async function copyMcpUrl() {
     await navigator.clipboard.writeText(ctx.mcpUrl);
     setMcpCopied(true);
@@ -405,7 +591,9 @@ export default function HomePage() {
           <CardHeader>
             <CardTitle>Two-Factor Authentication</CardTitle>
             <CardDescription>
-              A verification code has been sent to your email. Enter it below.
+              {twofaDelivery?.method === "sms"
+                ? `A verification code has been sent via text message${twofaDelivery.contact ? ` to ${twofaDelivery.contact}` : ""}. Enter it below.`
+                : `A verification code has been sent to your email${twofaDelivery?.contact ? ` (${twofaDelivery.contact})` : ""}. Enter it below.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -431,7 +619,7 @@ export default function HomePage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => { setTwofaSessionKey(""); setTwofaCode(""); }}
+              onClick={() => { setTwofaSessionKey(""); setTwofaCode(""); setTwofaDelivery(null); }}
             >
               Cancel
             </Button>
@@ -861,6 +1049,268 @@ export default function HomePage() {
                   )}
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Security Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Security</CardTitle>
+              <CardDescription>
+                Manage two-factor authentication and passkeys for your account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* TOTP 2FA Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Two-Factor Authentication (TOTP)</p>
+                    <p className="text-xs text-muted-foreground">
+                      {ctx.user?.twoFactorEnabled ? "Enabled" : "Disabled"}
+                    </p>
+                  </div>
+                  {!appTotpURI && !appTotpPasswordPrompt && (
+                    <Button
+                      size="sm"
+                      variant={ctx.user?.twoFactorEnabled ? "destructive" : "default"}
+                      onClick={() => {
+                        setAppTotpPasswordPrompt(ctx.user?.twoFactorEnabled ? "disable" : "enable");
+                        setAppTotpPassword("");
+                      }}
+                      disabled={appTotpLoading}
+                    >
+                      {ctx.user?.twoFactorEnabled ? "Disable" : "Enable"}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Password prompt for enable/disable */}
+                {appTotpPasswordPrompt && !appTotpURI && (
+                  <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
+                    <p className="text-sm text-muted-foreground">
+                      Enter your password to {appTotpPasswordPrompt === "enable" ? "enable" : "disable"} two-factor authentication.
+                    </p>
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      value={appTotpPassword}
+                      onChange={(e) => setAppTotpPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (appTotpPasswordPrompt === "enable" ? handleEnableTotp() : handleDisableTotp())}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={appTotpPasswordPrompt === "enable" ? handleEnableTotp : handleDisableTotp}
+                        disabled={appTotpLoading}
+                      >
+                        {appTotpLoading ? "Processing..." : "Confirm"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setAppTotpPasswordPrompt(null); setAppTotpPassword(""); }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TOTP setup flow — QR code + verify */}
+                {appTotpURI && (
+                  <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-slate-50">
+                    <p className="text-sm font-medium">Scan this QR code with your authenticator app</p>
+                    <div className="flex justify-center">
+                      <QRCodeSVG value={appTotpURI} size={200} />
+                    </div>
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        Can&apos;t scan? Show manual entry key
+                      </summary>
+                      <code className="block mt-2 p-2 bg-white rounded border text-xs break-all">
+                        {appTotpURI}
+                      </code>
+                    </details>
+
+                    {appBackupCodes.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-amber-700">Save your backup codes</p>
+                        <p className="text-xs text-muted-foreground">
+                          Store these codes somewhere safe. Each code can only be used once.
+                        </p>
+                        <div className="grid grid-cols-2 gap-1 p-3 bg-white rounded border font-mono text-xs">
+                          {appBackupCodes.map((code, i) => (
+                            <span key={i}>{code}</span>
+                          ))}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(appBackupCodes.join("\n"));
+                            toast.success("Backup codes copied!");
+                          }}
+                        >
+                          Copy Backup Codes
+                        </Button>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Enter a code from your authenticator app to verify</Label>
+                      <Input
+                        placeholder="6-digit code"
+                        value={appTotpVerifyCode}
+                        onChange={(e) => setAppTotpVerifyCode(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleVerifyTotpSetup()}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleVerifyTotpSetup}
+                          disabled={appTotpLoading}
+                        >
+                          {appTotpLoading ? "Verifying..." : "Verify & Enable"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setAppTotpURI(""); setAppBackupCodes([]); setAppTotpVerifyCode(""); }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Regenerate backup codes */}
+                {ctx.user?.twoFactorEnabled && !appTotpURI && !appTotpPasswordPrompt && (
+                  <>
+                    {!showBackupCodesPrompt && appBackupCodes.length === 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowBackupCodesPrompt(true)}
+                      >
+                        Regenerate Backup Codes
+                      </Button>
+                    )}
+                    {showBackupCodesPrompt && (
+                      <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
+                        <p className="text-sm text-muted-foreground">Enter your password to generate new backup codes.</p>
+                        <Input
+                          type="password"
+                          placeholder="Password"
+                          value={backupCodesPassword}
+                          onChange={(e) => setBackupCodesPassword(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleRegenerateBackupCodes()}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleRegenerateBackupCodes} disabled={appTotpLoading}>
+                            {appTotpLoading ? "Generating..." : "Generate"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setShowBackupCodesPrompt(false); setBackupCodesPassword(""); }}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {appBackupCodes.length > 0 && !appTotpURI && (
+                      <div className="border border-slate-200 rounded-lg p-4 space-y-2 bg-slate-50">
+                        <p className="text-sm font-medium text-amber-700">Your new backup codes</p>
+                        <p className="text-xs text-muted-foreground">Store these codes somewhere safe. Each code can only be used once.</p>
+                        <div className="grid grid-cols-2 gap-1 p-3 bg-white rounded border font-mono text-xs">
+                          {appBackupCodes.map((code, i) => (
+                            <span key={i}>{code}</span>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(appBackupCodes.join("\n"));
+                              toast.success("Backup codes copied!");
+                            }}
+                          >
+                            Copy
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setAppBackupCodes([])}>
+                            Done
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="border-t border-slate-200" />
+
+              {/* Passkeys Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Passkeys</p>
+                    <p className="text-xs text-muted-foreground">
+                      Sign in with biometrics or a security key.
+                    </p>
+                  </div>
+                  {!showAddPasskey && (
+                    <Button size="sm" variant="outline" onClick={() => setShowAddPasskey(true)} disabled={passkeyLoading}>
+                      Add Passkey
+                    </Button>
+                  )}
+                </div>
+
+                {showAddPasskey && (
+                  <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Passkey name (optional)</Label>
+                      <Input
+                        placeholder='e.g. "MacBook Touch ID"'
+                        value={addPasskeyName}
+                        onChange={(e) => setAddPasskeyName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleAddPasskey()}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={handleAddPasskey} disabled={passkeyLoading}>
+                        {passkeyLoading ? "Adding..." : "Register Passkey"}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setShowAddPasskey(false); setAddPasskeyName(""); }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {passkeys.length === 0 && !showAddPasskey && (
+                  <p className="text-xs text-muted-foreground">No passkeys registered.</p>
+                )}
+
+                {passkeys.map((pk) => (
+                  <div key={pk.id} className="flex items-center justify-between border border-slate-200 rounded-lg p-3">
+                    <div>
+                      <p className="text-sm font-medium">{pk.name || "Passkey"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Added {new Date(pk.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleDeletePasskey(pk.id)}
+                      disabled={passkeyLoading}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>

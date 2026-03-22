@@ -39,7 +39,7 @@ import { getLinkedMyChartAccounts } from '../scrapers/myChart/other_mycharts/oth
 import { getConversationMessages } from '../scrapers/myChart/messages/messageThreads';
 import { getImagingResults } from '../scrapers/myChart/labs_and_procedure_results/labResults';
 import { downloadImagingStudyDirect } from '../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../clo-to-jpg-converter/clo_to_jpg';
+import { convertCloToJpg } from '../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
 import { deleteMessage } from '../scrapers/myChart/messages/deleteMessage';
 import { requestMedicationRefill } from '../scrapers/myChart/medicationRefill';
 import { sessionStore } from '../scrapers/myChart/sessionStore';
@@ -103,8 +103,9 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--set-up-totp') parsed.setupTotp = true;
     else if (args[i] === '--use-saved-totp') parsed.useSavedTotp = true;
     else if (args[i] === '--disable-totp') parsed.disableTotp = true;
+    else if (args[i] === '--local') parsed.local = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; local?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -286,6 +287,7 @@ async function login(creds: { hostname: string; username: string; password: stri
       user: creds.username,
       pass: creds.password,
       skipSendCode: !!useTotpSecret,
+      protocol: cliArgs.local ? 'http' : undefined,
     });
 
     if (loginResult.state === 'invalid_login') {
@@ -312,6 +314,15 @@ async function login(creds: { hostname: string; username: string; password: stri
         console.log('  Using 2FA code from --2fa arg');
         twofaCodeArray = [{ code: cliArgs.twofa, score: 1 }];
       } else {
+        // Show where the code was sent
+        if (loginResult.twoFaDelivery) {
+          const { method, contact } = loginResult.twoFaDelivery;
+          if (method === 'sms') {
+            console.log(`  2FA code sent via text message${contact ? ` to ${contact}` : ''}`);
+          } else {
+            console.log(`  2FA code sent via email${contact ? ` to ${contact}` : ''}`);
+          }
+        }
         console.log('  Waiting for 2FA code via Resend...');
         const resendCodes = await get2FaCodeFromResend(Date.now(), creds.hostname);
         if (resendCodes.length === 0) {

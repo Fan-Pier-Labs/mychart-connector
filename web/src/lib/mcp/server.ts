@@ -13,6 +13,9 @@ import { getHealthIssues } from '../mychart/healthIssues';
 import { upcomingVisits, pastVisits } from '../mychart/visits/visits';
 import { listLabResults } from '../mychart/labs/labResults';
 import { listConversations } from '../mychart/messages/conversations';
+import { sendNewMessage, getMessageTopics, getMessageRecipients, getVerificationToken } from '../mychart/messages/sendMessage';
+import type { MessageRecipient, MessageTopic } from '../mychart/messages/sendMessage';
+import { sendReply } from '../mychart/messages/sendReply';
 import { getBillingHistory } from '../mychart/bills/bills';
 import { getCareTeam } from '../mychart/careTeam';
 import { getInsurance } from '../mychart/insurance';
@@ -22,7 +25,7 @@ import { getReferrals } from '../mychart/referrals';
 import { getMedicalHistory } from '../mychart/medicalHistory';
 import { getLetters } from '../mychart/letters';
 import { getVitals } from '../mychart/vitals';
-import { getEmergencyContacts } from '../mychart/emergencyContacts';
+import { getEmergencyContacts, addEmergencyContact, updateEmergencyContact, removeEmergencyContact } from '../mychart/emergencyContacts';
 import { getDocuments } from '../mychart/documents';
 import { getGoals } from '../mychart/goals';
 import { getUpcomingOrders } from '../mychart/upcomingOrders';
@@ -35,6 +38,11 @@ import { getImagingResults } from '../mychart/imagingResults';
 import { getLinkedMyChartAccounts } from '../mychart/linkedMyChartAccounts';
 import { complete2faFlow } from '../mychart/login';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { trimLabResults, trimBilling, trimMessages, trimImagingResults, trimLinkedAccounts, paginate } from './transforms';
+import type { LabTestResultWithHistory, ImagingResult } from '../../../../scrapers/myChart/labs_and_procedure_results/labtestresulttype';
+import type { BillingAccount } from '../../../../scrapers/myChart/bills/types';
+import type { ConversationListResponse } from '../../../../scrapers/myChart/messages/conversations';
+import type { LinkedMyChart } from '../../../../scrapers/myChart/other_mycharts/other_mycharts';
 
 function errorResult(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -89,8 +97,8 @@ async function resolveRequest(
     const autoConnectResults: { hostname: string; result: string }[] = [];
     for (const inst of totpInstances) {
       const result = await autoConnectInstance(userId, inst);
-      autoConnectResults.push({ hostname: inst.hostname, result });
-      console.log(`[mcp] resolveRequest: auto-connect ${inst.hostname} => ${result}`);
+      autoConnectResults.push({ hostname: inst.hostname, result: result.state });
+      console.log(`[mcp] resolveRequest: auto-connect ${inst.hostname} => ${result.state}`);
     }
 
     connected = getConnected();
@@ -213,8 +221,8 @@ export function createMcpServer(userId: string): McpServer {
 
         console.log(`[mcp] connect_instance: attempting auto-connect to ${inst.hostname} (hasTOTP=${!!inst.totpSecret})`);
         const result = await autoConnectInstance(userId, inst);
-        console.log(`[mcp] connect_instance: result=${result} for ${inst.hostname}`);
-        return jsonResult({ status: result, hostname: inst.hostname });
+        console.log(`[mcp] connect_instance: result=${result.state} for ${inst.hostname}`);
+        return jsonResult({ status: result.state, hostname: inst.hostname });
       } catch (err) {
         const error = err as Error;
         console.error(`[mcp] connect_instance: error -`, error.message, error.stack);
@@ -368,9 +376,230 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  registerScraperTool(server, userId, 'get_lab_results', 'Get lab results and test details', listLabResults);
-  registerScraperTool(server, userId, 'get_messages', 'Get message conversations from communication center', listConversations);
-  registerScraperTool(server, userId, 'get_billing', 'Get billing history and account details', getBillingHistory);
+  // Lab results — trimmed + paginated
+  server.registerTool(
+    'get_lab_results',
+    {
+      description: 'Get lab results. Returns trimmed results with component name, value, units, range, and abnormal flag. Supports pagination (default limit 10).',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        limit: z.number().optional().describe('Max results to return (default 10)'),
+        offset: z.number().optional().describe('Number of results to skip (default 0)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
+      console.log(`[mcp] Tool call: get_lab_results (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const raw = await listLabResults(result.mychartRequest) as LabTestResultWithHistory[];
+        const trimmed = trimLabResults(raw);
+        const page = paginate(trimmed, args.limit ?? 10, args.offset);
+        return jsonResult({ total: trimmed.length, offset: args.offset ?? 0, count: page.length, results: page });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_lab_results: error -`, error.message, error.stack);
+        return errorResult(`Error fetching get_lab_results: ${error.message}`);
+      }
+    }
+  );
+
+  // Messages — trimmed + paginated
+  server.registerTool(
+    'get_messages',
+    {
+      description: 'Get message conversations. Returns subject, date, author, and plain text body (HTML stripped). Supports pagination (default limit 10).',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        limit: z.number().optional().describe('Max conversations to return (default 10)'),
+        offset: z.number().optional().describe('Number of conversations to skip (default 0)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
+      console.log(`[mcp] Tool call: get_messages (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const raw = await listConversations(result.mychartRequest) as ConversationListResponse | null;
+        const trimmed = trimMessages(raw);
+        const page = paginate(trimmed, args.limit ?? 10, args.offset);
+        return jsonResult({ total: trimmed.length, offset: args.offset ?? 0, count: page.length, conversations: page });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_messages: error -`, error.message, error.stack);
+        return errorResult(`Error fetching get_messages: ${error.message}`);
+      }
+    }
+  );
+
+  // Message recipients + topics
+  server.registerTool(
+    'get_message_recipients',
+    {
+      description: 'Get list of available message recipients (providers) and message topics/categories',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_message_recipients' });
+      console.log(`[mcp] Tool call: get_message_recipients (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const token = await getVerificationToken(result.mychartRequest);
+        if (!token) return errorResult('Could not get verification token');
+        const [recipients, topics] = await Promise.all([
+          getMessageRecipients(result.mychartRequest, token),
+          getMessageTopics(result.mychartRequest, token),
+        ]);
+        return jsonResult({ recipients, topics });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_message_recipients: error -`, error.message, error.stack);
+        return errorResult(`Error fetching message recipients: ${error.message}`);
+      }
+    }
+  );
+
+  // Send new message
+  server.registerTool(
+    'send_message',
+    {
+      description: 'Send a new message to a provider, starting a new conversation thread',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        recipient_name: z.string().describe('Name of the recipient provider (fuzzy matched against available recipients)'),
+        topic: z.string().describe('Message topic/category (fuzzy matched against available topics)'),
+        subject: z.string().describe('Message subject line'),
+        message_body: z.string().describe('Message body text'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; recipient_name: string; topic: string; subject: string; message_body: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_message' });
+      console.log(`[mcp] Tool call: send_message (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const token = await getVerificationToken(result.mychartRequest);
+        if (!token) return errorResult('Could not get verification token');
+
+        const [recipients, topics] = await Promise.all([
+          getMessageRecipients(result.mychartRequest, token),
+          getMessageTopics(result.mychartRequest, token),
+        ]);
+
+        // Fuzzy-match recipient by case-insensitive includes
+        const recipientQuery = args.recipient_name.toLowerCase();
+        const matchedRecipients = recipients.filter((r: MessageRecipient) =>
+          r.displayName.toLowerCase().includes(recipientQuery)
+        );
+        if (matchedRecipients.length === 0) {
+          const available = recipients.map((r: MessageRecipient) => r.displayName).join(', ');
+          return errorResult(`No recipient matching "${args.recipient_name}". Available: ${available}`);
+        }
+        if (matchedRecipients.length > 1) {
+          const matches = matchedRecipients.map((r: MessageRecipient) => r.displayName).join(', ');
+          return errorResult(`Multiple recipients match "${args.recipient_name}": ${matches}. Please be more specific.`);
+        }
+        const recipient = matchedRecipients[0];
+
+        // Fuzzy-match topic, default to first if no match
+        const topicQuery = args.topic.toLowerCase();
+        let matchedTopic = topics.find((t: MessageTopic) =>
+          t.displayName.toLowerCase().includes(topicQuery)
+        );
+        if (!matchedTopic && topics.length > 0) {
+          matchedTopic = topics[0];
+        }
+        if (!matchedTopic) {
+          return errorResult('No message topics available');
+        }
+
+        const sendResult = await sendNewMessage(result.mychartRequest, {
+          recipient,
+          topic: matchedTopic,
+          subject: args.subject,
+          messageBody: args.message_body,
+        });
+
+        return jsonResult(sendResult);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] send_message: error -`, error.message, error.stack);
+        return errorResult(`Error sending message: ${error.message}`);
+      }
+    }
+  );
+
+  // Send reply to existing conversation
+  server.registerTool(
+    'send_reply',
+    {
+      description: 'Reply to an existing message conversation',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        conversation_id: z.string().describe('The conversation ID (hthId from get_messages) to reply to'),
+        message_body: z.string().describe('Reply message body text'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; conversation_id: string; message_body: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_reply' });
+      console.log(`[mcp] Tool call: send_reply (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const replyResult = await sendReply(result.mychartRequest, {
+          conversationId: args.conversation_id,
+          messageBody: args.message_body,
+        });
+        return jsonResult(replyResult);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] send_reply: error -`, error.message, error.stack);
+        return errorResult(`Error sending reply: ${error.message}`);
+      }
+    }
+  );
+
+  // Billing — trimmed + paginated
+  server.registerTool(
+    'get_billing',
+    {
+      description: 'Get billing history. Returns date, description, provider, payer, amounts, and coverage summary. Supports pagination on visits (default limit 10).',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        limit: z.number().optional().describe('Max visits per account to return (default 10)'),
+        offset: z.number().optional().describe('Number of visits to skip (default 0)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
+      console.log(`[mcp] Tool call: get_billing (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const raw = await getBillingHistory(result.mychartRequest) as BillingAccount[];
+        const trimmed = trimBilling(raw);
+        // Paginate visits within each account
+        const paginated = trimmed.map(acct => ({
+          ...acct,
+          totalVisits: acct.visits.length,
+          visits: paginate(acct.visits, args.limit ?? 10, args.offset),
+        }));
+        return jsonResult(paginated);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_billing: error -`, error.message, error.stack);
+        return errorResult(`Error fetching get_billing: ${error.message}`);
+      }
+    }
+  );
   registerScraperTool(server, userId, 'get_care_team', 'Get care team members', getCareTeam);
   registerScraperTool(server, userId, 'get_insurance', 'Get insurance information', getInsurance);
   registerScraperTool(server, userId, 'get_immunizations', 'Get immunization records', getImmunizations);
@@ -380,6 +609,102 @@ export function createMcpServer(userId: string): McpServer {
   registerScraperTool(server, userId, 'get_letters', 'Get letters (after-visit summaries, clinical documents)', getLetters);
   registerScraperTool(server, userId, 'get_vitals', 'Get vitals and track-my-health flowsheet data (weight, blood pressure, etc.)', getVitals);
   registerScraperTool(server, userId, 'get_emergency_contacts', 'Get emergency contacts', getEmergencyContacts);
+
+  server.registerTool(
+    'add_emergency_contact',
+    {
+      description: 'Add a new emergency contact',
+      inputSchema: {
+        name: z.string().describe('Full name of the emergency contact'),
+        relationship_type: z.string().describe('Relationship to patient (e.g. Spouse, Parent, Friend, Sibling)'),
+        phone_number: z.string().describe('Phone number'),
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+    async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'add_emergency_contact' });
+      console.log(`[mcp] Tool call: add_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await addEmergencyContact(result.mychartRequest, {
+          name: args.name,
+          relationshipType: args.relationship_type,
+          phoneNumber: args.phone_number,
+        });
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] add_emergency_contact: error -`, error.message, error.stack);
+        return errorResult(`Error adding emergency contact: ${error.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    'update_emergency_contact',
+    {
+      description: 'Update an existing emergency contact. Get the contact ID from get_emergency_contacts first.',
+      inputSchema: {
+        id: z.string().describe('Contact ID to update'),
+        name: z.string().optional().describe('New full name'),
+        relationship_type: z.string().optional().describe('New relationship type'),
+        phone_number: z.string().optional().describe('New phone number'),
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+    async (args: { id: string; name?: string; relationship_type?: string; phone_number?: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'update_emergency_contact' });
+      console.log(`[mcp] Tool call: update_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await updateEmergencyContact(result.mychartRequest, {
+          id: args.id,
+          name: args.name,
+          relationshipType: args.relationship_type,
+          phoneNumber: args.phone_number,
+        });
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] update_emergency_contact: error -`, error.message, error.stack);
+        return errorResult(`Error updating emergency contact: ${error.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    'remove_emergency_contact',
+    {
+      description: 'Remove an emergency contact. Get the contact ID from get_emergency_contacts first.',
+      inputSchema: {
+        id: z.string().describe('Contact ID to remove'),
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+    async (args: { id: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'remove_emergency_contact' });
+      console.log(`[mcp] Tool call: remove_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await removeEmergencyContact(result.mychartRequest, args.id);
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] remove_emergency_contact: error -`, error.message, error.stack);
+        return errorResult(`Error removing emergency contact: ${error.message}`);
+      }
+    }
+  );
+
   registerScraperTool(server, userId, 'get_documents', 'Get clinical documents', getDocuments);
   registerScraperTool(server, userId, 'get_goals', 'Get care team and patient goals', getGoals);
   registerScraperTool(server, userId, 'get_upcoming_orders', 'Get upcoming orders (labs, imaging, procedures)', getUpcomingOrders);
@@ -388,8 +713,40 @@ export function createMcpServer(userId: string): McpServer {
   registerScraperTool(server, userId, 'get_activity_feed', 'Get recent activity feed items', getActivityFeed);
   registerScraperTool(server, userId, 'get_education_materials', 'Get assigned education materials', getEducationMaterials);
   registerScraperTool(server, userId, 'get_ehi_export', 'Get electronic health information export templates', getEhiExportTemplates);
-  registerScraperTool(server, userId, 'get_imaging_results', 'Get imaging results (X-ray, MRI, CT, ultrasound, etc.)', getImagingResults);
-  registerScraperTool(server, userId, 'get_linked_mychart_accounts', 'Get linked MyChart accounts from other healthcare organizations', getLinkedMyChartAccounts);
+  // Imaging — trimmed (strips report HTML, keeps impression text)
+  server.registerTool(
+    'get_imaging_results',
+    {
+      description: 'Get imaging results (X-ray, MRI, CT, ultrasound). Returns order name, date, provider, and report/impression text.',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        limit: z.number().optional().describe('Max results to return (default 10)'),
+        offset: z.number().optional().describe('Number of results to skip (default 0)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
+      console.log(`[mcp] Tool call: get_imaging_results (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const raw = await getImagingResults(result.mychartRequest) as ImagingResult[];
+        const trimmed = trimImagingResults(raw);
+        const page = paginate(trimmed, args.limit ?? 10, args.offset);
+        return jsonResult({ total: trimmed.length, offset: args.offset ?? 0, count: page.length, results: page });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_imaging_results: error -`, error.message, error.stack);
+        return errorResult(`Error fetching get_imaging_results: ${error.message}`);
+      }
+    }
+  );
+
+  // Linked accounts — trimmed (drops logo URLs)
+  registerScraperTool(server, userId, 'get_linked_mychart_accounts', 'Get linked MyChart accounts from other healthcare organizations', async (req) => {
+    const raw = await getLinkedMyChartAccounts(req) as LinkedMyChart[];
+    return trimLinkedAccounts(raw);
+  });
 
   return server;
 }

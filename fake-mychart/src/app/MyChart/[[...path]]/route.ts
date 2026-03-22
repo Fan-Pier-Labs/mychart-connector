@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, validateSession, sessionCookieHeader } from '@/lib/session';
+import { createSession, validateSession, sessionCookieHeader, hasAcceptedTerms, acceptTerms } from '@/lib/session';
 import {
-  loginPage, loginPageControllerJs, doLoginSuccess, doLoginFailed,
-  secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage,
+  loginPage, loginPageControllerJs, doLoginSuccess, doLoginNeed2FA, doLoginFailed,
+  secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage, get2faMethods,
+  termsConditionsPage,
   careTeamPage, insurancePage, preventiveCarePage, billingSummaryPage, billingDetailsPage,
   medicationsPage, allergiesPage, healthIssuesPage, immunizationsPage,
   vitalsPage, medicalHistoryPage, testResultsPage, messagesPage, visitsPage,
@@ -15,6 +16,8 @@ import * as homer from '@/data/homer';
 // Deep-clone so mutations don't affect the seed module
 // eslint-disable-next-line prefer-const
 let conversationsState = JSON.parse(JSON.stringify(homer.conversations));
+let emergencyContactsState = JSON.parse(JSON.stringify(homer.emergencyContacts));
+let ecIdCounter = 100;
 let composeIdCounter = 1000;
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -40,6 +43,17 @@ function requireSession(request: NextRequest): NextResponse | null {
 
 function acceptAny(): boolean {
   return process.env.FAKE_MYCHART_ACCEPT_ANY === 'true';
+}
+
+function requireTerms(): boolean {
+  return process.env.FAKE_MYCHART_REQUIRE_TERMS === 'true';
+}
+
+function requireTermsRedirect(request: NextRequest): NextResponse | null {
+  if (!requireTerms()) return null;
+  const cookie = request.headers.get('cookie');
+  if (hasAcceptedTerms(cookie)) return null;
+  return NextResponse.redirect(new URL('/MyChart/Authentication/TermsConditions', request.url), 302);
 }
 
 // ─── Route handler ──────────────────────────────────────────────────
@@ -68,7 +82,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return html('OK');
   }
 
+  if (lower === 'authentication/termsconditions') {
+    return html(termsConditionsPage());
+  }
+
   if (lower === 'inside.asp') {
+    const termsRedirect = requireTermsRedirect(request);
+    if (termsRedirect) return termsRedirect;
     return html('Welcome to MyChart');
   }
 
@@ -78,10 +98,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!validateSession(cookie)) {
       return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
     }
+    const termsRedirect = requireTermsRedirect(request);
+    if (termsRedirect) return termsRedirect;
     return html(homePage(homer.profile.name, homer.profile.dob, homer.profile.mrn, homer.profile.pcp));
   }
 
   if (lower.startsWith('home/csrftoken')) {
+    const termsRedirect = requireTermsRedirect(request);
+    if (termsRedirect) return termsRedirect;
     return html(csrfTokenPage());
   }
 
@@ -286,9 +310,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return html(doLoginFailed());
       }
 
-      // Successful login — create session and set cookie
+      // Check if 2FA is required (opt-in via env var, off by default)
+      const require2fa = process.env.FAKE_MYCHART_REQUIRE_2FA === 'true';
+      if (require2fa) {
+        // Return 2FA page — don't create session yet
+        const sessionId = createSession();
+        const response = html(doLoginNeed2FA());
+        response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
+        return response;
+      }
+
+      // Successful login without 2FA — create session and set cookie
       const sessionId = createSession();
-      const response = html(doLoginSuccess());
+      // If terms are required, return the T&C page instead of the home page
+      const response = requireTerms()
+        ? html(termsConditionsPage())
+        : html(doLoginSuccess());
       response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
       return response;
 
@@ -297,9 +334,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   }
 
+  // ── Terms & Conditions acceptance ──────────────────────────────
+  if (lower === 'authentication/termsconditions') {
+    const cookie = request.headers.get('cookie');
+    acceptTerms(cookie);
+    // Redirect to home after accepting
+    return NextResponse.redirect(new URL('/MyChart/Home', request.url), 302);
+  }
+
   // ── 2FA ────────────────────────────────────────────────────────
   if (lower.startsWith('authentication/secondaryvalidation/sendcode')) {
-    return html('Code sent');
+    const body = await request.text();
+    const isEmail = body.includes('deliveryMethodEmail=true');
+    const maskedEmail = 'ho***@springfield.net';
+    const maskedPhone = '***-***-7890';
+    const contact = isEmail ? maskedEmail : maskedPhone;
+    return html(`Code sent to ${contact}`);
   }
 
   if (lower.startsWith('authentication/secondaryvalidation/validate')) {
@@ -400,7 +450,49 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Emergency Contacts
   if (lower === 'api/personalinformation/getrelationships') {
-    return json(homer.emergencyContacts);
+    return json(emergencyContactsState);
+  }
+  if (lower === 'api/personalinformation/addrelationship') {
+    try {
+      const body = await request.json();
+      ecIdCounter++;
+      const newContact = {
+        id: `EC-${ecIdCounter}`,
+        name: body.name || '',
+        relationshipType: body.relationshipType || '',
+        phoneNumber: body.phoneNumber || '',
+        isEmergencyContact: body.isEmergencyContact ?? true,
+      };
+      emergencyContactsState.relationships.push(newContact);
+      return json({ success: true, id: newContact.id });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
+  }
+  if (lower === 'api/personalinformation/updaterelationship') {
+    try {
+      const body = await request.json();
+      const idx = emergencyContactsState.relationships.findIndex(
+        (r: { id?: string; name?: string }) => r.id === body.id || r.name === body.id
+      );
+      if (idx === -1) return json({ error: 'Contact not found' }, 404);
+      const existing = emergencyContactsState.relationships[idx];
+      emergencyContactsState.relationships[idx] = { ...existing, ...body };
+      return json({ success: true });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
+  }
+  if (lower === 'api/personalinformation/removerelationship') {
+    try {
+      const body = await request.json();
+      emergencyContactsState.relationships = emergencyContactsState.relationships.filter(
+        (r: { id?: string; name?: string }) => r.id !== body.id && r.name !== body.id
+      );
+      return json({ success: true });
+    } catch {
+      return json({ error: 'Invalid request' }, 400);
+    }
   }
 
   // Upcoming Orders
@@ -515,20 +607,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/conversations/sendreply') {
     try {
       const body = await request.json();
+      const convId = body.conversationId || '';
       const conv = conversationsState.conversations.find(
-        (c: { hthId: string }) => c.hthId === body.conversationId
+        (c: { hthId: string }) => c.hthId === convId
       );
       if (conv) {
+        const replyBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || body.body || '');
         conv.messages.push({
           wmgId: `MSG-${Date.now()}`,
           author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
           deliveryInstantISO: new Date().toISOString(),
-          body: body.messageBody || body.body || '',
+          body: replyBody,
         });
       }
-      return json({ success: true });
+      // Real MyChart returns the conversation ID as a plain JSON string
+      return json(convId);
     } catch {
-      return json({ success: true });
+      return json('');
     }
   }
 
@@ -546,11 +641,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
       const body = await request.json();
       const newConvId = `CONV-${Date.now()}`;
+      const msgBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || '');
+      const msgSubject = body.messageSubject || body.subject || 'New Message';
+      const recipientName = body.recipient?.displayName || body.recipientName || 'Provider';
       conversationsState.conversations.unshift({
         hthId: newConvId,
-        subject: body.subject || 'New Message',
-        previewText: body.messageBody || '',
-        audience: [{ name: body.recipientName || 'Provider' }],
+        subject: msgSubject,
+        previewText: msgBody,
+        audience: [{ name: recipientName }],
         hasMoreMessages: false,
         userOverrideNames: {},
         messages: [
@@ -558,7 +656,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             wmgId: `MSG-${Date.now()}`,
             author: { empKey: '', wprKey: 'WPR-HOMER', displayName: 'Homer Simpson' },
             deliveryInstantISO: new Date().toISOString(),
-            body: body.messageBody || '',
+            body: msgBody,
           },
         ],
       });

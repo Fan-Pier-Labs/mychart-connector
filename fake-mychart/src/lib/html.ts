@@ -304,8 +304,36 @@ export function doLoginFailed(): string {
   return `<html><body><div> login failed</div></body></html>`;
 }
 
+/**
+ * Returns which 2FA delivery methods the fake MyChart should offer.
+ * Controlled by the FAKE_MYCHART_2FA_METHODS env var:
+ *   - "email"     → only email
+ *   - "sms"       → only SMS/phone
+ *   - "email,sms" → both (default)
+ */
+export function get2faMethods(): { email: boolean; sms: boolean } {
+  const methods = (process.env.FAKE_MYCHART_2FA_METHODS || 'email,sms').toLowerCase();
+  return {
+    email: methods.includes('email'),
+    sms: methods.includes('sms'),
+  };
+}
+
 export function secondaryValidationPage(): string {
   const token = generateCsrfToken();
+  const methods = get2faMethods();
+  const maskedEmail = 'ho***@springfield.net';
+  const maskedPhone = '***-***-7890';
+
+  // Build method buttons matching real MyChart's structure
+  let methodButtons = '';
+  if (methods.email) {
+    methodButtons += `<button type="button" class="method-btn" data-method="email">Email to me</button>\n`;
+  }
+  if (methods.sms) {
+    methodButtons += `<button type="button" class="method-btn" data-method="sms">Text to my phone</button>\n`;
+  }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head><title>MyChart - Verification</title>
@@ -316,21 +344,50 @@ export function secondaryValidationPage(): string {
   .verify-box h2 { margin-bottom: 8px; }
   .verify-box p { color: #666; font-size: 14px; margin-bottom: 20px; }
   .verify-box input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 20px; text-align: center; letter-spacing: 8px; margin-bottom: 16px; }
-  .verify-box button { width: 100%; padding: 12px; background: #1a5276; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .verify-box button { width: 100%; padding: 12px; background: #1a5276; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+  .method-btn { background: #2980b9; }
+  .method-btn:hover { background: #1a5276; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
   <input name="__RequestVerificationToken" type="hidden" value="${token}" style="display:none" />
   <div>secondaryvalidationcontroller</div>
   <div class="verify-box">
-    <h2>Two-Step Verification</h2>
-    <p>Enter the 6-digit code sent to your device.</p>
-    <form id="verifyForm">
-      <input type="text" id="code" name="code" maxlength="6" autocomplete="one-time-code" placeholder="000000">
-      <button type="submit">Verify</button>
-    </form>
+    <h2>Verify your identity</h2>
+    <p>Choose how to receive your security code.</p>
+    <div id="methodSelection">
+      ${methodButtons}
+    </div>
+    <div id="codeEntry" class="hidden">
+      <p id="sentMessage"></p>
+      <form id="verifyForm">
+        <input type="text" id="code" name="code" maxlength="6" autocomplete="one-time-code" placeholder="000000">
+        <button type="submit">Verify</button>
+      </form>
+    </div>
   </div>
   <script>
+    var maskedEmail = '${maskedEmail}';
+    var maskedPhone = '${maskedPhone}';
+    document.querySelectorAll('.method-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var method = btn.getAttribute('data-method');
+        var isEmail = method === 'email';
+        var contact = isEmail ? maskedEmail : maskedPhone;
+        fetch('/${FIRST_PATH}/Authentication/SecondaryValidation/SendCode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'deliveryMethodEmail=' + isEmail + '&resendCode=false&workflow=1',
+          credentials: 'same-origin'
+        }).then(function() {
+          document.getElementById('methodSelection').classList.add('hidden');
+          document.getElementById('codeEntry').classList.remove('hidden');
+          document.getElementById('sentMessage').textContent =
+            'We\\'ve sent a security code to ' + contact + '.';
+        });
+      });
+    });
     document.getElementById('verifyForm').addEventListener('submit', function(e) {
       e.preventDefault();
       var code = document.getElementById('code').value;
@@ -892,12 +949,12 @@ export function billingSummaryPage(accounts: Array<{
       <h3>\u{1F4B3} Account #${a.guarantorId}</h3>
       <div class="detail">${a.guarantorName}</div>
       <div style="font-size:28px; font-weight:700; color:#c0392b; margin: 12px 0;">
-        <span class="ba_card_status_due_amount moneyColor">${a.amountDue}</span>
+        <p class="ba_card_status_due_amount moneyColor">${a.amountDue}</p>
       </div>
       <div class="meta ba_card_status_due_label">Amount Due</div>
-      <div class="meta">
+      <p class="meta ba_card_status_recentPaymentLabel">
         <a href="/${FIRST_PATH}/Billing/Details?ID=${a.detailsId}&Context=${a.detailsContext}&tab=3" title="View payment history">${a.lastPaid}</a>
-      </div>
+      </p>
       <div class="meta" style="margin-top:8px;">
         <span class="ba_card_header_saLabel ba_card_header_saLabel_saName">Springfield Nuclear Power Plant</span>
       </div>
@@ -1124,6 +1181,23 @@ export function profilePage(): string {
       });
     </script>
   `);
+}
+
+// ─── Terms & Conditions ──────────────────────────────────────────────
+export function termsConditionsPage(): string {
+  const token = generateCsrfToken();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><title>MyChart - Terms and Conditions</title></head>
+<body>
+  <div>Terms and Conditions</div>
+  <p>Please review and accept the MyChart Terms and Conditions to continue.</p>
+  <form method="POST" action="/${FIRST_PATH}/Authentication/TermsConditions">
+    <input name="__RequestVerificationToken" type="hidden" value="${token}" />
+    <p>By clicking Accept, you agree to the MyChart Terms of Use and Privacy Policy.</p>
+    <button type="submit">I Accept</button>
+  </form>
+</body></html>`;
 }
 
 // ─── Token-only pages (backward compat for scrapers) ──────────────────

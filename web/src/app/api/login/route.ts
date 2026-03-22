@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       setSession(sessionKey, result.mychartRequest, { hostname: instance.hostname });
 
       if (result.state === 'need_2fa') {
-        return NextResponse.json({ state: 'need_2fa', sessionKey });
+        return NextResponse.json({ state: 'need_2fa', sessionKey, twoFaDelivery: result.twoFaDelivery });
       }
 
       return NextResponse.json({ state: 'logged_in', sessionKey });
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     setSession(sessionKey, result.mychartRequest, { hostname });
 
     if (result.state === 'need_2fa') {
-      return NextResponse.json({ state: 'need_2fa', sessionKey });
+      return NextResponse.json({ state: 'need_2fa', sessionKey, twoFaDelivery: result.twoFaDelivery });
     }
 
     return NextResponse.json({ state: 'logged_in', sessionKey });

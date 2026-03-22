@@ -494,6 +494,60 @@ describe('correlateEvents', () => {
     expect(novCats).toContain('imaging')
   })
 
+  it('handles visits with unexpected object shapes (e.g. {Patient, Physician, Department, Date, Time})', () => {
+    const data = {
+      pastVisits: {
+        List: {
+          org1: {
+            List: [
+              // Some MyChart instances return simplified visit objects with non-standard keys
+              { Patient: 'John Doe', Physician: 'Dr. Smith', Department: 'Internal Medicine', Date: '03/15/2026', Time: '10:00 AM' },
+            ],
+          },
+        },
+      },
+    }
+
+    // Should not throw even with unexpected visit shapes
+    const groups = correlateEvents(data as ScrapeResults)
+    // Single visit = singleton, filtered out (no correlations)
+    expect(groups.length).toBe(0)
+  })
+
+  it('handles visits where VisitTypeName is an object instead of a string', () => {
+    const data = {
+      pastVisits: {
+        List: {
+          org1: {
+            List: [
+              { Date: '01/10/2026', VisitTypeName: { Name: 'Office Visit' } as unknown as string, PrimaryProviderName: 'Dr. Chen' },
+            ],
+          },
+        },
+      },
+      billing: [
+        {
+          billingDetails: {
+            Data: {
+              UnifiedVisitList: [
+                { StartDateDisplay: '01/10/2026', Description: 'Office Visit', Provider: 'Dr. Chen' },
+              ],
+              InformationalVisitList: [],
+            },
+          },
+        },
+      ],
+    }
+
+    // Should not throw and should use 'Visit' fallback for object VisitTypeName
+    const groups = correlateEvents(data as ScrapeResults)
+    expect(groups.length).toBe(1)
+    const visitEvent = groups[0].events.find(e => e.category === 'visit')
+    expect(visitEvent).toBeDefined()
+    expect(typeof visitEvent!.title).toBe('string')
+    expect(visitEvent!.title).toBe('Visit') // Falls back since VisitTypeName is not a string
+  })
+
   it('includes medications and referrals in groups when they share date+provider', () => {
     const data = {
       pastVisits: {

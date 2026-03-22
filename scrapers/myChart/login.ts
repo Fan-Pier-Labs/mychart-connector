@@ -5,6 +5,7 @@ import fs from 'fs';
 import { getRequestVerificationTokenFromBody } from "./util";
 import { changeDirToPackageRoot } from "../../shared/util";
 import { sendTelemetryEvent } from "../../shared/telemetry";
+import { acceptTermsAndConditions } from "./termsAndConditions";
 
 
 // Just for testing / local development
@@ -72,6 +73,11 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
 
 }
 
+export type TwoFaDeliveryInfo = {
+  method: 'email' | 'sms';
+  contact?: string; // masked contact, e.g. "***-***-7204" or "ry***@gmail.com"
+}
+
 export type LoginResult = {
   state: 'logged_in' | 'need_2fa' | 'invalid_login' | 'error'
   error?: string
@@ -79,7 +85,60 @@ export type LoginResult = {
 
   // only set if need2fa is true
   twoFaSentTime?: number;
+  twoFaDelivery?: TwoFaDeliveryInfo;
 
+}
+
+/**
+ * Parse the secondary validation (2FA) page to detect which delivery methods are available.
+ * Real MyChart pages show buttons like "Email to me" or "Text to my phone".
+ * Returns which methods are available and any masked contact info found near the buttons.
+ */
+export function parse2faDeliveryMethods(html: string): {
+  hasEmail: boolean;
+  hasSms: boolean;
+  emailContact?: string;
+  smsContact?: string;
+} {
+  const $ = cheerio.load(html);
+  let hasEmail = false;
+  let hasSms = false;
+  let emailContact: string | undefined;
+  let smsContact: string | undefined;
+
+  // Look at all buttons and links on the page for delivery method indicators
+  $('button, a, [role="button"]').each((_, el) => {
+    const text = $(el).text().toLowerCase().trim();
+    if (text.includes('email')) {
+      hasEmail = true;
+      // Try to extract masked email from button text or nearby elements
+      const fullText = $(el).text().trim();
+      const emailMatch = fullText.match(/[\w*]+\*+[\w*]*@[\w.]+/);
+      if (emailMatch) emailContact = emailMatch[0];
+    }
+    if (text.includes('text') || text.includes('phone') || text.includes('sms')) {
+      hasSms = true;
+      // Try to extract masked phone from button text or nearby elements
+      const fullText = $(el).text().trim();
+      const phoneMatch = fullText.match(/[\d*][\d*-]+[\d*]/);
+      if (phoneMatch) smsContact = phoneMatch[0];
+    }
+  });
+
+  // Also look in paragraph/span text near the buttons for masked contact info
+  $('p, span, div').each((_, el) => {
+    const text = $(el).text();
+    if (!emailContact) {
+      const emailMatch = text.match(/[\w*]+\*+[\w*]*@[\w.]+/);
+      if (emailMatch) emailContact = emailMatch[0];
+    }
+    if (!smsContact) {
+      const phoneMatch = text.match(/\*{2,}[\d*-]*\d{4}/);
+      if (phoneMatch) smsContact = phoneMatch[0];
+    }
+  });
+
+  return { hasEmail, hasSms, emailContact, smsContact };
 }
 
 // takes in the user + pass
@@ -98,7 +157,8 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   }
 
 
-  const mychartRequest = new MyChartRequest(hostname, protocol);
+  const effectiveProtocol = protocol ?? (hostname.startsWith('localhost') ? 'http' : 'https');
+  const mychartRequest = new MyChartRequest(hostname, effectiveProtocol);
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest)
 
@@ -207,23 +267,51 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
 
     const codeSendTimeBefore = Date.now()
 
+    // Detect which 2FA delivery methods are available on the page
+    const deliveryMethods = parse2faDeliveryMethods(secondaryAuthPage);
+    console.log('2FA delivery methods:', JSON.stringify(deliveryMethods));
+
+    let twoFaDelivery: TwoFaDeliveryInfo | undefined;
+
     // When using TOTP, we skip SendCode — the code is generated locally.
     if (!skipSendCode) {
       // I don't think we need to do this, but just in case
       await mychartRequest.makeRequest({path: '/Authentication/SecondaryValidation/GetSMSConsentStrings?noCache=' + Math.random()})
 
-      await mychartRequest.makeRequest({
+      // Prefer email; fall back to SMS/phone if email isn't available
+      const useEmail = deliveryMethods.hasEmail || (!deliveryMethods.hasEmail && !deliveryMethods.hasSms);
+
+      const sendCodeResp = await mychartRequest.makeRequest({
         path: "/Authentication/SecondaryValidation/SendCode?noCache=" + Math.random(),
         "headers": {
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
           '__RequestVerificationToken': requestVerificationToken,
         },
-        // Some of these might not support email.
-        "body": "deliveryMethodEmail=true&resendCode=false&workflow=1",
+        "body": `deliveryMethodEmail=${useEmail}&resendCode=false&workflow=1`,
         "method": "POST",
       });
 
-      console.log("Asked for a 2FA code to be sent to email, waiting for email to arrive")
+      // Try to extract masked contact info from the SendCode response
+      const sendCodeBody = await sendCodeResp.text();
+      let contact: string | undefined;
+      if (useEmail) {
+        contact = deliveryMethods.emailContact;
+        // Also try parsing contact from the SendCode response
+        if (!contact) {
+          const emailMatch = sendCodeBody.match(/[\w*]+\*+[\w*]*@[\w.]+/);
+          if (emailMatch) contact = emailMatch[0];
+        }
+        twoFaDelivery = { method: 'email', contact };
+        console.log(`Asked for a 2FA code to be sent to email${contact ? ` (${contact})` : ''}, waiting for email to arrive`);
+      } else {
+        contact = deliveryMethods.smsContact;
+        if (!contact) {
+          const phoneMatch = sendCodeBody.match(/\*{2,}[\d*-]*\d{4}/);
+          if (phoneMatch) contact = phoneMatch[0];
+        }
+        twoFaDelivery = { method: 'sms', contact };
+        console.log(`Asked for a 2FA code to be sent via SMS${contact ? ` (${contact})` : ''}`);
+      }
     } else {
       console.log("Skipping SendCode (using TOTP)")
     }
@@ -231,6 +319,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
     return {
       state: 'need_2fa',
       twoFaSentTime: codeSendTimeBefore,
+      twoFaDelivery,
       mychartRequest
     }
 
@@ -240,6 +329,24 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   if (bodyLower.includes('md_home_index')) {
     return {
       state: 'logged_in',
+      mychartRequest
+    }
+  }
+
+  // Check if we landed on Terms & Conditions page — auto-accept silently
+  if (bodyLower.includes('termsconditions') || bodyLower.includes('terms and conditions')) {
+    console.log('Landed on Terms & Conditions page after login, auto-accepting');
+    const accepted = await acceptTermsAndConditions(mychartRequest);
+    if (accepted) {
+      return {
+        state: 'logged_in',
+        mychartRequest
+      }
+    }
+    console.log('Failed to auto-accept Terms & Conditions');
+    return {
+      state: 'error',
+      error: 'Failed to accept MyChart Terms & Conditions',
       mychartRequest
     }
   }
@@ -313,7 +420,22 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
     const respBody = await resp.json()
 
     if (respBody.Success === true) {
-      await mychartRequest.makeRequest({path: '/inside.asp'})
+      const insideResp = await mychartRequest.makeRequest({path: '/inside.asp'})
+      const insideBody = await insideResp.text();
+      const insideBodyLower = insideBody.toLowerCase();
+
+      // Check if we landed on Terms & Conditions page — auto-accept silently
+      if (insideBodyLower.includes('termsconditions') || insideBodyLower.includes('terms and conditions')) {
+        console.log('Landed on Terms & Conditions page after 2FA, auto-accepting');
+        const accepted = await acceptTermsAndConditions(mychartRequest);
+        if (!accepted) {
+          console.log('Failed to auto-accept Terms & Conditions after 2FA');
+          return {
+            state: 'error',
+            mychartRequest
+          };
+        }
+      }
 
       return {
         state: 'logged_in',

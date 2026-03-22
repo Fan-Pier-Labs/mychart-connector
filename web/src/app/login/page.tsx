@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,103 +16,172 @@ import {
 import { useAppContext } from "@/lib/app-context";
 import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/track";
+import { Icon } from "@iconify/react";
+import { WebGLBackground } from "@/components/landing/webgl-background";
+import { PhoneMockup } from "@/components/landing/phone-mockup";
 
 type AuthMode = "signin" | "signup";
+type TwoFactorMode = "totp" | "backup";
+
+const DATA_CATEGORIES = [
+  "Profile", "Medications", "Allergies", "Lab Results", "Imaging",
+  "Vitals", "Immunizations", "Insurance", "Billing", "Care Team",
+  "Messages", "Visits", "Health Issues", "Referrals", "Medical History",
+  "Preventive Care", "Documents", "Letters", "Goals", "Emergency Contacts",
+  "Questionnaires", "Care Journeys", "Education Materials", "Activity Feed",
+  "EHI Export", "Upcoming Orders", "Health Summary", "Visit Summaries",
+  "Linked Accounts", "Drafts",
+];
 
 const FEATURES = [
   {
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-2.54-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757" />
-      </svg>
-    ),
+    icon: "solar:database-linear",
     title: "MCP for All MyChart Data",
-    description:
-      "Expose 30+ health data categories as MCP tools. Connect to Claude Desktop, OpenClaw, or any MCP-compatible AI assistant and let it read your medications, labs, vitals, imaging, billing, and more.",
+    description: "Expose 30+ health data categories as MCP tools. Connect to Claude Desktop, OpenClaw, or any MCP-compatible AI assistant and let it read your medications, labs, vitals, imaging, billing, and more.",
+    span: "md:col-span-2",
+    visual: (
+      <div className="mt-8 bg-white/60 border border-white/80 rounded-2xl p-5 relative overflow-hidden shadow-sm flex items-center gap-6 h-32">
+        <div className="flex-1 space-y-3">
+          <div className="flex items-center gap-2">
+            <Icon icon="solar:folder-with-files-linear" width={16} height={16} className="text-slate-400" />
+            <div className="h-2 w-24 bg-slate-300 rounded-full" />
+          </div>
+          <div className="flex items-center gap-2 pl-6">
+            <Icon icon="solar:file-text-linear" width={16} height={16} className="text-blue-400" />
+            <div className="h-2 w-32 bg-slate-200 rounded-full" />
+          </div>
+          <div className="flex items-center gap-2 pl-6">
+            <Icon icon="solar:file-text-linear" width={16} height={16} className="text-emerald-400" />
+            <div className="h-2 w-20 bg-slate-200 rounded-full" />
+          </div>
+        </div>
+        <div className="hidden sm:flex flex-1 items-center justify-center">
+          <Icon icon="solar:arrow-right-linear" width={24} height={24} className="text-slate-300" />
+        </div>
+        <div className="flex-1 bg-slate-900 rounded-xl p-4 flex items-center justify-center shadow-lg relative overflow-hidden group-hover:scale-[1.02] transition-transform">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:10px_10px]" />
+          <span className="text-white font-mono text-xs z-10">get_lab_results()</span>
+        </div>
+      </div>
+    ),
   },
   {
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5a17.92 17.92 0 0 1-8.716-2.247m0 0A8.966 8.966 0 0 1 3 12c0-1.264.26-2.466.73-3.558" />
-      </svg>
-    ),
+    icon: "solar:buildings-linear",
     title: "Works with Every MyChart",
-    description:
-      "Supports every Epic MyChart instance — thousands of healthcare organizations nationwide. If it runs on Epic MyChart, it works here.",
+    description: "Supports every Epic MyChart instance — thousands of healthcare organizations nationwide. If it runs on Epic, it works here.",
+    visual: (
+      <div className="mt-8 w-full h-32 relative flex items-center justify-center">
+        <div className="absolute w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center border-4 border-white shadow-sm z-20 group-hover:scale-110 transition-transform">
+          <Icon icon="solar:hospital-linear" width={32} height={32} className="text-blue-500" />
+        </div>
+        <div className="absolute w-full h-px bg-slate-200" />
+        <div className="absolute left-4 w-2 h-2 rounded-full bg-slate-300" />
+        <div className="absolute right-4 w-2 h-2 rounded-full bg-slate-300" />
+      </div>
+    ),
   },
   {
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
-      </svg>
-    ),
+    icon: "solar:chat-round-linear",
     title: "Send Messages with AI",
-    description:
-      "Let your AI assistant send messages to your care team, reply to conversations, request medication refills, and manage your health communications hands-free.",
+    description: "Let your AI assistant send messages to your care team, reply to conversations, request medication refills, and manage communications hands-free.",
+    visual: (
+      <div className="mt-8 bg-white/50 border border-white/60 rounded-2xl p-4 shadow-sm space-y-3">
+        <div className="w-2/3 h-8 bg-slate-200/60 rounded-xl rounded-tl-sm ml-auto" />
+        <div className="w-3/4 h-12 bg-blue-50 rounded-xl rounded-tr-sm border border-blue-100 relative overflow-hidden group-hover:bg-blue-100/50 transition-colors">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400">
+            <Icon icon="solar:pen-linear" width={16} height={16} />
+          </div>
+          <div className="absolute left-9 top-1/2 -translate-y-1/2 h-2 w-1/2 bg-blue-200/60 rounded-full" />
+        </div>
+      </div>
+    ),
   },
   {
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-      </svg>
-    ),
+    icon: "solar:chart-square-linear",
     title: "Analyze Your Health with AI",
-    description:
-      "Ask your AI assistant to summarize your lab trends, check medication interactions, review your visit history, or explain your imaging results — all in natural language.",
+    description: "Ask your AI assistant to summarize your lab trends, check medication interactions, review your visit history, or explain your imaging results — all in natural language.",
+    span: "md:col-span-2",
+    visual: (
+      <div className="mt-8 flex items-end gap-2 h-28 bg-white/40 border border-white/60 rounded-2xl p-4 shadow-inner relative group-hover:bg-white/60 transition-colors">
+        <div className="absolute top-4 left-4 flex gap-1.5 items-center">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.4)] animate-pulse" />
+          <span className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase">Lab Trends</span>
+        </div>
+        <div className="w-full flex items-end gap-2 h-16 relative z-10 px-2">
+          <div className="flex-1 bg-blue-400/20 rounded-t-sm h-[40%] group-hover:h-[45%] transition-all duration-500" />
+          <div className="flex-1 bg-blue-400/30 rounded-t-sm h-[50%] group-hover:h-[60%] transition-all duration-500" />
+          <div className="flex-1 bg-blue-400/20 rounded-t-sm h-[45%] group-hover:h-[40%] transition-all duration-500" />
+          <div className="flex-1 bg-blue-400/40 rounded-t-sm h-[70%] group-hover:h-[80%] transition-all duration-500" />
+          <div className="flex-1 bg-emerald-400/60 rounded-t-sm h-[90%] group-hover:h-[100%] transition-all duration-500 relative">
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+          </div>
+          <div className="flex-1 bg-blue-400/30 rounded-t-sm h-[60%] group-hover:h-[50%] transition-all duration-500" />
+        </div>
+      </div>
+    ),
   },
   {
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
-      </svg>
-    ),
+    icon: "solar:documents-linear",
     title: "Beyond FHIR APIs",
-    description:
-      "Access data that standard FHIR APIs don't expose — imaging reports with full narratives, billing claims, care journeys, questionnaires, education materials, activity feeds, and EHI exports.",
+    description: "Access data that standard FHIR APIs don't expose — imaging reports with full narratives, billing claims, care journeys, questionnaires, education materials, activity feeds, and EHI exports.",
+    span: "md:col-span-2",
+    visual: (
+      <div className="mt-8 flex gap-4 h-32 relative">
+        <div className="w-24 bg-white/60 border border-white/80 rounded-xl p-3 shadow-sm transform group-hover:-translate-y-2 group-hover:-rotate-3 transition-transform duration-500 relative z-20">
+          <div className="w-6 h-6 rounded bg-slate-100 mb-3 flex items-center justify-center">
+            <Icon icon="solar:file-text-linear" width={14} height={14} />
+          </div>
+          <div className="h-1.5 w-full bg-slate-200 rounded-full mb-1.5" />
+          <div className="h-1.5 w-2/3 bg-slate-200 rounded-full" />
+        </div>
+        <div className="w-24 bg-white/60 border border-white/80 rounded-xl p-3 shadow-sm transform group-hover:-translate-y-4 transition-transform duration-500 delay-75 relative z-10">
+          <div className="w-6 h-6 rounded bg-blue-50 text-blue-500 mb-3 flex items-center justify-center">
+            <Icon icon="solar:gallery-linear" width={14} height={14} />
+          </div>
+          <div className="h-1.5 w-full bg-slate-200 rounded-full mb-1.5" />
+          <div className="h-1.5 w-3/4 bg-slate-200 rounded-full" />
+        </div>
+        <div className="w-24 bg-white/60 border border-white/80 rounded-xl p-3 shadow-sm transform group-hover:-translate-y-2 group-hover:rotate-3 transition-transform duration-500 delay-150">
+          <div className="w-6 h-6 rounded bg-emerald-50 text-emerald-500 mb-3 flex items-center justify-center">
+            <Icon icon="solar:dollar-minimalistic-linear" width={14} height={14} />
+          </div>
+          <div className="h-1.5 w-full bg-slate-200 rounded-full mb-1.5" />
+          <div className="h-1.5 w-1/2 bg-slate-200 rounded-full" />
+        </div>
+      </div>
+    ),
   },
   {
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-      </svg>
-    ),
+    icon: "solar:shield-check-linear",
     title: "Your Data Stays Private",
-    description:
-      "Your MyChart credentials are encrypted at rest. Health data flows directly between your MyChart portal and your AI assistant — we don't store it.",
+    description: "Your MyChart credentials are encrypted at rest. Health data flows directly between your MyChart portal and your AI assistant — we don't store it.",
+    visual: (
+      <div className="mt-8 flex items-center justify-center h-28 relative">
+        <div className="absolute w-24 h-24 bg-emerald-400/10 rounded-full blur-xl group-hover:bg-emerald-400/20 transition-colors" />
+        <div className="w-16 h-16 bg-white border border-slate-200 rounded-full shadow-md flex items-center justify-center z-10 group-hover:scale-110 transition-transform duration-500">
+          <Icon icon="solar:lock-password-linear" width={28} height={28} className="text-emerald-500" />
+        </div>
+      </div>
+    ),
   },
 ];
 
-const DATA_CATEGORIES = [
-  "Profile",
-  "Medications",
-  "Allergies",
-  "Lab Results",
-  "Imaging",
-  "Vitals",
-  "Immunizations",
-  "Insurance",
-  "Billing",
-  "Care Team",
-  "Messages",
-  "Visits",
-  "Health Issues",
-  "Referrals",
-  "Medical History",
-  "Preventive Care",
-  "Documents",
-  "Letters",
-  "Goals",
-  "Emergency Contacts",
-  "Questionnaires",
-  "Care Journeys",
-  "Education Materials",
-  "Activity Feed",
-  "EHI Export",
-  "Upcoming Orders",
-  "Health Summary",
-  "Visit Summaries",
-  "Linked Accounts",
-  "Drafts",
+const STEPS = [
+  {
+    icon: "solar:user-circle-linear",
+    title: "Create an account",
+    description: "Sign up with email or Google. Your app account is separate from your MyChart login to maintain privacy boundaries.",
+  },
+  {
+    icon: "solar:link-circle-linear",
+    title: "Add your MyChart accounts",
+    description: "Enter your MyChart hostname and credentials. We encrypt everything at rest and establish a secure connection to your portal.",
+  },
+  {
+    icon: "solar:magic-stick-3-linear",
+    title: "Talk to your health data",
+    description: "Generate an MCP URL and ask your AI about medications, labs, appointments, billing — anything in your health record.",
+  },
 ];
 
 export default function LoginPage() {
@@ -123,18 +192,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode>("totp");
+  const [showModal, setShowModal] = useState(false);
+  const [modalStep, setModalStep] = useState<"choose" | "signin">("choose");
+  const timelineSectionRef = useRef<HTMLElement>(null);
 
   const isLoggedIn = !ctx.sessionLoading && !!ctx.user;
 
-  // Redirect to home if already logged in
   useEffect(() => {
     if (isLoggedIn) {
       router.push("/home");
     }
   }, [isLoggedIn, router]);
 
-  // Check if Google OAuth is configured
   useEffect(() => {
     fetch("/api/session")
       .then((res) => res.json())
@@ -144,23 +218,56 @@ export default function LoginPage() {
       .catch(() => {});
   }, []);
 
+  // Timeline intersection observer
+  useEffect(() => {
+    const section = timelineSectionRef.current;
+    if (!section) return;
+    const steps = Array.from(section.querySelectorAll(".tl-step"));
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          if (entry.target === section) {
+            section.classList.add("is-inview");
+            return;
+          }
+          const el = entry.target as HTMLElement;
+          const idx = steps.indexOf(el);
+          el.style.transitionDelay = Math.min(idx * 120, 360) + "ms";
+          el.classList.add("is-inview");
+          io.unobserve(el);
+        });
+      },
+      { threshold: 0.28, rootMargin: "0px 0px -10% 0px" }
+    );
+    io.observe(section);
+    steps.forEach((s) => io.observe(s));
+    return () => io.disconnect();
+  }, []);
+
   async function handleEmailSignIn() {
-    track('auth_signin_attempt', { email });
+    track("auth_signin_attempt", { email });
     if (!email || !password) {
       toast.error("Email and password are required.");
       return;
     }
-
     setLoading(true);
     try {
       const result = await authClient.signIn.email({ email, password });
       if (result.error) {
-        track('auth_signin_failed', { email, error: result.error.message });
+        track("auth_signin_failed", { email, error: result.error.message });
         toast.error(result.error.message || "Sign in failed.");
         setLoading(false);
         return;
       }
-      track('auth_signin_success', { email });
+      if (result.data?.twoFactorRedirect) {
+        track("auth_signin_2fa_required", { email });
+        setTwoFactorPending(true);
+        setShowModal(false);
+        setLoading(false);
+        return;
+      }
+      track("auth_signin_success", { email });
       router.push("/home");
     } catch (err) {
       toast.error("Network error: " + (err as Error).message);
@@ -168,23 +275,70 @@ export default function LoginPage() {
     }
   }
 
+  async function handleTotpVerify() {
+    if (!totpCode) {
+      toast.error("Enter a verification code.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (twoFactorMode === "backup") {
+        const result = await authClient.twoFactor.verifyBackupCode({ code: totpCode });
+        if (result.error) {
+          toast.error(result.error.message || "Invalid backup code.");
+          setLoading(false);
+          return;
+        }
+      } else {
+        const result = await authClient.twoFactor.verifyTotp({ code: totpCode });
+        if (result.error) {
+          toast.error(result.error.message || "Invalid code.");
+          setLoading(false);
+          return;
+        }
+      }
+      track('auth_signin_2fa_success', { email });
+      router.push("/home");
+    } catch (err) {
+      toast.error("Verification failed: " + (err as Error).message);
+      setLoading(false);
+    }
+  }
+
+  async function handlePasskeySignIn() {
+    track('auth_passkey_signin_attempt');
+    setLoading(true);
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result?.error) {
+        toast.error(result.error.message || "Passkey sign-in failed.");
+        setLoading(false);
+        return;
+      }
+      track('auth_passkey_signin_success');
+      router.push("/home");
+    } catch (err) {
+      toast.error("Passkey sign-in failed: " + (err as Error).message);
+      setLoading(false);
+    }
+  }
+
   async function handleEmailSignUp() {
-    track('auth_signup_attempt', { email, name });
+    track("auth_signup_attempt", { email, name });
     if (!email || !password || !name) {
       toast.error("Name, email, and password are required.");
       return;
     }
-
     setLoading(true);
     try {
       const result = await authClient.signUp.email({ email, password, name });
       if (result.error) {
-        track('auth_signup_failed', { email, error: result.error.message });
+        track("auth_signup_failed", { email, error: result.error.message });
         toast.error(result.error.message || "Sign up failed.");
         setLoading(false);
         return;
       }
-      track('auth_signup_success', { email, name });
+      track("auth_signup_success", { email, name });
       router.push("/home");
     } catch (err) {
       toast.error("Network error: " + (err as Error).message);
@@ -193,7 +347,7 @@ export default function LoginPage() {
   }
 
   async function handleGoogleSignIn() {
-    track('auth_google_signin_attempt');
+    track("auth_google_signin_attempt");
     setLoading(true);
     try {
       await authClient.signIn.social({ provider: "google" });
@@ -204,10 +358,9 @@ export default function LoginPage() {
   }
 
   async function loadDemo() {
-    track('demo_button_clicked');
+    track("demo_button_clicked");
     setLoading(true);
     ctx.setIsDemo(true);
-
     try {
       const res = await fetch("/api/demo", { method: "POST" });
       const data = await res.json();
@@ -235,351 +388,585 @@ export default function LoginPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen">
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/10 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-cyan-500/10 via-transparent to-transparent" />
-        <div className="relative max-w-6xl mx-auto px-6 py-24 sm:py-32 lg:py-40">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/10 border border-blue-500/20 px-4 py-1.5 text-sm text-blue-300 mb-8">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400"></span>
-              </span>
-              Open-source MCP server for health data
+  if (twoFactorPending) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Two-Factor Authentication</CardTitle>
+            <CardDescription>
+              {twoFactorMode === "backup"
+                ? "Enter one of your backup codes."
+                : "Enter the 6-digit code from your authenticator app."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="totp-code">
+                {twoFactorMode === "backup" ? "Backup Code" : "Verification Code"}
+              </Label>
+              <Input
+                id="totp-code"
+                placeholder={twoFactorMode === "backup" ? "Backup code" : "6-digit code"}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleTotpVerify()}
+                autoFocus
+              />
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-[1.1]">
-              Your entire health record,{" "}
-              <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                accessible to AI
-              </span>
-            </h1>
-            <p className="mt-6 text-lg sm:text-xl text-slate-300 leading-relaxed max-w-2xl">
-              Connect any MyChart portal to Claude, ChatGPT, or any MCP-compatible AI assistant.
-              Access 30+ health data categories, send messages to your care team, and analyze your
-              medical data with AI — including data that FHIR APIs don&apos;t expose.
-            </p>
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
-              <Button
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-500 text-white text-base px-8 h-12"
+            <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleTotpVerify}>
+              Verify
+            </Button>
+            <div className="flex items-center justify-between">
+              <button
+                className="text-sm text-blue-600 hover:underline"
                 onClick={() => {
-                  document.getElementById("get-started")?.scrollIntoView({ behavior: "smooth" });
+                  setTwoFactorMode(twoFactorMode === "totp" ? "backup" : "totp");
+                  setTotpCode("");
                 }}
               >
-                Get Started
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white text-base px-8 h-12"
-                onClick={loadDemo}
+                {twoFactorMode === "totp" ? "Use backup code" : "Use authenticator code"}
+              </button>
+              <button
+                className="text-sm text-slate-500 hover:underline"
+                onClick={() => {
+                  setTwoFactorPending(false);
+                  setTotpCode("");
+                  setTwoFactorMode("totp");
+                }}
               >
-                View Demo
-              </Button>
+                Cancel
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen text-slate-900" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+      <WebGLBackground />
+
+      {/* Fixed Glass Header */}
+      <header className="fixed top-4 left-0 w-full z-50 px-4 sm:px-6 pointer-events-none">
+        <div className="max-w-6xl mx-auto pointer-events-auto">
+          <div className="relative backdrop-blur-xl bg-white/70 border border-white/40 shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-full px-2 py-2 pl-6 flex items-center justify-between transition-all duration-500 hover:bg-white/80 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)]">
+            <a href="#" className="flex items-center gap-2">
+              <span className="font-medium text-slate-800 tracking-tight text-sm uppercase hidden sm:block">
+                MyChart Connector
+              </span>
+            </a>
+
+            <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
+              <a href="#features" className="px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 uppercase tracking-wider rounded-full hover:bg-white/60 transition-all">
+                Features
+              </a>
+              <a href="#setup" className="px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 uppercase tracking-wider rounded-full hover:bg-white/60 transition-all">
+                Setup
+              </a>
+            </nav>
+
+            <div className="flex items-center gap-2">
               <a
                 href="https://github.com/Fan-Pier-Labs/mychart-connector"
                 target="_blank"
                 rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-2 justify-center px-6 py-2.5 text-xs font-medium text-slate-700 uppercase tracking-widest bg-white/60 border border-slate-200/60 rounded-full hover:bg-white transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
               >
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white text-base px-8 h-12 w-full"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-                  </svg>
-                  GitHub
-                </Button>
+                <Icon icon="mdi:github" width={16} height={16} />
+                GitHub
               </a>
+              <button
+                onClick={() => { setShowModal(true); setModalStep("signin"); }}
+                className="hidden sm:inline-flex items-center justify-center px-6 py-2.5 text-xs font-medium text-white uppercase tracking-widest bg-slate-900 rounded-full hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 hover:shadow-xl hover:shadow-slate-900/20 hover:-translate-y-0.5"
+              >
+                Sign In
+              </button>
             </div>
           </div>
         </div>
-      </section>
+      </header>
 
-      {/* Data Categories Ticker */}
-      <section className="bg-slate-50 border-y border-slate-200 py-4 overflow-hidden">
-        <div className="flex animate-scroll gap-4 whitespace-nowrap">
-          {[...DATA_CATEGORIES, ...DATA_CATEGORIES].map((cat, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 shrink-0"
-            >
-              {cat}
-            </span>
-          ))}
+      {/* Hero Section */}
+      <section className="relative w-full min-h-screen flex items-center justify-center" style={{ padding: "6rem 5% 4rem" }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-16 max-w-[1300px] w-full z-10">
+          <div className="flex flex-col items-start md:items-start text-left">
+            <div className="flex flex-wrap gap-2 mb-6">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-100/80 text-[11px] font-medium tracking-wide text-blue-600 shadow-sm backdrop-blur-md">
+                <Icon icon="solar:lock-keyhole-minimalistic-linear" width={14} height={14} />
+                Open-source
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50/80 border border-slate-200/80 text-[11px] font-medium tracking-wide text-slate-600 shadow-sm backdrop-blur-md">
+                <Icon icon="solar:rocket-linear" width={14} height={14} />
+                2 minute setup on Railway
+              </span>
+            </div>
+
+            <h1 className="tracking-tight whitespace-nowrap leading-[1.05] mb-6" style={{ fontSize: "clamp(2.5rem, 5vw, 4.5rem)", fontWeight: 600, letterSpacing: "-0.04em", color: "#1a1a24" }}>
+              Claude
+              <Icon icon="lucide:arrow-right-left" className="inline-block align-middle text-slate-300 mx-1" width="0.8em" height="0.8em" />
+              MyChart.
+            </h1>
+            <p className="mb-10 font-light leading-relaxed max-w-[540px]" style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.25rem)", color: "#5a5a6a" }}>
+              Manage your health data with Claude AI. Connect your MyChart portal
+              to Claude (or other AI assistants). Manage your health records, send
+              messages, book appointments, request refills, and more—all with AI.
+            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 items-start">
+              <button
+                onClick={() => setShowModal(true)}
+                className="group inline-flex items-center justify-center px-10 py-4 text-base font-medium text-white bg-slate-900 border border-slate-800 rounded-full cursor-pointer hover:bg-slate-800 hover:-translate-y-1 transition-all duration-300 shadow-[0_15px_35px_rgba(0,0,0,0.04),inset_0_0_0_1px_rgba(255,255,255,0.5)] hover:shadow-[0_25px_45px_rgba(0,0,0,0.08)]"
+              >
+                Get started
+                <Icon icon="lucide:arrow-right" width={18} height={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
+              </button>
+              <a
+                href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3 rounded-full text-sm font-medium text-slate-700 bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_10px_30px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] hover:bg-white/60 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)] transition-all duration-300 flex items-center gap-2"
+              >
+                <Icon icon="mdi:github" width={18} height={18} />
+                GitHub
+              </a>
+            </div>
+          </div>
+
+          <div className="flex relative items-center justify-center" style={{ perspective: "1400px" }}>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[125%] h-[125%] bg-emerald-400/10 rounded-full blur-[90px] -z-10 pointer-events-none" />
+            <PhoneMockup />
+          </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="bg-white py-20 sm:py-28">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+      <main className="z-10 w-full relative">
+        {/* Data Types Marquee */}
+        <section className="flex flex-col w-full max-w-[1400px] border-slate-200/30 border-t mx-auto pt-16 pb-16 items-center justify-center overflow-hidden">
+          <div
+            className="w-full relative flex items-center overflow-hidden py-2"
+            style={{
+              maskImage: "linear-gradient(to right, transparent, black 15%, black 85%, transparent)",
+              WebkitMaskImage: "linear-gradient(to right, transparent, black 15%, black 85%, transparent)",
+            }}
+          >
+            <div className="marquee-track flex w-max hover:[animation-play-state:paused]" style={{ animationDuration: "40s" }}>
+              {[...DATA_CATEGORIES, ...DATA_CATEGORIES].map((cat, i) => (
+                <span
+                  key={i}
+                  className="px-5 py-2.5 bg-white/60 backdrop-blur-md border border-slate-200/60 rounded-full text-sm font-medium text-slate-600 shadow-sm whitespace-nowrap mr-4"
+                >
+                  {cat}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Features Bento Grid */}
+        <section id="features" className="max-w-[1400px] mx-auto pt-20 px-6 pb-32">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-medium text-slate-900 tracking-tight mb-4">
               Everything your health portal can do, now with AI
             </h2>
-            <p className="mt-4 text-lg text-slate-500">
-              We reverse-engineer the full MyChart web interface — not just the limited FHIR API — so your AI assistant gets the complete picture.
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light">
+              We reverse-engineer the full MyChart web interface — not just the
+              limited FHIR API — so your AI assistant gets the complete picture.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {FEATURES.map((feature, i) => (
               <div
                 key={i}
-                className="group rounded-xl border border-slate-200 bg-white p-6 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-50 transition-all duration-200"
+                className={`glass-panel flex flex-col group rounded-[2rem] p-8 justify-between transition-all duration-1000 ${feature.span || ""}`}
               >
-                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-50 text-blue-600 mb-4 group-hover:bg-blue-100 transition-colors">
-                  {feature.icon}
+                <div>
+                  <div className="flex bg-slate-100 w-12 h-12 border-slate-200 border rounded-full shadow-inner items-center justify-center mb-6">
+                    <Icon icon={feature.icon} width={24} height={24} className="text-slate-700" />
+                  </div>
+                  <h3 className="text-2xl font-medium text-slate-900 mb-3 tracking-tight">
+                    {feature.title}
+                  </h3>
+                  <p className={`text-slate-500 font-light ${feature.span ? "text-lg" : "text-sm"}`}>
+                    {feature.description}
+                  </p>
                 </div>
-                <h3 className="font-semibold text-slate-900 text-base mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  {feature.description}
-                </p>
+                {feature.visual}
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* How It Works */}
-      <section className="bg-slate-50 py-20 sm:py-28 border-t border-slate-200">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+        {/* How It Works Timeline */}
+        <section
+          id="setup"
+          ref={timelineSectionRef}
+          className="md:py-48 overflow-hidden bg-slate-50/30 pt-32 pb-32 relative border-y border-slate-200/40"
+        >
+          <div className="max-w-6xl mx-auto px-6 relative z-20 text-center mb-16 md:mb-24 tl-title">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-slate-200/70 backdrop-blur-md text-[11px] font-medium tracking-widest uppercase text-slate-500 shadow-[0_8px_30px_rgba(0,0,0,0.03)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+              Quick Start
+            </div>
+            <h2 className="mt-6 text-4xl md:text-5xl font-medium text-slate-900 tracking-tight leading-[0.95]">
               Up and running in 3 steps
             </h2>
+            <p className="mt-4 text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed font-light">
+              Connect your MyChart account and start exploring your health data with Claude in minutes.
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            {[
-              {
-                step: "1",
-                title: "Create an account",
-                description: "Sign up with email or Google. Your app account is separate from your MyChart login.",
-              },
-              {
-                step: "2",
-                title: "Add your MyChart accounts",
-                description: "Enter your MyChart hostname and credentials. We encrypt everything at rest and connect to your portal.",
-              },
-              {
-                step: "3",
-                title: "Talk to your health data",
-                description: "Generate an MCP URL and ask your AI about medications, labs, appointments, billing — anything in your health record.",
-              },
-            ].map((item, i) => (
-              <div key={i} className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-600 text-white font-bold text-lg mb-4">
-                  {item.step}
+
+          {/* Spine */}
+          <div
+            className="tl-spine absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 overflow-hidden hidden md:block"
+            style={{
+              background: "rgba(226, 232, 240, 0.35)",
+              maskImage: "linear-gradient(180deg, transparent, black 30%, black 100%, transparent)",
+              WebkitMaskImage: "linear-gradient(180deg, transparent, black 30%, black 100%, transparent)",
+            }}
+          />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-white rounded-full blur-[100px] opacity-40 pointer-events-none" />
+
+          <div className="max-w-6xl mx-auto px-6 relative z-10 flex flex-col gap-24 md:gap-40">
+            {STEPS.map((step, i) => (
+              <div
+                key={i}
+                className="tl-step group relative grid grid-cols-1 md:grid-cols-2 gap-8 items-start"
+                style={{ transitionDelay: `${i * 120}ms` }}
+              >
+                {/* Node */}
+                <div className="absolute left-1/2 top-[3.5rem] -translate-x-1/2 hidden md:flex items-center justify-center z-20">
+                  <div className="tl-halo absolute w-24 h-24 border border-slate-100/50 rounded-full pointer-events-none" />
+                  <div
+                    className="tl-node w-14 h-14 bg-white rounded-full border border-slate-100 shadow-[0_4px_12px_rgba(0,0,0,0.04),inset_0_2px_4px_rgba(255,255,255,0.9)] flex items-center justify-center animate-[breathe_6s_ease-in-out_infinite] group-hover:scale-105 transition-transform duration-500"
+                    style={{ animationDelay: `${i * 1.5}s` }}
+                  >
+                    <Icon icon={step.icon} width={24} height={24} className="text-slate-400" />
+                  </div>
                 </div>
-                <h3 className="font-semibold text-slate-900 text-base mb-2">
-                  {item.title}
-                </h3>
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  {item.description}
-                </p>
+
+                {/* Alternating left/right */}
+                {i % 2 === 0 ? (
+                  <>
+                    <div className="md:text-right md:pr-24 mt-8 md:mt-0">
+                      <div className="relative bg-white rounded-2xl p-8 md:p-10 shadow-[0_2px_8px_rgba(0,0,0,0.03),0_12px_24px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,1)] border border-slate-100/80 transition-transform duration-500 group-hover:-translate-y-2 hover:shadow-[0_8px_20px_rgba(0,0,0,0.05),0_20px_40px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,1)]">
+                        <div className="md:hidden absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-white rounded-full border border-slate-100 shadow-sm flex items-center justify-center">
+                          <span className="font-semibold text-slate-400">{i + 1}</span>
+                        </div>
+                        <div className="text-[10px] font-medium tracking-[0.25em] text-slate-400 uppercase mb-4">
+                          Step {i + 1}
+                        </div>
+                        <h3 className="text-3xl font-medium text-slate-800 mb-4 tracking-tight">
+                          {step.title}
+                        </h3>
+                        <p className="text-slate-500 leading-relaxed text-lg font-light">
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="hidden md:block" />
+                  </>
+                ) : (
+                  <>
+                    <div className="hidden md:block" />
+                    <div className="md:text-left md:pl-24 mt-8 md:mt-0">
+                      <div className="relative bg-white rounded-2xl p-8 md:p-10 shadow-[0_2px_8px_rgba(0,0,0,0.03),0_12px_24px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,1)] border border-slate-100/80 transition-transform duration-500 group-hover:-translate-y-2 hover:shadow-[0_8px_20px_rgba(0,0,0,0.05),0_20px_40px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,1)]">
+                        <div className="md:hidden absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-white rounded-full border border-slate-100 shadow-sm flex items-center justify-center">
+                          <span className="font-semibold text-slate-400">{i + 1}</span>
+                        </div>
+                        <div className="text-[10px] font-medium tracking-[0.25em] text-slate-400 uppercase mb-4">
+                          Step {i + 1}
+                        </div>
+                        <h3 className="text-3xl font-medium text-slate-800 mb-4 tracking-tight">
+                          {step.title}
+                        </h3>
+                        <p className="text-slate-500 leading-relaxed text-lg font-light">
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Self-Host */}
-      <section className="bg-white py-20 sm:py-28 border-t border-slate-200">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-              Self-host in one click
-            </h2>
-            <p className="mt-4 text-lg text-slate-500">
-              Deploy your own instance and keep full control of your data.
-            </p>
-          </div>
-          <div className="flex justify-center">
-            <a
-              href="https://railway.com/template/mychart-mcp?referralCode=fan-pier-labs"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                src="https://railway.com/button.svg"
-                alt="Deploy on Railway"
-                height="44"
-                style={{ height: 44 }}
-              />
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Auth Form */}
-      <section id="get-started" className="bg-white py-20 sm:py-28 border-t border-slate-200">
-        <div className="max-w-md mx-auto px-6">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-              {authMode === "signin" ? "Sign in" : "Create an account"}
-            </h2>
-            <p className="mt-2 text-slate-500">
-              {authMode === "signin"
-                ? "Sign in to manage your MyChart connections."
-                : "Create an account to get started."}
-            </p>
-          </div>
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="sr-only">
-                {authMode === "signin" ? "Sign In" : "Sign Up"}
-              </CardTitle>
-              <CardDescription className="sr-only">
-                {authMode === "signin" ? "Sign in to your account" : "Create a new account"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Google OAuth — only shown when credentials are configured */}
-              {googleOAuthEnabled && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleGoogleSignIn}
-                  >
-                    <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                    </svg>
-                    Continue with Google
-                  </Button>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-200" />
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <span className="bg-white px-2 text-slate-400">or</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Email + Password */}
-              {authMode === "signup" && (
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="Your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (authMode === "signin" ? handleEmailSignIn() : handleEmailSignUp())}
-                />
-              </div>
-
-              {authMode === "signin" ? (
-                <>
-                  <Button
-                    className="w-full bg-blue-600 hover:bg-blue-500"
-                    onClick={handleEmailSignIn}
-                  >
-                    Sign In
-                  </Button>
-                  <p className="text-center text-sm text-slate-500">
-                    Don&apos;t have an account?{" "}
-                    <button
-                      className="text-blue-600 hover:underline font-medium"
-                      onClick={() => setAuthMode("signup")}
-                    >
-                      Sign up
-                    </button>
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Button
-                    className="w-full bg-blue-600 hover:bg-blue-500"
-                    onClick={handleEmailSignUp}
-                  >
-                    Create Account
-                  </Button>
-                  <p className="text-center text-sm text-slate-500">
-                    Already have an account?{" "}
-                    <button
-                      className="text-blue-600 hover:underline font-medium"
-                      onClick={() => setAuthMode("signin")}
-                    >
-                      Sign in
-                    </button>
-                  </p>
-                </>
-              )}
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-2 text-slate-400">or</span>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={loadDemo}
-              >
-                View Demo with Sample Data
-              </Button>
-            </CardContent>
-          </Card>
-          <p className="mt-4 text-center text-xs text-slate-400">
-            Your MyChart credentials are encrypted at rest. Health data is not stored on our servers.
+        {/* CTA Section */}
+        <section className="py-24 md:py-32 relative flex flex-col items-center justify-center text-center px-6 z-20">
+          <h2 className="text-4xl md:text-5xl font-medium text-slate-900 tracking-tight mb-6">
+            Ready to explore your health data?
+          </h2>
+          <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-10 font-light">
+            Get up and running in minutes. Connect your MyChart portal and start using Claude to manage your health records.
           </p>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-slate-900 py-8 border-t border-slate-800">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-center gap-4">
-          <p className="text-sm text-slate-400">
-            MyChart MCP &mdash; Open-source health data access for AI assistants
-          </p>
-          <a
-            href="https://github.com/Fan-Pier-Labs/mychart-connector"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-slate-400 hover:text-slate-200 transition-colors"
+          <button
+            onClick={() => setShowModal(true)}
+            className="group inline-flex items-center justify-center px-10 py-4 text-base font-medium text-white bg-slate-900 border border-slate-800 rounded-full cursor-pointer hover:bg-slate-800 hover:-translate-y-1 transition-all duration-300 shadow-lg shadow-slate-900/10 hover:shadow-xl hover:shadow-slate-900/20"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-            </svg>
-          </a>
+            Get started
+            <Icon icon="lucide:arrow-right" width={18} height={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
+          </button>
+        </section>
+
+        {/* Footer */}
+        <footer className="bg-white/80 backdrop-blur-md border-t border-slate-200 pt-16 pb-8 relative z-10">
+          <div className="max-w-[1200px] mx-auto px-6">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+              <span className="text-lg font-medium text-slate-900 tracking-tight uppercase">
+                MyChart Connector
+              </span>
+              <p className="text-sm text-slate-500 font-light text-center md:text-left">
+                Open-source health data access for AI assistants.
+              </p>
+              <div className="flex gap-6 items-center">
+                <a
+                  href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-slate-400 hover:text-slate-900 transition-colors"
+                  aria-label="GitHub"
+                >
+                  <Icon icon="mdi:github" width={22} height={22} />
+                </a>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </main>
+
+      {/* Get Started Modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowModal(false); setModalStep("choose"); } }}
+        >
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                {modalStep === "signin" && (
+                  <button
+                    onClick={() => setModalStep("choose")}
+                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <Icon icon="lucide:arrow-left" width={20} height={20} />
+                  </button>
+                )}
+                <h3 className="text-xl font-semibold text-slate-800 tracking-tight">
+                  {modalStep === "choose" ? "Choose your setup" : (authMode === "signin" ? "Sign in" : "Create an account")}
+                </h3>
+              </div>
+              <button
+                onClick={() => { setShowModal(false); setModalStep("choose"); }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <Icon icon="lucide:x" width={24} height={24} />
+              </button>
+            </div>
+
+            {modalStep === "choose" ? (
+              <div className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white">
+                {/* Self-host option */}
+                <a
+                  href="https://railway.com/deploy/5F69Mf?referralCode=xrxOUg"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative flex flex-col p-6 rounded-2xl border-2 border-slate-200 hover:border-slate-900 hover:shadow-lg transition-all bg-white text-left"
+                >
+                  <div className="w-12 h-12 bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Icon icon="lucide:server" width={24} height={24} />
+                  </div>
+                  <h4 className="text-lg font-semibold text-slate-900 mb-2">Host it yourself</h4>
+                  <p className="text-sm text-slate-500 mb-6 flex-1">
+                    Deploy directly to Railway. You control the infrastructure and data flow.
+                  </p>
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-start gap-2 text-sm text-slate-600">
+                      <Icon icon="lucide:check-circle-2" width={18} height={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span>Maximum privacy and security</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm text-slate-600">
+                      <Icon icon="lucide:check-circle-2" width={18} height={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span>Completely free to use</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm text-slate-600">
+                      <Icon icon="lucide:alert-triangle" width={18} height={18} className="text-amber-500 shrink-0 mt-0.5" />
+                      <span className="whitespace-nowrap">Requires Railway setup</span>
+                    </li>
+                  </ul>
+                  <div className="w-full py-2.5 px-4 bg-slate-50 text-slate-700 text-sm font-medium rounded-xl border border-slate-200 text-center group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                    Deploy to Railway
+                  </div>
+                </a>
+
+                {/* Express option */}
+                <button
+                  onClick={() => setModalStep("signin")}
+                  className="group relative flex flex-col p-6 rounded-2xl border-2 border-blue-100 hover:border-blue-500 hover:shadow-lg transition-all bg-gradient-to-b from-blue-50/50 to-white text-left"
+                >
+                  <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full shadow-sm">
+                    Recommended
+                  </div>
+                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Icon icon="lucide:zap" width={24} height={24} />
+                  </div>
+                  <h4 className="text-lg font-semibold text-slate-900 mb-2">Express setup</h4>
+                  <p className="text-sm text-slate-500 mb-6 flex-1">
+                    Use our hosted service. Connect your portal and start in seconds.
+                  </p>
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-start gap-2 text-sm text-slate-600">
+                      <Icon icon="lucide:check-circle-2" width={18} height={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span>Instant access in &lt; 2 mins</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm text-slate-600">
+                      <Icon icon="lucide:check-circle-2" width={18} height={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <span>Completely free to use</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm text-slate-600">
+                      <Icon icon="lucide:alert-triangle" width={18} height={18} className="text-amber-500 shrink-0 mt-0.5" />
+                      <span>Data passes through our proxy</span>
+                    </li>
+                  </ul>
+                  <div className="w-full py-2.5 px-4 bg-blue-50 text-blue-700 text-sm font-medium rounded-xl border border-blue-200 text-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    Continue with Express
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 md:p-8 bg-white">
+                <div className="max-w-sm mx-auto">
+                  <p className="text-sm text-slate-500 text-center mb-6">
+                    {authMode === "signin"
+                      ? "Sign in to manage your MyChart connections."
+                      : "Create an account to get started."}
+                  </p>
+                  <div className="space-y-4">
+                    {googleOAuthEnabled && (
+                      <>
+                        <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
+                          <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                          </svg>
+                          Continue with Google
+                        </Button>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-slate-200" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-white px-2 text-slate-400">or</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {authMode === "signup" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Name</Label>
+                        <Input id="name" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && (authMode === "signin" ? handleEmailSignIn() : handleEmailSignUp())}
+                      />
+                    </div>
+
+                    {authMode === "signin" ? (
+                      <>
+                        <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleEmailSignIn}>
+                          Sign In
+                        </Button>
+                        <p className="text-center text-sm text-slate-500">
+                          Don&apos;t have an account?{" "}
+                          <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
+                            Sign up
+                          </button>
+                        </p>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-slate-200" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-white px-2 text-slate-400">or</span>
+                          </div>
+                        </div>
+                        <Button variant="outline" className="w-full" onClick={handlePasskeySignIn}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33" />
+                          </svg>
+                          Sign in with Passkey
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              id="tos"
+                              checked={tosAccepted}
+                              onChange={(e) => setTosAccepted(e.target.checked)}
+                              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="tos" className="text-sm font-medium leading-tight cursor-pointer">
+                              I agree to the Terms of Service
+                            </Label>
+                          </div>
+                          <ul className="text-xs text-slate-500 space-y-1 ml-6 list-disc">
+                            <li>This software is provided as-is with no warranty. Use at your own risk</li>
+                            <li>By using this service, you agree to MyChart&apos;s Terms of Use</li>
+                            <li>We are not associated with, endorsed by, or affiliated with Epic Systems or MyChart</li>
+                          </ul>
+                        </div>
+                        <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleEmailSignUp} disabled={!tosAccepted}>
+                          Create Account
+                        </Button>
+                        <p className="text-center text-sm text-slate-500">
+                          Already have an account?{" "}
+                          <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signin")}>
+                            Sign in
+                          </button>
+                        </p>
+                      </>
+                    )}
+
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-slate-200" />
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="bg-white px-2 text-slate-400">or</span>
+                      </div>
+                    </div>
+                    <Button variant="outline" className="w-full" onClick={loadDemo}>
+                      View Demo with Sample Data
+                    </Button>
+                  </div>
+                  <p className="mt-4 text-center text-xs text-slate-400">
+                    Your MyChart credentials are encrypted at rest. Health data is not stored on our servers.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </footer>
+      )}
     </div>
   );
 }

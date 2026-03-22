@@ -2,6 +2,8 @@ import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoogleOAuth } from './mcp/config';
 import { nextCookies } from 'better-auth/next-js';
+import { twoFactor } from 'better-auth/plugins/two-factor';
+import { passkey } from '@better-auth/passkey';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let authInstance: any = null;
@@ -39,6 +41,14 @@ export async function getAuth(): Promise<any> {
   if (baseURL && !trustedOrigins.includes(baseURL)) {
     trustedOrigins.push(baseURL);
   }
+  // Allow additional trusted origins via env var (comma-separated)
+  if (process.env.TRUSTED_ORIGINS) {
+    for (const origin of process.env.TRUSTED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)) {
+      if (!trustedOrigins.includes(origin)) {
+        trustedOrigins.push(origin);
+      }
+    }
+  }
 
   authInstance = betterAuth({
     database: pool,
@@ -58,7 +68,17 @@ export async function getAuth(): Promise<any> {
           },
         }
       : {}),
-    plugins: [nextCookies()],
+    plugins: [
+      nextCookies(),
+      twoFactor({
+        issuer: 'MyChart MCP',
+      }),
+      passkey({
+        rpID: new URL(baseURL).hostname,
+        rpName: 'MyChart MCP',
+        origin: baseURL,
+      }),
+    ],
   });
 
   return authInstance;

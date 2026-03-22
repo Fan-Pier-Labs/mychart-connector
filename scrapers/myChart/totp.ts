@@ -4,10 +4,10 @@ import { TOTP } from 'totp-generator';
  * Generate a TOTP code from a Base32-encoded secret.
  * MyChart uses standard 6-digit, 30-second TOTP codes.
  */
-export async function generateTotpCode(secret: string): Promise<string> {
+export async function generateTotpCode(secret: string, timestamp?: number): Promise<string> {
   // Clean up the secret: remove spaces, uppercase
   const cleanSecret = secret.replace(/\s+/g, '').toUpperCase();
-  const { otp } = await TOTP.generate(cleanSecret);
+  const { otp } = await TOTP.generate(cleanSecret, { timestamp });
   return otp;
 }
 

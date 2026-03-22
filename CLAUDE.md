@@ -14,7 +14,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **CLI** (`cli/cli.ts`): Headless CLI entry point. Great for Claude code to use for testing changes in the cli or scrapers.
 - **Shared types** (`shared/`): Common types and enums shared across packages
 - **Read local passwords** (`read-local-passwords/`): Browser password store extraction (Chrome, Arc, Firefox)
-- **CLO-to-JPG converter** (`clo-to-jpg-converter/`): eUnity CLO image format converter
+- **CLO-to-JPG converter** (`scrapers/myChart/clo-to-jpg-converter/`): eUnity CLO image format converter
 - **Web app** (`web/`): Next.js demo app deployed to AWS Fargate. Includes an mcp server. Uses BetterAuth for user authentication (email+password, Google OAuth) and PostgreSQL for storing encrypted MyChart credentials.
 - **OpenClaw plugin** (`openclaw-plugin/`): Self-contained OpenClaw plugin that bundles all MyChart scrapers locally. No server dependency.
 - **Fake MyChart** (`fake-mychart/`): Standalone Next.js app that mimics MyChart's API surface with Homer Simpson fake data. Used for development without real MyChart access and CI integration tests. Run with `cd fake-mychart && bun run dev` (port 4000). Credentials: `homer`/`donuts123` (or set `FAKE_MYCHART_ACCEPT_ANY=true`). All state lives in RAM. Supports the full login flow including 2FA (code `123456`).
@@ -38,6 +38,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **[Deployment details](docs/deployment.md)** — Additional infrastructure notes
 - **[MyChart features](MYCHART_FEATURES.md)** — Full inventory of MyChart features and scraper coverage
 - **[MyChart TOTP](docs/mychart-totp.md)** — TOTP authenticator app 2FA setup, API endpoints, CLI flags
+- **[Self-hosting](SELF_HOSTING.md)** — Run locally with PostgreSQL, ngrok/Cloudflare Tunnel, and env-var config
 
 ## Deployment
 
@@ -79,6 +80,23 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - Fetch passwords from the browser keystore
 - Do not ask the user for 2FA codes — retrieve them automatically via the Resend API (see [CLI docs](docs/cli.md#automatic-2fa-via-resend))
 - Session expiration: a 302 redirect to the Login page means cookies are dead
+
+## App Authentication & 2FA
+
+BetterAuth handles email+password and Google OAuth sign-in. Two additional auth methods are supported:
+
+- **Passkeys (WebAuthn)**: Users can register passkeys (Touch ID, Face ID, security keys) from the Security card on the home page. Sign-in with passkey is available on the login page.
+- **TOTP 2FA (Authenticator App)**: Users can enable TOTP-based two-factor authentication from the Security card. When enabled, sign-in with email+password requires a 6-digit code from an authenticator app. Backup codes are provided during setup.
+
+Key files:
+- `web/src/lib/auth.ts` — Server config with `twoFactor()` and `passkey()` plugins
+- `web/src/lib/auth-client.ts` — Client config with `twoFactorClient()` and `passkeyClient()` plugins
+- `web/src/app/login/page.tsx` — Passkey sign-in button + TOTP verification step
+- `web/src/app/home/page.tsx` — Security settings card (enable/disable TOTP, manage passkeys)
+
+Database tables (`twoFactor`, `passkey`) are auto-created by `runMigrations()`.
+
+Note: This is separate from MyChart portal TOTP (used for auto-connecting to health portals).
 
 ## MCP Server
 
