@@ -563,8 +563,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/conversations/sendreply') {
     try {
       const body = await request.json();
+      const convId = body.conversationId || '';
       const conv = conversationsState.conversations.find(
-        (c: { hthId: string }) => c.hthId === body.conversationId
+        (c: { hthId: string }) => c.hthId === convId
       );
       if (conv) {
         const replyBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || body.body || '');
@@ -575,9 +576,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           body: replyBody,
         });
       }
-      return json({ success: true });
+      // Real MyChart returns the conversation ID as a plain JSON string
+      return json(convId);
     } catch {
-      return json({ success: true });
+      return json('');
     }
   }
 
