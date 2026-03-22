@@ -39,7 +39,7 @@ import { getLinkedMyChartAccounts } from '../scrapers/myChart/other_mycharts/oth
 import { getConversationMessages } from '../scrapers/myChart/messages/messageThreads';
 import { getImagingResults } from '../scrapers/myChart/labs_and_procedure_results/labResults';
 import { downloadImagingStudyDirect } from '../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../clo-to-jpg-converter/clo_to_jpg';
+import { convertCloToJpg } from '../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
 import { deleteMessage } from '../scrapers/myChart/messages/deleteMessage';
 import { requestMedicationRefill } from '../scrapers/myChart/medicationRefill';
 import { sessionStore } from '../scrapers/myChart/sessionStore';

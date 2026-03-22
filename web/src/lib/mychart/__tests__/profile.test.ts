@@ -135,4 +135,30 @@ describe('parseProfileHtml', () => {
     expect(result).not.toBeNull()
     expect(result!.name).toBe('Whitespace User')
   })
+
+  it('parses MyChart Central format with only Name and DOB', () => {
+    const html = `
+      <div class="printheader">
+                Name: Nathan Aune | DOB: 4/2/1973
+            </div>
+    `
+    const result = parseProfileHtml(html)
+    expect(result).not.toBeNull()
+    expect(result!.name).toBe('Nathan Aune')
+    expect(result!.dob).toBe('4/2/1973')
+    expect(result!.mrn).toBe('')
+    expect(result!.pcp).toBe('')
+  })
+
+  it('parses Name | DOB | MRN without PCP', () => {
+    const html = `
+      <div class="printheader">Name: Jane Doe | DOB: 6/15/1990 | MRN: 112233</div>
+    `
+    const result = parseProfileHtml(html)
+    expect(result).not.toBeNull()
+    expect(result!.name).toBe('Jane Doe')
+    expect(result!.dob).toBe('6/15/1990')
+    expect(result!.mrn).toBe('112233')
+    expect(result!.pcp).toBe('')
+  })
 })

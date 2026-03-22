@@ -949,12 +949,12 @@ export function billingSummaryPage(accounts: Array<{
       <h3>\u{1F4B3} Account #${a.guarantorId}</h3>
       <div class="detail">${a.guarantorName}</div>
       <div style="font-size:28px; font-weight:700; color:#c0392b; margin: 12px 0;">
-        <span class="ba_card_status_due_amount moneyColor">${a.amountDue}</span>
+        <p class="ba_card_status_due_amount moneyColor">${a.amountDue}</p>
       </div>
       <div class="meta ba_card_status_due_label">Amount Due</div>
-      <div class="meta">
+      <p class="meta ba_card_status_recentPaymentLabel">
         <a href="/${FIRST_PATH}/Billing/Details?ID=${a.detailsId}&Context=${a.detailsContext}&tab=3" title="View payment history">${a.lastPaid}</a>
-      </div>
+      </p>
       <div class="meta" style="margin-top:8px;">
         <span class="ba_card_header_saLabel ba_card_header_saLabel_saName">Springfield Nuclear Power Plant</span>
       </div>
@@ -1181,6 +1181,23 @@ export function profilePage(): string {
       });
     </script>
   `);
+}
+
+// ─── Terms & Conditions ──────────────────────────────────────────────
+export function termsConditionsPage(): string {
+  const token = generateCsrfToken();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><title>MyChart - Terms and Conditions</title></head>
+<body>
+  <div>Terms and Conditions</div>
+  <p>Please review and accept the MyChart Terms and Conditions to continue.</p>
+  <form method="POST" action="/${FIRST_PATH}/Authentication/TermsConditions">
+    <input name="__RequestVerificationToken" type="hidden" value="${token}" />
+    <p>By clicking Accept, you agree to the MyChart Terms of Use and Privacy Policy.</p>
+    <button type="submit">I Accept</button>
+  </form>
+</body></html>`;
 }
 
 // ─── Token-only pages (backward compat for scrapers) ──────────────────
