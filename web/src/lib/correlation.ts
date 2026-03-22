@@ -103,13 +103,17 @@ function extractVisits(data: ScrapeResults): MedicalEvent[] {
     .flatMap((org: PastVisitOrganization) => org.List || []);
 
   allVisits.forEach((v, i: number) => {
+    // Guard against unexpected object shapes from different MyChart instances
+    const title = typeof v.VisitTypeName === 'string' ? v.VisitTypeName : 'Visit';
+    const date = typeof v.Date === 'string' ? v.Date : null;
+    const provider = typeof v.PrimaryProviderName === 'string' ? v.PrimaryProviderName : null;
     events.push({
       category: 'visit',
-      title: v.VisitTypeName || 'Visit',
-      date: normaliseDate(v.Date),
-      provider: v.PrimaryProviderName || null,
+      title: title || 'Visit',
+      date: normaliseDate(date),
+      provider: provider || null,
       sourceIndex: i,
-      summary: `${v.VisitTypeName || 'Visit'}${v.PrimaryProviderName ? ` with ${v.PrimaryProviderName}` : ''}`,
+      summary: `${title || 'Visit'}${provider ? ` with ${provider}` : ''}`,
     });
   });
   return events;

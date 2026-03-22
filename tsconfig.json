@@ -42,7 +42,6 @@
     "shared/**/*.ts",
     "web/src/**/*.ts",
     "web/src/**/*.tsx",
-    "read-local-passwords/**/*.ts",
-    "clo-to-jpg-converter/**/*.ts"
+    "read-local-passwords/**/*.ts"
   ]
 }
