@@ -68,8 +68,6 @@ export default function HomePage() {
   // Passkey state
   const [passkeys, setPasskeys] = useState<Array<{ id: string; name?: string | null; createdAt: string }>>([]);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [addPasskeyName, setAddPasskeyName] = useState("");
-  const [showAddPasskey, setShowAddPasskey] = useState(false);
 
   useEffect(() => {
     if (!ctx.sessionLoading && !ctx.user) {
@@ -490,15 +488,14 @@ export default function HomePage() {
   async function handleAddPasskey() {
     setPasskeyLoading(true);
     try {
-      const result = await authClient.passkey.addPasskey({ name: addPasskeyName || undefined });
+      const name = `mychart-connector-${ctx.user?.email || "unknown"}`;
+      const result = await authClient.passkey.addPasskey({ name });
       if (result?.error) {
         toast.error(result.error.message || "Failed to add passkey.");
         setPasskeyLoading(false);
         return;
       }
       toast.success("Passkey added!");
-      setShowAddPasskey(false);
-      setAddPasskeyName("");
       await loadPasskeys();
     } catch (err) {
       toast.error("Failed to add passkey: " + (err as Error).message);
@@ -1258,36 +1255,12 @@ export default function HomePage() {
                       Sign in with biometrics or a security key.
                     </p>
                   </div>
-                  {!showAddPasskey && (
-                    <Button size="sm" variant="outline" onClick={() => setShowAddPasskey(true)} disabled={passkeyLoading}>
-                      Add Passkey
+                  <Button size="sm" variant="outline" onClick={handleAddPasskey} disabled={passkeyLoading}>
+                      {passkeyLoading ? "Adding..." : "Add Passkey"}
                     </Button>
-                  )}
                 </div>
 
-                {showAddPasskey && (
-                  <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Passkey name (optional)</Label>
-                      <Input
-                        placeholder='e.g. "MacBook Touch ID"'
-                        value={addPasskeyName}
-                        onChange={(e) => setAddPasskeyName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAddPasskey()}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={handleAddPasskey} disabled={passkeyLoading}>
-                        {passkeyLoading ? "Adding..." : "Register Passkey"}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => { setShowAddPasskey(false); setAddPasskeyName(""); }}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {passkeys.length === 0 && !showAddPasskey && (
+                {passkeys.length === 0 && (
                   <p className="text-xs text-muted-foreground">No passkeys registered.</p>
                 )}
 
