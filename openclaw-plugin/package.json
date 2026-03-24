@@ -1,15 +1,33 @@
 {
-  "name": "openclaw-plugin-mychart",
+  "name": "openclaw-mychart",
   "version": "2.0.0",
   "description": "Access your MyChart health records locally — no server needed",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Fan Pier Labs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fan-Pier-Labs/mychart-connector"
+  },
+  "homepage": "https://github.com/Fan-Pier-Labs/mychart-connector/tree/main/openclaw-plugin",
+  "keywords": ["openclaw", "openclaw-plugin", "mychart", "epic", "health", "medical-records", "ehr"],
+  "engines": {
+    "node": ">=18"
+  },
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "skills/",
+    "openclaw.plugin.json",
+    "LICENSE",
+    "README.md"
+  ],
   "openclaw": {
     "extensions": ["./dist/index.js"]
   },
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "fetch-cookie": "^3.1.0",
