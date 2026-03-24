@@ -350,7 +350,7 @@ export default function LoginPage() {
     track("auth_google_signin_attempt");
     setLoading(true);
     try {
-      await authClient.signIn.social({ provider: "google" });
+      await authClient.signIn.social({ provider: "google", callbackURL: "/home" });
     } catch (err) {
       toast.error("Google sign in failed: " + (err as Error).message);
       setLoading(false);
