@@ -334,7 +334,9 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   }
 
   // Check if we landed on Terms & Conditions page — auto-accept silently
-  if (bodyLower.includes('termsconditions') || bodyLower.includes('terms and conditions')) {
+  // Use the response URL to avoid false positives from pages that merely
+  // reference "termsconditions" in CSS/JS/footer links.
+  if (urlLower.includes('termsconditions') || (bodyLower.includes('terms and conditions') && !urlLower.includes('/home'))) {
     console.log('Landed on Terms & Conditions page after login, auto-accepting');
     const accepted = await acceptTermsAndConditions(mychartRequest);
     if (accepted) {
@@ -425,7 +427,10 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
       const insideBodyLower = insideBody.toLowerCase();
 
       // Check if we landed on Terms & Conditions page — auto-accept silently
-      if (insideBodyLower.includes('termsconditions') || insideBodyLower.includes('terms and conditions')) {
+      // Use the response URL (not just body content) to avoid false positives from
+      // pages that merely reference "termsconditions" in CSS/JS/footer links.
+      const insideUrl = (insideResp.url || '').toLowerCase();
+      if (insideUrl.includes('termsconditions') || (insideBodyLower.includes('terms and conditions') && !insideUrl.includes('/home'))) {
         console.log('Landed on Terms & Conditions page after 2FA, auto-accepting');
         const accepted = await acceptTermsAndConditions(mychartRequest);
         if (!accepted) {
