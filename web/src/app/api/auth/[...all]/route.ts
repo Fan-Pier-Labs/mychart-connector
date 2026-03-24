@@ -14,7 +14,7 @@ async function ensureHandler() {
 export async function GET(req: Request) {
   try {
     const h = await ensureHandler();
-    return h.GET(req);
+    return await h.GET(req);
   } catch (err) {
     console.error(`[Auth Route] GET error:`, err);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
