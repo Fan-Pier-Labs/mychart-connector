@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test'
+import { describe, it, expect, mock } from 'bun:test'
 import { MyChartRequest } from '../myChartRequest'
 import { acceptTermsAndConditions } from '../termsAndConditions'
 
@@ -117,7 +117,7 @@ describe('acceptTermsAndConditions', () => {
       const req = createMockRequest()
       let postBody = ''
 
-      req.fetchWithCookieJar = mock(async (url: string, config: any) => {
+      req.fetchWithCookieJar = mock(async (_url: string, config: Record<string, string>) => {
         if (config?.method === 'POST') {
           postBody = config.body
         }
@@ -156,7 +156,7 @@ describe('acceptTermsAndConditions', () => {
       const req = createMockRequest()
       let callCount = 0
 
-      req.fetchWithCookieJar = mock(async (url: string) => {
+      req.fetchWithCookieJar = mock(async () => {
         callCount++
         if (callCount === 1) {
           return new Response(buildTermsPage(), { status: 200 })
@@ -175,7 +175,7 @@ describe('acceptTermsAndConditions', () => {
       const req = createMockRequest()
       let callCount = 0
 
-      req.fetchWithCookieJar = mock(async (url: string) => {
+      req.fetchWithCookieJar = mock(async () => {
         callCount++
         if (callCount === 1) {
           return new Response(buildTermsPage(), { status: 200 })
@@ -195,7 +195,7 @@ describe('acceptTermsAndConditions', () => {
       let callCount = 0
       const calledUrls: string[] = []
 
-      req.fetchWithCookieJar = mock(async (url: string) => {
+      req.fetchWithCookieJar = mock(async () => {
         callCount++
         calledUrls.push(url)
         if (callCount === 1) {
