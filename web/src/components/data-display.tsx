@@ -134,9 +134,9 @@ export function VisitsCard({ title, data, getVisits }: { title: string; data: Da
 }
 
 export function VisitItem({ visit }: { visit: Visit }) {
-  // Guard against non-standard visit shapes that may not have been normalized
+  // TODO: normalize all visit types in the backend scrapers so the frontend doesn't need these guards
   if (!visit || typeof visit !== 'object') return null;
-  // Detect alternate format {Patient, Physician, Department, Date, Time} and render it
+  // TODO: normalize all types in the backend in TypeScript so alternate formats are handled before reaching the UI
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const v = visit as any;
   const isAlternate = 'Patient' in v || 'Physician' in v;
