@@ -907,6 +907,10 @@ export default function ScrapeResultsPage() {
                 <h4 className="font-semibold text-sm">New Message</h4>
                 {composeLoading ? (
                   <p className="text-sm text-muted-foreground">Loading recipients...</p>
+                ) : composeRecipients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No recipients available. This MyChart account does not have any providers you can message.
+                  </p>
                 ) : (
                   <>
                     <div>
