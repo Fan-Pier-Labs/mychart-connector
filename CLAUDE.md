@@ -129,6 +129,19 @@ Key files:
 - `web/src/lib/notifications/templates.ts` — HTML email templates (summary + detailed)
 - `web/src/app/api/notifications/preferences/route.ts` — GET/PUT user preferences
 
+## Email Relay (bluesignup.com → Slack)
+
+All emails to `*@bluesignup.com` are forwarded to the `#mychart-2fa-emails` Slack channel. This provides visibility into MyChart 2FA codes and other portal emails.
+
+**Architecture:** SES Receive → SNS → Slack channel email
+- **SES** (us-east-1): Receives inbound email for `bluesignup.com` via MX record
+- **SNS topic**: `arn:aws:sns:us-east-1:555985150976:bluesignup-email-relay`
+- **Subscriber**: `mychart-2fa-emails-aaaattsmwzx2iw43jsaumck4a4@fanpierlabs.slack.com`
+- **SES receipt rule set**: `bluesignup-relay` (active), rule `forward-to-slack`
+- **DNS**: MX record on `bluesignup.com` → `10 inbound-smtp.us-east-1.amazonaws.com`
+
+No Lambda or application code — pure AWS infrastructure (SES + SNS + Route53).
+
 ## OpenClaw Plugin
 
 Self-contained plugin in `openclaw-plugin/` that bundles all MyChart scraper code locally (no server needed).
