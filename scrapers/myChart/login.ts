@@ -33,6 +33,10 @@ export function parseFirstPathPartFromLocation(locationHeader: string, hostname:
  * fetch that page and look for URLs pointing back to the original MyChart hostname.
  * These appear in script tags, data attributes, and links embedded on the marketing page.
  * Extract the firstPathPart from the first matching URL.
+ *
+ * NOTE: This is experimental — not fully confident this works for all edge cases.
+ * If it causes issues, it can be safely removed (the login flow will fall through
+ * to the body/meta-refresh detection instead).
  */
 export async function extractFirstPathPartFromMarketingPage(mychartRequest: MyChartRequest, marketingPageUrl: string): Promise<string | null> {
   try {
@@ -116,6 +120,7 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
 
   if (!firstPathPart) {
     console.log('Could not find first path part');
+    console.log('TODO: handle this error better')
     return mychartRequest;
   }
 
