@@ -134,15 +134,23 @@ export function VisitsCard({ title, data, getVisits }: { title: string; data: Da
 }
 
 export function VisitItem({ visit }: { visit: Visit }) {
+  // Guard against non-standard visit shapes that may not have been normalized
+  if (!visit || typeof visit !== 'object') return null;
+  // Detect alternate format {Patient, Physician, Department, Date, Time} and render it
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const v = visit as any;
+  const isAlternate = 'Patient' in v || 'Physician' in v;
   return (
     <div className="bg-muted rounded-md p-3 text-sm">
       <div className="font-medium">
         {safeText(visit.Date)} {safeText(visit.Time)} {visit.VisitTypeName ? `- ${safeText(visit.VisitTypeName)}` : ''}
       </div>
       <div className="text-xs text-muted-foreground mt-1">
-        {visit.PrimaryProviderName && <span>Provider: {safeText(visit.PrimaryProviderName)}</span>}
-        {visit.PrimaryDepartment?.Name && (
-          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment.Name)}</span>
+        {(visit.PrimaryProviderName || (isAlternate && v.Physician)) && (
+          <span>Provider: {safeText(visit.PrimaryProviderName || v.Physician)}</span>
+        )}
+        {(visit.PrimaryDepartment?.Name || (isAlternate && v.Department)) && (
+          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment?.Name || v.Department)}</span>
         )}
         {visit.Location && (
           <span className="ml-3">Location: {safeText(visit.Location)}</span>

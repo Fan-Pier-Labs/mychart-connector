@@ -160,3 +160,139 @@ describe('normalizeVisit', () => {
     expect(result.Location).toBe('100 Hospital Dr, Building A, Floor 3');
   });
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeVisitList(visits: any): any[] | undefined {
+  if (!Array.isArray(visits)) return undefined;
+  return visits.map(normalizeVisit);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeUpcomingVisits(raw: any) {
+  if (!raw || raw.error) return raw;
+  if (Array.isArray(raw)) {
+    return { LaterVisitsList: raw.map(normalizeVisit) };
+  }
+  return {
+    ...raw,
+    LaterVisitsList: normalizeVisitList(raw.LaterVisitsList),
+    NextNDaysVisits: normalizeVisitList(raw.NextNDaysVisits),
+    InProgressVisits: normalizeVisitList(raw.InProgressVisits),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizePastVisits(raw: any) {
+  if (!raw || raw.error) return raw;
+  const list = raw.List;
+  if (!list || typeof list !== 'object') return raw;
+
+  if (Array.isArray(list)) {
+    return {
+      ...raw,
+      List: { default: { List: list.map(normalizeVisit) } },
+    };
+  }
+
+  const normalized: Record<string, { List: ReturnType<typeof normalizeVisit>[] }> = {};
+  for (const [orgKey, org] of Object.entries(list)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgData = org as any;
+    if (Array.isArray(orgData)) {
+      normalized[orgKey] = { List: orgData.map(normalizeVisit) };
+    } else if (orgData && typeof orgData === 'object' && Array.isArray(orgData.List)) {
+      normalized[orgKey] = {
+        ...orgData,
+        List: orgData.List.map(normalizeVisit),
+      };
+    } else if (orgData && typeof orgData === 'object' && ('Patient' in orgData || 'Physician' in orgData || 'Date' in orgData)) {
+      normalized[orgKey] = { List: [normalizeVisit(orgData)] };
+    } else {
+      normalized[orgKey] = { ...orgData, List: [] };
+    }
+  }
+  return { ...raw, List: normalized };
+}
+
+describe('normalizePastVisits', () => {
+  it('normalizes standard org-based past visits', () => {
+    const raw = {
+      List: {
+        org1: {
+          List: [
+            { Date: '01/10/2026', VisitTypeName: 'Office Visit', PrimaryProviderName: 'Dr. Chen' },
+          ],
+        },
+      },
+    };
+    const result = normalizePastVisits(raw);
+    expect(result.List.org1.List).toHaveLength(1);
+    expect(result.List.org1.List[0].VisitTypeName).toBe('Office Visit');
+  });
+
+  it('handles List as a flat array of visits', () => {
+    const raw = {
+      List: [
+        { Patient: 'John', Physician: 'Dr. Smith', Department: 'IM', Date: '03/15/2026', Time: '10am' },
+        { Patient: 'John', Physician: 'Dr. Jones', Department: 'Cardio', Date: '02/10/2026', Time: '2pm' },
+      ],
+    };
+    const result = normalizePastVisits(raw);
+    expect(result.List.default.List).toHaveLength(2);
+    expect(result.List.default.List[0].PrimaryProviderName).toBe('Dr. Smith');
+    expect(result.List.default.List[0].PrimaryDepartment).toEqual({ Name: 'IM' });
+  });
+
+  it('handles org value as a direct array of visits', () => {
+    const raw = {
+      List: {
+        org1: [
+          { Date: '01/10/2026', VisitTypeName: 'Office Visit' },
+        ],
+      },
+    };
+    const result = normalizePastVisits(raw);
+    expect(result.List.org1.List).toHaveLength(1);
+    expect(result.List.org1.List[0].VisitTypeName).toBe('Office Visit');
+  });
+
+  it('handles org value as a single visit object (flat numeric keys)', () => {
+    const raw = {
+      List: {
+        '0': { Patient: 'John', Physician: 'Dr. Smith', Department: 'IM', Date: '03/15/2026', Time: '10am' },
+      },
+    };
+    const result = normalizePastVisits(raw);
+    expect(result.List['0'].List).toHaveLength(1);
+    expect(result.List['0'].List[0].PrimaryProviderName).toBe('Dr. Smith');
+  });
+
+  it('returns raw if no List property', () => {
+    const raw = { error: 'something went wrong' };
+    expect(normalizePastVisits(raw)).toEqual(raw);
+  });
+});
+
+describe('normalizeUpcomingVisits', () => {
+  it('normalizes standard upcoming visits', () => {
+    const raw = {
+      LaterVisitsList: [
+        { Date: '04/01/2026', VisitTypeName: 'Follow Up', PrimaryProviderName: 'Dr. Chen' },
+      ],
+      NextNDaysVisits: [],
+      InProgressVisits: [],
+    };
+    const result = normalizeUpcomingVisits(raw);
+    expect(result.LaterVisitsList).toHaveLength(1);
+    expect(result.LaterVisitsList[0].VisitTypeName).toBe('Follow Up');
+  });
+
+  it('handles flat array of upcoming visits', () => {
+    const raw = [
+      { Patient: 'John', Physician: 'Dr. Smith', Date: '04/01/2026', Time: '10am' },
+    ];
+    const result = normalizeUpcomingVisits(raw);
+    expect(result.LaterVisitsList).toHaveLength(1);
+    expect(result.LaterVisitsList[0].PrimaryProviderName).toBe('Dr. Smith');
+  });
+});
