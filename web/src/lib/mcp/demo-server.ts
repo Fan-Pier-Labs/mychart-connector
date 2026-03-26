@@ -43,11 +43,20 @@ export function createDemoMcpServer(): McpServer {
     version: '1.0.0',
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function reg(name: string, handler: (...args: any[]) => Promise<CallToolResult>) {
+    const def = toolDef(name);
+    server.registerTool(
+      name,
+      { description: def.description, inputSchema: def.inputSchema },
+      // @ts-expect-error zod v3/v4 compat
+      handler
+    );
+  }
+
   // ── Meta tools ──
 
-  server.tool(
-    'list_accounts',
-    toolDef('list_accounts').description,
+  reg('list_accounts',
     async (): Promise<CallToolResult> => {
       return jsonResult([
         {
@@ -60,28 +69,19 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    'connect_instance',
-    { description: toolDef('connect_instance').description, inputSchema: toolDef('connect_instance').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('connect_instance',
     async (_args: { instance: string }): Promise<CallToolResult> => {
       return jsonResult({ status: 'logged_in', hostname: DEMO_HOSTNAME });
     }
   );
 
-  server.registerTool(
-    'check_session',
-    { description: toolDef('check_session').description, inputSchema: toolDef('check_session').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('check_session',
     async (_args: { instance?: string }): Promise<CallToolResult> => {
       return jsonResult({ hostname: DEMO_HOSTNAME, connected: true, cookiesValid: true });
     }
   );
 
-  server.registerTool(
-    'complete_2fa',
-    { description: toolDef('complete_2fa').description, inputSchema: toolDef('complete_2fa').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('complete_2fa',
     async (_args: { code: string; instance: string }): Promise<CallToolResult> => {
       return jsonResult({ status: 'logged_in', message: '2FA completed successfully' });
     }
@@ -90,20 +90,14 @@ export function createDemoMcpServer(): McpServer {
   // ── Custom-parameter scraper tools ──
 
   // get_past_visits has a custom parameter
-  server.registerTool(
-    'get_past_visits',
-    { description: toolDef('get_past_visits').description, inputSchema: toolDef('get_past_visits').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_past_visits',
     async (_args: { years_back?: number; instance?: string }): Promise<CallToolResult> => {
       return jsonResult(demo.demoPastVisits);
     }
   );
 
   // Lab results — paginated
-  server.registerTool(
-    'get_lab_results',
-    { description: toolDef('get_lab_results').description, inputSchema: toolDef('get_lab_results').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_lab_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -113,10 +107,7 @@ export function createDemoMcpServer(): McpServer {
   );
 
   // Messages — paginated
-  server.registerTool(
-    'get_messages',
-    { description: toolDef('get_messages').description, inputSchema: toolDef('get_messages').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_messages',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -126,10 +117,7 @@ export function createDemoMcpServer(): McpServer {
   );
 
   // Billing — paginated
-  server.registerTool(
-    'get_billing',
-    { description: toolDef('get_billing').description, inputSchema: toolDef('get_billing').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_billing',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -139,10 +127,7 @@ export function createDemoMcpServer(): McpServer {
   );
 
   // Imaging — paginated
-  server.registerTool(
-    'get_imaging_results',
-    { description: toolDef('get_imaging_results').description, inputSchema: toolDef('get_imaging_results').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_imaging_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -153,10 +138,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Message recipients + topics ──
 
-  server.registerTool(
-    'get_message_recipients',
-    { description: toolDef('get_message_recipients').description, inputSchema: toolDef('get_message_recipients').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_message_recipients',
     async (_args: { instance?: string }): Promise<CallToolResult> => {
       return jsonResult(demo.demoMessageRecipients);
     }
@@ -164,10 +146,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Send message ──
 
-  server.registerTool(
-    'send_message',
-    { description: toolDef('send_message').description, inputSchema: toolDef('send_message').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_message',
     async (args: { instance?: string; recipient_name: string; topic: string; subject: string; message_body: string }): Promise<CallToolResult> => {
       // Fuzzy-match recipient
       const query = args.recipient_name.toLowerCase();
@@ -194,10 +173,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Send reply ──
 
-  server.registerTool(
-    'send_reply',
-    { description: toolDef('send_reply').description, inputSchema: toolDef('send_reply').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_reply',
     async (args: { instance?: string; conversation_id: string; message_body: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -208,10 +184,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Request medication refill ──
 
-  server.registerTool(
-    'request_refill',
-    { description: toolDef('request_refill').description, inputSchema: toolDef('request_refill').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('request_refill',
     async (args: { instance?: string; medication_name: string }): Promise<CallToolResult> => {
       const query = args.medication_name.toLowerCase();
       const matched = demo.demoMedications.filter(m =>
@@ -242,10 +215,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Get available appointment slots ──
 
-  server.registerTool(
-    'get_available_appointments',
-    { description: toolDef('get_available_appointments').description, inputSchema: toolDef('get_available_appointments').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_available_appointments',
     async (args: { instance?: string; provider_name?: string; visit_type?: string }): Promise<CallToolResult> => {
       let results = demo.demoAvailableAppointments;
       if (args.provider_name) {
@@ -265,10 +235,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Book appointment ──
 
-  server.registerTool(
-    'book_appointment',
-    { description: toolDef('book_appointment').description, inputSchema: toolDef('book_appointment').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('book_appointment',
     async (args: { instance?: string; slot_id: string; reason?: string }): Promise<CallToolResult> => {
       // Find the slot across all providers
       for (const provider of demo.demoAvailableAppointments) {
@@ -294,10 +261,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Emergency contact management ──
 
-  server.registerTool(
-    'add_emergency_contact',
-    { description: toolDef('add_emergency_contact').description, inputSchema: toolDef('add_emergency_contact').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('add_emergency_contact',
     async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -307,10 +271,7 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    'update_emergency_contact',
-    { description: toolDef('update_emergency_contact').description, inputSchema: toolDef('update_emergency_contact').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('update_emergency_contact',
     async (args: { id: string; name?: string; relationship_type?: string; phone_number?: string; instance?: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -319,10 +280,7 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    'remove_emergency_contact',
-    { description: toolDef('remove_emergency_contact').description, inputSchema: toolDef('remove_emergency_contact').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('remove_emergency_contact',
     async (args: { id: string; instance?: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -334,11 +292,7 @@ export function createDemoMcpServer(): McpServer {
   // ── Register all standard scraper tools ──
 
   for (const [name, data] of Object.entries(scraperToolData)) {
-    const def = toolDef(name);
-    server.registerTool(
-      name,
-      { description: def.description, inputSchema: def.inputSchema },
-      // @ts-expect-error zod v3/v4 compat
+    reg(name,
       async (_args: { instance?: string }): Promise<CallToolResult> => {
         return jsonResult(data);
       }

@@ -131,16 +131,9 @@ async function resolveRequest(
 
 type ScraperFn = (req: MyChartRequest) => Promise<unknown>;
 
-function registerScraperTool(server: McpServer, userId: string, name: string, scraperFn: ScraperFn) {
-  const def = toolDef(name);
-  server.registerTool(
-    name,
-    {
-      description: def.description,
-      inputSchema: def.inputSchema,
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function registerScraperTool(server: McpServer, userId: string, reg: (name: string, handler: (...args: any[]) => Promise<CallToolResult>) => void, name: string, scraperFn: ScraperFn) {
+  reg(name,
     async (args: { instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: name });
       console.log(`[mcp] Tool call: ${name} (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -175,10 +168,19 @@ export function createMcpServer(userId: string): McpServer {
     version: '1.0.0',
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function reg(name: string, handler: (...args: any[]) => Promise<CallToolResult>) {
+    const def = toolDef(name);
+    server.registerTool(
+      name,
+      { description: def.description, inputSchema: def.inputSchema },
+      // @ts-expect-error zod v3/v4 compat
+      handler
+    );
+  }
+
   // Meta tools
-  server.tool(
-    'list_accounts',
-    toolDef('list_accounts').description,
+  reg('list_accounts',
     async (): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: list_accounts (user=${userId})`);
       try {
@@ -203,11 +205,7 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'connect_instance',
-    { description: toolDef('connect_instance').description, inputSchema: toolDef('connect_instance').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('connect_instance',
     async (args: { instance: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: connect_instance (user=${userId}, instance=${args.instance})`);
       try {
@@ -231,11 +229,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Auth tools
-  server.registerTool(
-    'check_session',
-    { description: toolDef('check_session').description, inputSchema: toolDef('check_session').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('check_session',
     async (args: { instance?: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: check_session (user=${userId}, instance=${args.instance || 'all'})`);
       try {
@@ -287,11 +281,7 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'complete_2fa',
-    { description: toolDef('complete_2fa').description, inputSchema: toolDef('complete_2fa').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('complete_2fa',
     async (args: { code: string; instance: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: complete_2fa (user=${userId}, instance=${args.instance})`);
       try {
@@ -326,23 +316,19 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Scraper tools
-  registerScraperTool(server, userId, 'get_profile', async (req) => {
+  registerScraperTool(server, userId, reg,'get_profile', async (req) => {
     const profile = await getMyChartProfile(req);
     const email = await getEmail(req);
     return { ...profile, email };
   });
 
-  registerScraperTool(server, userId, 'get_health_summary', getHealthSummary);
-  registerScraperTool(server, userId, 'get_medications', getMedications);
-  registerScraperTool(server, userId, 'get_allergies', getAllergies);
-  registerScraperTool(server, userId, 'get_health_issues', getHealthIssues);
-  registerScraperTool(server, userId, 'get_upcoming_visits', upcomingVisits);
+  registerScraperTool(server, userId, reg,'get_health_summary', getHealthSummary);
+  registerScraperTool(server, userId, reg,'get_medications', getMedications);
+  registerScraperTool(server, userId, reg,'get_allergies', getAllergies);
+  registerScraperTool(server, userId, reg,'get_health_issues', getHealthIssues);
+  registerScraperTool(server, userId, reg,'get_upcoming_visits', upcomingVisits);
 
-  server.registerTool(
-    'get_past_visits',
-    { description: toolDef('get_past_visits').description, inputSchema: toolDef('get_past_visits').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('get_past_visits',
     async (args: { years_back?: number; instance?: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_past_visits (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
@@ -361,10 +347,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Lab results — trimmed + paginated
-  server.registerTool(
-    'get_lab_results',
-    { description: toolDef('get_lab_results').description, inputSchema: toolDef('get_lab_results').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_lab_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_lab_results (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
@@ -383,10 +366,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Messages — trimmed + paginated
-  server.registerTool(
-    'get_messages',
-    { description: toolDef('get_messages').description, inputSchema: toolDef('get_messages').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_messages',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_messages (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
@@ -405,10 +385,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Message recipients + topics
-  server.registerTool(
-    'get_message_recipients',
-    { description: toolDef('get_message_recipients').description, inputSchema: toolDef('get_message_recipients').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_message_recipients',
     async (args: { instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_message_recipients' });
       console.log(`[mcp] Tool call: get_message_recipients (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -431,10 +408,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Send new message
-  server.registerTool(
-    'send_message',
-    { description: toolDef('send_message').description, inputSchema: toolDef('send_message').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_message',
     async (args: { instance?: string; recipient_name: string; topic: string; subject: string; message_body: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_message' });
       console.log(`[mcp] Tool call: send_message (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -493,10 +467,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Send reply to existing conversation
-  server.registerTool(
-    'send_reply',
-    { description: toolDef('send_reply').description, inputSchema: toolDef('send_reply').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_reply',
     async (args: { instance?: string; conversation_id: string; message_body: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_reply' });
       console.log(`[mcp] Tool call: send_reply (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -517,10 +488,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Request medication refill
-  server.registerTool(
-    'request_refill',
-    { description: toolDef('request_refill').description, inputSchema: toolDef('request_refill').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('request_refill',
     async (args: { instance?: string; medication_name: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'request_refill' });
       console.log(`[mcp] Tool call: request_refill (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -564,10 +532,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Billing — trimmed + paginated
-  server.registerTool(
-    'get_billing',
-    { description: toolDef('get_billing').description, inputSchema: toolDef('get_billing').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_billing',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_billing (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
@@ -589,21 +554,17 @@ export function createMcpServer(userId: string): McpServer {
       }
     }
   );
-  registerScraperTool(server, userId, 'get_care_team', getCareTeam);
-  registerScraperTool(server, userId, 'get_insurance', getInsurance);
-  registerScraperTool(server, userId, 'get_immunizations', getImmunizations);
-  registerScraperTool(server, userId, 'get_preventive_care', getPreventiveCare);
-  registerScraperTool(server, userId, 'get_referrals', getReferrals);
-  registerScraperTool(server, userId, 'get_medical_history', getMedicalHistory);
-  registerScraperTool(server, userId, 'get_letters', getLetters);
-  registerScraperTool(server, userId, 'get_vitals', getVitals);
-  registerScraperTool(server, userId, 'get_emergency_contacts', getEmergencyContacts);
+  registerScraperTool(server, userId, reg,'get_care_team', getCareTeam);
+  registerScraperTool(server, userId, reg,'get_insurance', getInsurance);
+  registerScraperTool(server, userId, reg,'get_immunizations', getImmunizations);
+  registerScraperTool(server, userId, reg,'get_preventive_care', getPreventiveCare);
+  registerScraperTool(server, userId, reg,'get_referrals', getReferrals);
+  registerScraperTool(server, userId, reg,'get_medical_history', getMedicalHistory);
+  registerScraperTool(server, userId, reg,'get_letters', getLetters);
+  registerScraperTool(server, userId, reg,'get_vitals', getVitals);
+  registerScraperTool(server, userId, reg,'get_emergency_contacts', getEmergencyContacts);
 
-  server.registerTool(
-    'add_emergency_contact',
-    { description: toolDef('add_emergency_contact').description, inputSchema: toolDef('add_emergency_contact').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('add_emergency_contact',
     async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'add_emergency_contact' });
       console.log(`[mcp] Tool call: add_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -624,11 +585,7 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'update_emergency_contact',
-    { description: toolDef('update_emergency_contact').description, inputSchema: toolDef('update_emergency_contact').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('update_emergency_contact',
     async (args: { id: string; name?: string; relationship_type?: string; phone_number?: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'update_emergency_contact' });
       console.log(`[mcp] Tool call: update_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -650,11 +607,7 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'remove_emergency_contact',
-    { description: toolDef('remove_emergency_contact').description, inputSchema: toolDef('remove_emergency_contact').inputSchema },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('remove_emergency_contact',
     async (args: { id: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'remove_emergency_contact' });
       console.log(`[mcp] Tool call: remove_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -671,19 +624,16 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  registerScraperTool(server, userId, 'get_documents', getDocuments);
-  registerScraperTool(server, userId, 'get_goals', getGoals);
-  registerScraperTool(server, userId, 'get_upcoming_orders', getUpcomingOrders);
-  registerScraperTool(server, userId, 'get_questionnaires', getQuestionnaires);
-  registerScraperTool(server, userId, 'get_care_journeys', getCareJourneys);
-  registerScraperTool(server, userId, 'get_activity_feed', getActivityFeed);
-  registerScraperTool(server, userId, 'get_education_materials', getEducationMaterials);
-  registerScraperTool(server, userId, 'get_ehi_export', getEhiExportTemplates);
+  registerScraperTool(server, userId, reg,'get_documents', getDocuments);
+  registerScraperTool(server, userId, reg,'get_goals', getGoals);
+  registerScraperTool(server, userId, reg,'get_upcoming_orders', getUpcomingOrders);
+  registerScraperTool(server, userId, reg,'get_questionnaires', getQuestionnaires);
+  registerScraperTool(server, userId, reg,'get_care_journeys', getCareJourneys);
+  registerScraperTool(server, userId, reg,'get_activity_feed', getActivityFeed);
+  registerScraperTool(server, userId, reg,'get_education_materials', getEducationMaterials);
+  registerScraperTool(server, userId, reg,'get_ehi_export', getEhiExportTemplates);
   // Imaging — trimmed (strips report HTML, keeps impression text)
-  server.registerTool(
-    'get_imaging_results',
-    { description: toolDef('get_imaging_results').description, inputSchema: toolDef('get_imaging_results').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_imaging_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_imaging_results (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
@@ -702,10 +652,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Get available appointment slots
-  server.registerTool(
-    'get_available_appointments',
-    { description: toolDef('get_available_appointments').description, inputSchema: toolDef('get_available_appointments').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_available_appointments',
     async (_args: { instance?: string; provider_name?: string; visit_type?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_available_appointments' });
       return errorResult('Appointment scheduling is not yet available for real MyChart instances. This feature is coming soon.');
@@ -713,10 +660,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Book appointment
-  server.registerTool(
-    'book_appointment',
-    { description: toolDef('book_appointment').description, inputSchema: toolDef('book_appointment').inputSchema },
-    // @ts-expect-error zod v3/v4 compat
+  reg('book_appointment',
     async (_args: { instance?: string; slot_id: string; reason?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'book_appointment' });
       return errorResult('Appointment booking is not yet available for real MyChart instances. This feature is coming soon.');
@@ -724,7 +668,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Linked accounts — trimmed (drops logo URLs)
-  registerScraperTool(server, userId, 'get_linked_mychart_accounts', async (req) => {
+  registerScraperTool(server, userId, reg,'get_linked_mychart_accounts', async (req) => {
     const raw = await getLinkedMyChartAccounts(req) as LinkedMyChart[];
     return trimLinkedAccounts(raw);
   });
