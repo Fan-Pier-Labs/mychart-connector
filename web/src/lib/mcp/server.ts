@@ -16,6 +16,7 @@ import { listConversations } from '../mychart/messages/conversations';
 import { sendNewMessage, getMessageTopics, getMessageRecipients, getVerificationToken } from '../mychart/messages/sendMessage';
 import type { MessageRecipient, MessageTopic } from '../mychart/messages/sendMessage';
 import { sendReply } from '../mychart/messages/sendReply';
+import { requestMedicationRefill } from '../mychart/medicationRefill';
 import { getBillingHistory } from '../mychart/bills/bills';
 import { getCareTeam } from '../mychart/careTeam';
 import { getInsurance } from '../mychart/insurance';
@@ -567,6 +568,59 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
+  // Request medication refill
+  server.registerTool(
+    'request_refill',
+    {
+      description: 'Request a medication refill. Use get_medications first to find the medication key for refillable medications.',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        medication_name: z.string().describe('Name of the medication to refill (fuzzy matched against current medications)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (args: { instance?: string; medication_name: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'request_refill' });
+      console.log(`[mcp] Tool call: request_refill (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+
+        // Get medications to find the matching one
+        const medsResult = await getMedications(result.mychartRequest);
+        const meds = medsResult.medications;
+        const query = args.medication_name.toLowerCase();
+        const matched = meds.filter(m =>
+          m.name.toLowerCase().includes(query) || m.commonName.toLowerCase().includes(query)
+        );
+
+        if (matched.length === 0) {
+          const available = meds.map(m => m.name).join(', ');
+          return errorResult(`No medication matching "${args.medication_name}". Available: ${available}`);
+        }
+        if (matched.length > 1) {
+          const names = matched.map(m => m.name).join(', ');
+          return errorResult(`Multiple medications match "${args.medication_name}": ${names}. Please be more specific.`);
+        }
+
+        const med = matched[0];
+        if (!med.isRefillable) {
+          return errorResult(`"${med.name}" is not refillable.`);
+        }
+        if (!med.medicationKey) {
+          return errorResult(`"${med.name}" does not have a medication key for refill requests.`);
+        }
+
+        const refillResult = await requestMedicationRefill(result.mychartRequest, med.medicationKey);
+        return jsonResult({ ...refillResult, medication: med.name });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] request_refill: error -`, error.message, error.stack);
+        return errorResult(`Error requesting refill: ${error.message}`);
+      }
+    }
+  );
+
   // Billing — trimmed + paginated
   server.registerTool(
     'get_billing',
@@ -739,6 +793,42 @@ export function createMcpServer(userId: string): McpServer {
         console.error(`[mcp] get_imaging_results: error -`, error.message, error.stack);
         return errorResult(`Error fetching get_imaging_results: ${error.message}`);
       }
+    }
+  );
+
+  // Get available appointment slots
+  server.registerTool(
+    'get_available_appointments',
+    {
+      description: 'Get available appointment slots for scheduling. Optionally filter by provider name or visit type.',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        provider_name: z.string().optional().describe('Filter by provider name (fuzzy match)'),
+        visit_type: z.string().optional().describe('Filter by visit type (e.g. Office Visit, Lab Work, Follow-Up)'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (_args: { instance?: string; provider_name?: string; visit_type?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_available_appointments' });
+      return errorResult('Appointment scheduling is not yet available for real MyChart instances. This feature is coming soon.');
+    }
+  );
+
+  // Book appointment
+  server.registerTool(
+    'book_appointment',
+    {
+      description: 'Book an appointment using a slot ID from get_available_appointments',
+      inputSchema: {
+        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+        slot_id: z.string().describe('The slot ID from get_available_appointments to book'),
+        reason: z.string().optional().describe('Reason for the visit'),
+      },
+    },
+    // @ts-expect-error zod v3/v4 compat
+    async (_args: { instance?: string; slot_id: string; reason?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'book_appointment' });
+      return errorResult('Appointment booking is not yet available for real MyChart instances. This feature is coming soon.');
     }
   );
 
