@@ -17,6 +17,7 @@
     "@better-auth/passkey": "^1.5.5",
     "@iconify/react": "^6.0.2",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@sentry/nextjs": "^10",
     "@types/qrcode.react": "^3.0.0",
     "better-auth": "^1.5.4",
     "cheerio": "^1.2.0",
