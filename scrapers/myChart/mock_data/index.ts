@@ -1,5 +1,5 @@
 import { RequestConfig } from '../types';
-import { billing_page_section, bills_details_html_page, bills_visit_list, get_pdf, statement_list } from './bills';
+import { billing_page_section, bills_details_html_page, bills_visit_list, get_pdf, payment_list, statement_list } from './bills';
 import { firstPathPart } from './firstPathPart'
 import { getTestDetails, getTestResultsList, test_results_html_page } from './labs';
 import { doLogin, home, insideASP, login, secondaryValidation, secondaryValidationSMSConsent, smsVerification, validate2faCode } from './login'
@@ -32,6 +32,7 @@ export async function mockRequest(inputUrl: string, config: RequestConfig): Prom
     bills_details_html_page,
     bills_visit_list,
     statement_list,
+    payment_list,
     get_pdf
   ]
 

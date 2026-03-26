@@ -152,6 +152,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return json(homer.billingStatements);
   }
 
+  if (lower.startsWith('billing/details/loadpaymentlist')) {
+    return json(homer.billingPayments);
+  }
+
   if (lower.startsWith('billing/details/downloadfromblob')) {
     // Return a minimal fake PDF
     const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A]); // %PDF-1.4\n

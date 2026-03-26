@@ -459,6 +459,16 @@ async function scrapeAll(mychartRequest: MyChartRequest, hostname: string) {
           console.log(`\n    ... and ${allVisits.length - 20} more billing items`);
         }
       }
+
+      // Payment history
+      const payments = account.paymentList?.Data?.PaymentList;
+      if (payments && payments.length > 0) {
+        console.log(`\n    Patient Payments: ${payments.length}`);
+        for (const payment of payments) {
+          const paymentMethod = payment.HtmlSubText?.replace(/<[^>]+>/g, '').trim() || '';
+          console.log(`      ${payment.FormattedDateDisplay} - ${payment.Description} - ${payment.PaymentAmountDisplay} ${paymentMethod}`);
+        }
+      }
     }
   } catch (err) {
     console.log('    Error fetching billing:', (err as Error).message);
