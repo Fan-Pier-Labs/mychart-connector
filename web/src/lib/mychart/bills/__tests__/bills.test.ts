@@ -271,6 +271,24 @@ describe('parseBillingAccountsHtml', () => {
     expect(accounts[0].patientName).toBe('unknown')
   })
 
+  it('extracts ID/Context from Billing/Details link when recentPaymentLabel is missing', () => {
+    const html = `
+      <div class="ba_card">
+        <p class="ba_card_header_account_idAndType">Guarantor #102424656 (Ryan Hughes)</p>
+        <p class="ba_card_status_due_amount">$0.00</p>
+        <a href="https://mychart.example.com/Billing/Details?ID=WP-ABC123&Context=WP-DEF456">
+          View Account Details, Patient Payments, Billing Documents
+        </a>
+      </div>
+    `
+    const accounts = parseBillingAccountsHtml(html, hostname)
+    expect(accounts).toHaveLength(1)
+    expect(accounts[0].guarantorNumber).toBe('102424656')
+    expect(accounts[0].patientName).toBe('Ryan Hughes')
+    expect(accounts[0].id).toBe('WP-ABC123')
+    expect(accounts[0].context).toBe('WP-DEF456')
+  })
+
   it('handles amountDue as undefined when element is empty', () => {
     const html = `
       <div class="ba_card">
