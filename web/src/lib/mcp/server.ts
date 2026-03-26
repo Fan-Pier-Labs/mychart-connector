@@ -571,7 +571,7 @@ export function createMcpServer(userId: string): McpServer {
   server.registerTool(
     'get_billing',
     {
-      description: 'Get billing history. Returns date, description, provider, payer, amounts, and coverage summary. Supports pagination on visits (default limit 10).',
+      description: 'Get billing history including visits/charges, patient payments (MyChart payments made via credit card), and statements. Supports pagination on visits (default limit 10).',
       inputSchema: {
         instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
         limit: z.number().optional().describe('Max visits per account to return (default 10)'),
