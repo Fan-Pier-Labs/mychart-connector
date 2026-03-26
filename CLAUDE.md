@@ -102,11 +102,18 @@ Note: This is separate from MyChart portal TOTP (used for auto-connecting to hea
 
 The web app exposes a per-user MCP server at `/api/mcp?key={apiKey}` for Claude AI integration. Users generate a long-lived API key (SHA-256 hash stored in `user.mcp_api_key_hash`) via `POST /api/mcp-key`. One MCP URL works for all of a user's MyChart accounts — tools accept an optional `instance` parameter to target a specific hostname when multiple accounts are connected. Auto-connects TOTP-enabled instances on first tool call.
 
+Write tools include `send_message`, `send_reply`, `request_refill`, `book_appointment`, `get_available_appointments`, and emergency contact management (`add_emergency_contact`, `update_emergency_contact`, `remove_emergency_contact`). Appointment booking (`get_available_appointments`, `book_appointment`) is a placeholder in production (returns "coming soon" error) but fully functional in the demo server.
+
+A public demo MCP endpoint at `/api/mcp/demo` requires no authentication and returns fictional Homer Simpson data. The demo server mirrors all production tools exactly with fake responses.
+
 Key files:
 - `web/src/lib/mcp/server.ts` — MCP server creation, tool registration (per-user)
+- `web/src/lib/mcp/demo-server.ts` — Demo MCP server with fake Homer Simpson data
+- `web/src/lib/mcp/demo-data.ts` — All fictional demo data (profile, meds, appointments, etc.)
 - `web/src/lib/mcp/api-keys.ts` — API key generate/validate/revoke
 - `web/src/lib/mcp/auto-connect.ts` — shared login+TOTP auto-connect logic
 - `web/src/app/api/mcp/route.ts` — HTTP transport handler (authenticates via API key)
+- `web/src/app/api/mcp/demo/route.ts` — Demo MCP endpoint (no auth required)
 - `web/src/app/api/mcp-key/route.ts` — API key management endpoint
 
 ## Notification System
