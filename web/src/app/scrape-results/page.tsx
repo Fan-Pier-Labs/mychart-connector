@@ -603,9 +603,9 @@ export default function ScrapeResultsPage() {
         {Array.isArray(results.activityFeed) && results.activityFeed.map((item: ActivityFeedItemType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
-              <span className="font-medium">{item.title}</span>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
-              <p className="text-xs text-muted-foreground">{item.date}</p>
+              <span className="font-medium">{safeText(item.title)}</span>
+              <p className="text-xs text-muted-foreground">{safeText(item.description)}</p>
+              <p className="text-xs text-muted-foreground">{safeText(item.date)}</p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[10px]">{safeText(item.type)}</Badge>

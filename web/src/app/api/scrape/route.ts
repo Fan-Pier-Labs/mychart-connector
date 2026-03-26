@@ -90,6 +90,10 @@ function normalizeVisitList(visits: any): any[] | undefined {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeUpcomingVisits(raw: any) {
   if (!raw || raw.error) return raw;
+  // Handle case where response is a flat array of visits
+  if (Array.isArray(raw)) {
+    return { LaterVisitsList: raw.map(normalizeVisit) };
+  }
   return {
     ...raw,
     LaterVisitsList: normalizeVisitList(raw.LaterVisitsList),
@@ -103,14 +107,34 @@ function normalizePastVisits(raw: any) {
   if (!raw || raw.error) return raw;
   const list = raw.List;
   if (!list || typeof list !== 'object') return raw;
+
+  // Handle case where List is a flat array of visits (some instances return this)
+  if (Array.isArray(list)) {
+    return {
+      ...raw,
+      List: { default: { List: list.map(normalizeVisit) } },
+    };
+  }
+
   const normalized: Record<string, { List: ReturnType<typeof normalizeVisit>[] }> = {};
   for (const [orgKey, org] of Object.entries(list)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orgData = org as any;
-    normalized[orgKey] = {
-      ...orgData,
-      List: Array.isArray(orgData.List) ? orgData.List.map(normalizeVisit) : [],
-    };
+    if (Array.isArray(orgData)) {
+      // Org value is directly an array of visits
+      normalized[orgKey] = { List: orgData.map(normalizeVisit) };
+    } else if (orgData && typeof orgData === 'object' && Array.isArray(orgData.List)) {
+      // Standard format: org has a List property
+      normalized[orgKey] = {
+        ...orgData,
+        List: orgData.List.map(normalizeVisit),
+      };
+    } else if (orgData && typeof orgData === 'object' && ('Patient' in orgData || 'Physician' in orgData || 'Date' in orgData)) {
+      // Org value is itself a visit object (flat structure with numeric keys)
+      normalized[orgKey] = { List: [normalizeVisit(orgData)] };
+    } else {
+      normalized[orgKey] = { ...orgData, List: [] };
+    }
   }
   return { ...raw, List: normalized };
 }
