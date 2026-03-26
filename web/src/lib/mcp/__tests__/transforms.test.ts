@@ -7,6 +7,7 @@ import {
   trimLinkedAccounts,
   paginate,
 } from '../transforms';
+import type { BillingAccount } from '../../../../../scrapers/myChart/bills/types';
 
 describe('trimLabResults', () => {
   it('extracts flat component fields from nested structure', () => {
@@ -199,6 +200,7 @@ describe('trimBilling', () => {
     expect(trimmed[0].visits[0].selfAmountDue).toBe('$50.00');
     expect(trimmed[0].visits[0].coverageSummary).toHaveLength(1);
     expect(trimmed[0].visits[0].coverageSummary![0].deductible).toBe('$20.00');
+    expect(trimmed[0].payments).toHaveLength(0);
     expect(trimmed[0].statements).toHaveLength(1);
     expect(trimmed[0].statements[0].amount).toBe('$50.00');
 
@@ -206,6 +208,61 @@ describe('trimBilling', () => {
     expect(JSON.stringify(trimmed)).not.toContain('ProcedureList');
     expect(JSON.stringify(trimmed)).not.toContain('enc-token');
     expect(JSON.stringify(trimmed)).not.toContain('Banner');
+  });
+
+  it('extracts payment history from paymentList', () => {
+    const raw = [{
+      guarantorNumber: '99999',
+      patientName: 'Payment Test',
+      amountDue: 0,
+      id: 'id',
+      context: 'ctx',
+      billingDetails: {
+        Success: true,
+        Data: {
+          UnifiedVisitList: [],
+          InformationalVisitList: [],
+          HasVisits: false, ShowingAll: true, HasUnconvertedPBVisits: false,
+          CanMakePayment: false, CanEditPaymentPlan: false,
+          URLMakePayment: null, URLEditPaymentPlan: null,
+          Filters: { FilterClass: '', Options: [] },
+          PartialPaymentPlanAlert: { Code: 0, Banner: { HeaderText: '', DetailText: '', AssistiveText: '', ButtonLabel: '', ButtonUrl: '', ButtonID: null, ButtonClass: null, ButtonData: null, TelephoneLink: null, ButtonLabelSecondary: null, ButtonUrlSecondary: null, ButtonIDSecondary: null, ButtonClassSecondary: null, ButtonAriaDescribedByContentSecondary: null, ButtonAriaDescribedByIdSecondary: null, ButtonDataSecondary: null, DisableDetailTextHtmlEncoding: false, BannerType: '', BannerTypeReact: '', IconOverride: '', IconAltTextOverride: null, FontSize: 0 } },
+          BillingSystem: 1,
+        },
+      },
+      paymentList: {
+        Success: true,
+        Data: {
+          PaymentList: [
+            {
+              ID: 'enc-pmt-id', ElementID: 'past_enc-pmt-id', Index: '0',
+              DayOfMonth: 13, Month: 5, Year: 2022,
+              FormattedDateDisplay: 'May 13, 2022',
+              Description: 'MyChart Payment',
+              SubText: null,
+              HtmlSubText: '<img alt="Visa" class="brandImage" src="/en-US/images/3rdparty/Visa.png"></img> x1153',
+              PaymentAmountDisplay: '$135.06',
+              UndistributedAmountDisplay: null, CoverageInfo: null, Receipt: null,
+              IsBadDebtAdj: false, IsWriteOffAdj: false, IsSurchargeAdj: false,
+              CanEdit: false, EditPaymentOptions: null, CanCancel: false,
+              CancelCommandOptions: null, ConsentDocument: null, ViewConsentOptions: null,
+              IsCardExpiringSoon: false, HasCardExpired: false,
+            },
+          ],
+          Filters: null,
+        },
+      },
+    }];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const trimmed = trimBilling(raw as unknown as BillingAccount[]);
+    expect(trimmed[0].payments).toHaveLength(1);
+    expect(trimmed[0].payments[0].date).toBe('May 13, 2022');
+    expect(trimmed[0].payments[0].description).toBe('MyChart Payment');
+    expect(trimmed[0].payments[0].amount).toBe('$135.06');
+    expect(trimmed[0].payments[0].paymentMethod).toBe('Visa x1153');
+    // No encrypted IDs
+    expect(JSON.stringify(trimmed)).not.toContain('enc-pmt-id');
   });
 });
 
