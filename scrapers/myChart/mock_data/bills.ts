@@ -7,6 +7,45 @@ export const get_pdf: MockData = {
 }
 
 
+export const payment_list: MockData = {
+  path: ['/MyChartPRD/Billing/Details/LoadPaymentList'],
+  response: new Response(JSON.stringify({
+    Success: true,
+    Data: {
+      PaymentList: [
+        {
+          ID: 'MOCK-PMT-001',
+          ElementID: 'past_MOCK-PMT-001',
+          Index: '0',
+          DayOfMonth: 15,
+          Month: 3,
+          Year: 2023,
+          FormattedDateDisplay: 'Mar 15, 2023',
+          Description: 'MyChart Payment',
+          SubText: null,
+          HtmlSubText: '<img alt="Visa" class="brandImage" src="/en-US/images/3rdparty/Visa.png"></img> x4242',
+          PaymentAmountDisplay: '$10.00',
+          UndistributedAmountDisplay: null,
+          CoverageInfo: null,
+          Receipt: null,
+          IsBadDebtAdj: false,
+          IsWriteOffAdj: false,
+          IsSurchargeAdj: false,
+          CanEdit: false,
+          EditPaymentOptions: null,
+          CanCancel: false,
+          CancelCommandOptions: null,
+          ConsentDocument: null,
+          ViewConsentOptions: null,
+          IsCardExpiringSoon: false,
+          HasCardExpired: false,
+        },
+      ],
+      Filters: null,
+    },
+  }), { headers: { 'Content-Type': 'application/json' } })
+}
+
 export const statement_list: MockData = {
   path: ['/MyChartPRD/Billing/Details/GetStatementList'],
   response: new Response(`

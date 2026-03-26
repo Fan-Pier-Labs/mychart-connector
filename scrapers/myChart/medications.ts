@@ -22,6 +22,7 @@ export type Medication = {
     writtenDispenseQuantity: string;
     daySupply: string;
   } | null;
+  medicationKey: string | null;
 }
 
 export type MedicationsResult = {
@@ -57,6 +58,7 @@ type PrescriptionResponse = {
   orderingProvider?: ProviderResponse;
   isPatientReported?: boolean;
   refillDetails?: RefillDetailsResponse;
+  medicationKey?: string;
 }
 
 type CommunityMemberResponse = {
@@ -117,6 +119,7 @@ export async function getMedications(mychartRequest: MyChartRequest): Promise<Me
           writtenDispenseQuantity: rx.refillDetails.writtenDispenseQuantity || '',
           daySupply: rx.refillDetails.daySupply || '',
         } : null,
+        medicationKey: rx.medicationKey || null,
       });
     }
   }
