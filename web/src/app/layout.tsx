@@ -33,7 +33,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "MyChart Connector — Let AI manage your healthcare",
+        alt: "MyChart Connector — Manage your healthcare with Claude AI",
       },
     ],
     type: "website",
