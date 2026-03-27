@@ -48,6 +48,7 @@ import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
 import { sendTelemetryEvent } from '../shared/telemetry';
 import { checkForUpdate } from '../shared/updateCheck';
+import { isBlockedInstance } from '../shared/blockedInstances';
 
 // Note: We NEVER modify or delete macOS Keychain entries. Read-only via browser password extraction.
 
@@ -262,6 +263,11 @@ async function getManualCredentials(): Promise<{ hostname: string; username: str
 // ─── Step 2: Login ───
 
 async function login(creds: { hostname: string; username: string; password: string }): Promise<MyChartRequest | null> {
+  if (isBlockedInstance(creds.hostname)) {
+    console.log(`\n  ✗ ${creds.hostname} is not supported. central.mychart.org is a portal aggregator and cannot be scraped directly. Please use the individual hospital MyChart instance instead.`);
+    return null;
+  }
+
   console.log(`\n  Connecting to ${creds.hostname}...`);
 
   // Try cached session first (unless --no-cache)

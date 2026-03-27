@@ -6,6 +6,7 @@ import { getRequestVerificationTokenFromBody } from "./util";
 import { changeDirToPackageRoot } from "../../shared/util";
 import { sendTelemetryEvent } from "../../shared/telemetry";
 import { acceptTermsAndConditions } from "./termsAndConditions";
+import { isBlockedInstance } from "../../shared/blockedInstances";
 
 
 // Just for testing / local development
@@ -211,6 +212,10 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   if (!hostname || !user || !pass) {
     console.log('missing hostname, user, or pass', {hostname, user, pass})
     throw new Error('Missing hostname, user, or pass')
+  }
+
+  if (isBlockedInstance(hostname)) {
+    throw new Error(`${hostname} is not supported. central.mychart.org is a portal aggregator and cannot be scraped directly. Please use the individual hospital MyChart instance instead.`);
   }
 
 
