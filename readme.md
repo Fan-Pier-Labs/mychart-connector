@@ -6,7 +6,7 @@ The project is **open source** and designed to run on your own infrastructure. D
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/5F69Mf?referralCode=xrxOUg)
 
-Or try the hosted version at [mychart.fanpierlabs.com](https://mychart.fanpierlabs.com).
+Or try the hosted version at [openrecord.fanpierlabs.com](https://openrecord.fanpierlabs.com).
 
 ## What It Does
 
@@ -42,7 +42,7 @@ Sessions are kept alive automatically and re-established on expiry.
 
 Try the MCP server with fake patient data — no account or API key required.
 
-**Demo URL:** `https://mychart.fanpierlabs.com/api/mcp/demo`
+**Demo URL:** `https://openrecord.fanpierlabs.com/api/mcp/demo`
 
 The demo server exposes the same 35+ tools as the real MCP server (medications, lab results, vitals, messages, etc.) but returns fictional data for a sample patient. All meta tools (list_accounts, connect_instance, check_session, complete_2fa) work as well — they just return pre-connected status.
 
@@ -52,7 +52,7 @@ The demo server exposes the same 35+ tools as the real MCP server (medications, 
 
 The fastest way to get started. Sign up, connect your MyChart account, and add the MCP server to Claude Desktop.
 
-1. Sign up at [mychart.fanpierlabs.com](https://mychart.fanpierlabs.com) (or your self-hosted instance)
+1. Sign up at [openrecord.fanpierlabs.com](https://openrecord.fanpierlabs.com) (or your self-hosted instance)
 2. Add your MyChart account — hostname, username, and password
 3. Generate an MCP URL
 4. In Claude Desktop: **Settings → MCP Servers → Add** → Name: `mychart` and MCP URL: the one you copied
