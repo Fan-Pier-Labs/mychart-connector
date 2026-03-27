@@ -22,6 +22,18 @@ const nextConfig: NextConfig = {
   // Tell Next.js to resolve these as external server packages so Turbopack
   // doesn't fail when it can't find them in web/node_modules.
   serverExternalPackages: ["cheerio", "tough-cookie", "fetch-cookie"],
+
+  // Redirect old domain to canonical domain (preserves path)
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'mychart.fanpierlabs.com' }],
+        destination: 'https://openrecord.fanpierlabs.com/:path*',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(nextConfig, {
