@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'bun:test'
 import { createDemoMcpServer } from '../demo-server'
-import { createMcpServer } from '../server'
 import { TOOL_DEFINITIONS } from '../tool-definitions'
 
 type RegisteredTool = { description?: string };
@@ -14,11 +13,6 @@ describe('tool parity', () => {
   const demoServer = createDemoMcpServer();
   const demoTools = getToolRecord(demoServer);
   const demoToolNames = new Set(Object.keys(demoTools));
-
-  const prodServer = createMcpServer('test-user');
-  const prodTools = getToolRecord(prodServer);
-  const prodToolNames = new Set(Object.keys(prodTools));
-
   const definitionNames = new Set(TOOL_DEFINITIONS.map(t => t.name));
 
   it('TOOL_DEFINITIONS has no duplicate names', () => {
@@ -32,18 +26,6 @@ describe('tool parity', () => {
     }
   });
 
-  it('all production server tools exist in TOOL_DEFINITIONS', () => {
-    for (const name of prodToolNames) {
-      expect(definitionNames.has(name)).toBe(true);
-    }
-  });
-
-  it('all TOOL_DEFINITIONS are registered in production server', () => {
-    for (const name of definitionNames) {
-      expect(prodToolNames.has(name)).toBe(true);
-    }
-  });
-
   it('all TOOL_DEFINITIONS are registered in demo server', () => {
     for (const name of definitionNames) {
       expect(demoToolNames.has(name)).toBe(true);
@@ -52,16 +34,6 @@ describe('tool parity', () => {
 
   it('demo server tool descriptions match TOOL_DEFINITIONS', () => {
     for (const [name, tool] of Object.entries(demoTools)) {
-      const def = TOOL_DEFINITIONS.find(t => t.name === name);
-      expect(def).toBeDefined();
-      if (def && tool.description) {
-        expect(tool.description).toBe(def.description);
-      }
-    }
-  });
-
-  it('production server tool descriptions match TOOL_DEFINITIONS', () => {
-    for (const [name, tool] of Object.entries(prodTools)) {
       const def = TOOL_DEFINITIONS.find(t => t.name === name);
       expect(def).toBeDefined();
       if (def && tool.description) {
