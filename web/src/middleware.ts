@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+
 const CANONICAL_HOSTNAME = 'openrecord.fanpierlabs.com';
 
 export function middleware(request: NextRequest) {
