@@ -22,6 +22,18 @@ export interface MyChartInstanceInfo {
   updatedAt: string;
 }
 
+export interface FhirConnectionInfo {
+  id: string;
+  fhirServerUrl: string;
+  organizationName: string;
+  fhirPatientId: string;
+  scopes: string | null;
+  tokenExpiresAt: string;
+  connected: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface AppContextType {
   // BetterAuth user
   user: { id: string; name: string; email: string; image?: string | null; twoFactorEnabled?: boolean } | null;
@@ -30,6 +42,11 @@ interface AppContextType {
   // MyChart instances
   instances: MyChartInstanceInfo[];
   setInstances: (instances: MyChartInstanceInfo[]) => void;
+
+  // FHIR connections
+  fhirConnections: FhirConnectionInfo[];
+  setFhirConnections: (connections: FhirConnectionInfo[]) => void;
+
   refreshInstances: () => Promise<void>;
 
   // Active MyChart session
@@ -81,6 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending: userLoading, refetch: refreshSession } = authClient.useSession();
 
   const [instances, setInstances] = useState<MyChartInstanceInfo[]>([]);
+  const [fhirConnections, setFhirConnections] = useState<FhirConnectionInfo[]>([]);
   const [activeSessionKey, setActiveSessionKey] = useState("");
   const [activeInstanceId, setActiveInstanceId] = useState("");
   const [hostname, setHostname] = useState("");
@@ -95,10 +113,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshInstances = useCallback(async () => {
     try {
-      const res = await fetch("/api/mychart-instances");
-      if (res.ok) {
-        const data = await res.json();
+      const [instancesRes, fhirRes] = await Promise.all([
+        fetch("/api/mychart-instances"),
+        fetch("/api/fhir-connections"),
+      ]);
+      if (instancesRes.ok) {
+        const data = await instancesRes.json();
         setInstances(data);
+      }
+      if (fhirRes.ok) {
+        const data = await fhirRes.json();
+        setFhirConnections(data.connections || []);
       }
     } catch {
       // best-effort
@@ -122,6 +147,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const resetAll = useCallback(() => {
     authClient.signOut();
     setInstances([]);
+    setFhirConnections([]);
     setActiveSessionKey("");
     setActiveInstanceId("");
     setHostname("");
@@ -147,7 +173,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         userLoading,
-        instances, setInstances, refreshInstances,
+        instances, setInstances,
+        fhirConnections, setFhirConnections,
+        refreshInstances,
         activeSessionKey, setActiveSessionKey,
         activeInstanceId, setActiveInstanceId,
         token: activeSessionKey, setToken: setActiveSessionKey,

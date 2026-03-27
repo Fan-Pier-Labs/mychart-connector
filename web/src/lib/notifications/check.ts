@@ -1,13 +1,16 @@
 import {
   getNotificationEnabledInstances,
+  getNotificationEnabledFhirConnections,
   updateNotificationLastChecked,
+  updateFhirNotificationLastChecked,
 } from '@/lib/db';
 import { autoConnectInstance } from '@/lib/mcp/auto-connect';
 import { getSession } from '@/lib/sessions';
-import { detectChanges } from './change-detector';
+import { detectChanges, detectChangesFhir } from './change-detector';
 import { getImagingAttachments } from './imaging';
 import { buildSummaryEmail, buildDetailedEmail } from './templates';
 import { sendNotificationEmail } from './email';
+import { FhirClient } from '@/lib/fhir/client';
 
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -84,6 +87,51 @@ export async function checkAllUsers(): Promise<{ checked: number; sent: number; 
       await updateNotificationLastChecked(instance.id, instance.userId);
     } catch (err) {
       console.error(`[notifications] Error checking ${instance.hostname}:`, (err as Error).message);
+      errors++;
+    }
+  }
+
+  // Check FHIR connections
+  const fhirConnections = await getNotificationEnabledFhirConnections();
+  for (const conn of fhirConnections) {
+    try {
+      const client = new FhirClient(
+        conn.fhirServerUrl,
+        conn.fhirPatientId,
+        conn.id,
+        conn.userId,
+        { accessToken: conn.accessToken, refreshToken: conn.refreshToken, tokenExpiresAt: conn.tokenExpiresAt }
+      );
+
+      checked++;
+
+      // First run: establish baseline
+      if (!conn.notificationsLastCheckedAt) {
+        console.log(`[notifications/fhir] ${conn.organizationName}: first run, establishing baseline`);
+        await updateFhirNotificationLastChecked(conn.id, conn.userId);
+        continue;
+      }
+
+      const { changes } = await detectChangesFhir(client, conn.notificationsLastCheckedAt);
+
+      if (changes.length === 0) {
+        console.log(`[notifications/fhir] ${conn.organizationName}: no changes detected`);
+        await updateFhirNotificationLastChecked(conn.id, conn.userId);
+        continue;
+      }
+
+      // Build and send email (FHIR connections don't support imaging attachments)
+      const email = conn.includeContent
+        ? buildDetailedEmail(changes, conn.organizationName, [])
+        : buildSummaryEmail(changes, conn.organizationName);
+
+      await sendNotificationEmail(conn.userEmail, email);
+      sent++;
+      console.log(`[notifications/fhir] Sent email to ${conn.userEmail} for ${conn.organizationName}: ${changes.length} categories`);
+
+      await updateFhirNotificationLastChecked(conn.id, conn.userId);
+    } catch (err) {
+      console.error(`[notifications/fhir] Error checking ${conn.organizationName}:`, (err as Error).message);
       errors++;
     }
   }

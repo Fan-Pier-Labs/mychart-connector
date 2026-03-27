@@ -18,6 +18,14 @@ mock.module('@/lib/db', () => ({
   deleteMyChartInstance: () => Promise.resolve(false),
   getUserNotificationPreferences: () => Promise.resolve({ enabled: false, includeContent: false }),
   setUserNotificationPreferences: () => Promise.resolve(),
+  // FHIR stubs
+  getNotificationEnabledFhirConnections: () => Promise.resolve([]),
+  updateFhirNotificationLastChecked: () => Promise.resolve(),
+  getFhirConnections: () => Promise.resolve([]),
+  getFhirConnection: () => Promise.resolve(null),
+  createFhirConnection: () => Promise.resolve({}),
+  updateFhirTokens: () => Promise.resolve(null),
+  deleteFhirConnection: () => Promise.resolve(false),
 }));
 
 mock.module('@/lib/mcp/auto-connect', () => ({
@@ -38,6 +46,13 @@ mock.module('@/lib/sessions', () => ({
 // Mock change-detector itself so we don't need to mock all 10 scrapers
 mock.module('@/lib/notifications/change-detector', () => ({
   detectChanges: () => Promise.resolve(mockChanges),
+  detectChangesFhir: () => Promise.resolve({ changes: [], newImagingResults: [] }),
+}));
+
+// Mock FHIR client so it doesn't try to import real config/encryption
+mock.module('@/lib/fhir/client', () => ({
+  FhirClient: class {},
+  createFhirClientFromConnection: () => Promise.resolve(null),
 }));
 
 mock.module('@/lib/notifications/email', () => ({

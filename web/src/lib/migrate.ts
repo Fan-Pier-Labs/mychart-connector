@@ -53,6 +53,25 @@ export async function runMigrations(): Promise<void> {
     ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS notifications_last_checked_at TIMESTAMPTZ;
   `);
 
+  // 6. Create fhir_connections table for FHIR API (OAuth) connections
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fhir_connections (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      fhir_server_url TEXT NOT NULL,
+      organization_name TEXT NOT NULL,
+      fhir_patient_id TEXT NOT NULL,
+      encrypted_access_token TEXT NOT NULL,
+      encrypted_refresh_token TEXT NOT NULL,
+      token_expires_at TIMESTAMPTZ NOT NULL,
+      scopes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      notifications_last_checked_at TIMESTAMPTZ,
+      UNIQUE(user_id, fhir_server_url)
+    );
+  `);
+
   await pool.end();
   console.log('[migrate] Database migrations complete.');
 }

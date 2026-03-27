@@ -1,4 +1,13 @@
 import type { MyChartRequest } from '@/lib/mychart/myChartRequest';
+import type { FhirClient } from '@/lib/fhir/client';
+import {
+  mapMedicationRequests,
+  mapAllergyIntolerances,
+  mapConditions,
+  mapObservationsToLabResults,
+  mapDocumentReferences,
+  mapPatientToProfile,
+} from '@/lib/fhir/mappers';
 import { listConversationsWithFullHistory } from '@/lib/mychart/messages/conversationsWithFullHistory';
 import { listLabResults } from '@/lib/mychart/labs/labResults';
 import { getImagingResults } from '@/lib/mychart/imagingResults';
@@ -281,4 +290,113 @@ export async function detectChanges(
   }
 
   return { changes, newImagingResults };
+}
+
+/**
+ * Detect changes for FHIR connections.
+ * Checks a subset of categories (no messaging, billing, imaging CLO, etc.).
+ * Uses FHIR _lastUpdated search parameter where possible.
+ */
+export async function detectChangesFhir(
+  client: FhirClient,
+  lastCheckedAt: Date
+): Promise<DetectedChanges> {
+  const changes: CategoryChange[] = [];
+
+  const checkers: { category: string; run: () => Promise<void> }[] = [
+    {
+      category: 'Lab Results',
+      run: async () => {
+        const observations = await client.getObservations('laboratory');
+        const mapped = mapObservationsToLabResults(observations);
+        // Simple: report all results as new items for the notification
+        // FHIR doesn't provide the same timestamp granularity, so we check date
+        const newItems: Record<string, unknown>[] = [];
+        for (const lab of mapped) {
+          for (const result of lab.results) {
+            const d = tryParseDate(result.orderMetadata.resultTimestampDisplay);
+            if (d && d > lastCheckedAt) {
+              newItems.push({
+                orderName: lab.orderName,
+                resultName: result.name,
+                status: result.orderMetadata.resultStatus,
+                isAbnormal: result.isAbnormal,
+              });
+            }
+          }
+        }
+        if (newItems.length > 0) {
+          changes.push({ category: 'Lab Results', newItems });
+        }
+      },
+    },
+    {
+      category: 'Medications',
+      run: async () => {
+        const resources = await client.getMedicationRequests();
+        const patient = await client.getPatient();
+        const name = mapPatientToProfile(patient).name;
+        const data = mapMedicationRequests(resources, name);
+        const newItems = filterNewItems(data.medications, (m) => m.dateToDisplay, lastCheckedAt);
+        if (newItems.length > 0) {
+          changes.push({
+            category: 'Medications',
+            newItems: newItems.map((m) => ({ name: m.name, sig: m.sig, date: m.dateToDisplay })),
+          });
+        }
+      },
+    },
+    {
+      category: 'Allergies',
+      run: async () => {
+        const resources = await client.getAllergyIntolerances();
+        const data = mapAllergyIntolerances(resources);
+        const newItems = filterNewItems(data.allergies, (a) => a.formattedDateNoted, lastCheckedAt);
+        if (newItems.length > 0) {
+          changes.push({
+            category: 'Allergies',
+            newItems: newItems.map((a) => ({ name: a.name, type: a.type, reaction: a.reaction })),
+          });
+        }
+      },
+    },
+    {
+      category: 'Health Issues',
+      run: async () => {
+        const resources = await client.getConditions();
+        const data = mapConditions(resources);
+        const newItems = filterNewItems(data, (h) => h.formattedDateNoted, lastCheckedAt);
+        if (newItems.length > 0) {
+          changes.push({
+            category: 'Health Issues',
+            newItems: newItems.map((h) => ({ name: h.name, date: h.formattedDateNoted })),
+          });
+        }
+      },
+    },
+    {
+      category: 'Documents',
+      run: async () => {
+        const resources = await client.getDocumentReferences();
+        const data = mapDocumentReferences(resources);
+        const newItems = filterNewItems(data, (d) => d.date, lastCheckedAt);
+        if (newItems.length > 0) {
+          changes.push({
+            category: 'Documents',
+            newItems: newItems.map((d) => ({ title: d.title, type: d.documentType, date: d.date })),
+          });
+        }
+      },
+    },
+  ];
+
+  for (const checker of checkers) {
+    try {
+      await checker.run();
+    } catch (err) {
+      console.warn(`[notifications/fhir] Failed to check ${checker.category}:`, (err as Error).message);
+    }
+  }
+
+  return { changes, newImagingResults: [] };
 }

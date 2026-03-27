@@ -142,6 +142,151 @@ export async function deleteMyChartInstance(id: string, userId: string): Promise
   return (result.rowCount ?? 0) > 0;
 }
 
+// ── FHIR Connections ──
+
+export interface FhirConnection {
+  id: string;
+  userId: string;
+  fhirServerUrl: string;
+  organizationName: string;
+  fhirPatientId: string;
+  accessToken: string;
+  refreshToken: string;
+  tokenExpiresAt: Date;
+  scopes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  notificationsLastCheckedAt: Date | null;
+}
+
+export interface CreateFhirConnectionInput {
+  fhirServerUrl: string;
+  organizationName: string;
+  patientId: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+  scopes?: string;
+}
+
+async function rowToFhirConnection(row: Record<string, unknown>): Promise<FhirConnection> {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    fhirServerUrl: row.fhir_server_url as string,
+    organizationName: row.organization_name as string,
+    fhirPatientId: row.fhir_patient_id as string,
+    accessToken: await decrypt(row.encrypted_access_token as string),
+    refreshToken: await decrypt(row.encrypted_refresh_token as string),
+    tokenExpiresAt: row.token_expires_at as Date,
+    scopes: row.scopes as string | null,
+    createdAt: row.created_at as Date,
+    updatedAt: row.updated_at as Date,
+    notificationsLastCheckedAt: row.notifications_last_checked_at as Date | null,
+  };
+}
+
+export async function createFhirConnection(userId: string, input: CreateFhirConnectionInput): Promise<FhirConnection> {
+  const db = await getPool();
+  const encryptedAccessToken = await encrypt(input.accessToken);
+  const encryptedRefreshToken = await encrypt(input.refreshToken);
+
+  const result = await db.query(
+    `INSERT INTO fhir_connections (user_id, fhir_server_url, organization_name, fhir_patient_id, encrypted_access_token, encrypted_refresh_token, token_expires_at, scopes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING *`,
+    [userId, input.fhirServerUrl, input.organizationName, input.patientId, encryptedAccessToken, encryptedRefreshToken, input.expiresAt, input.scopes ?? null]
+  );
+
+  return rowToFhirConnection(result.rows[0]);
+}
+
+export async function getFhirConnections(userId: string): Promise<FhirConnection[]> {
+  const db = await getPool();
+  const result = await db.query(
+    'SELECT * FROM fhir_connections WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return Promise.all(result.rows.map(rowToFhirConnection));
+}
+
+export async function getFhirConnection(id: string, userId: string): Promise<FhirConnection | null> {
+  const db = await getPool();
+  const result = await db.query(
+    'SELECT * FROM fhir_connections WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+  if (result.rows.length === 0) return null;
+  return rowToFhirConnection(result.rows[0]);
+}
+
+export async function updateFhirTokens(
+  id: string,
+  userId: string,
+  accessToken: string,
+  refreshToken: string,
+  expiresAt: Date
+): Promise<FhirConnection | null> {
+  const db = await getPool();
+  const encryptedAccessToken = await encrypt(accessToken);
+  const encryptedRefreshToken = await encrypt(refreshToken);
+
+  const result = await db.query(
+    `UPDATE fhir_connections
+     SET encrypted_access_token = $1, encrypted_refresh_token = $2, token_expires_at = $3, updated_at = NOW()
+     WHERE id = $4 AND user_id = $5
+     RETURNING *`,
+    [encryptedAccessToken, encryptedRefreshToken, expiresAt, id, userId]
+  );
+
+  if (result.rows.length === 0) return null;
+  return rowToFhirConnection(result.rows[0]);
+}
+
+export async function deleteFhirConnection(id: string, userId: string): Promise<boolean> {
+  const db = await getPool();
+  const result = await db.query(
+    'DELETE FROM fhir_connections WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+// ── FHIR Notification helpers ──
+
+export interface NotificationEnabledFhirConnection extends FhirConnection {
+  userEmail: string;
+  includeContent: boolean;
+}
+
+export async function getNotificationEnabledFhirConnections(): Promise<NotificationEnabledFhirConnection[]> {
+  const db = await getPool();
+  const result = await db.query(
+    `SELECT fc.*, u.email AS user_email, u.notifications_include_content
+     FROM fhir_connections fc
+     JOIN "user" u ON fc.user_id = u.id
+     WHERE u.notifications_enabled = TRUE
+     ORDER BY fc.created_at ASC`
+  );
+  const connections = await Promise.all(result.rows.map(async (row) => {
+    const connection = await rowToFhirConnection(row);
+    return {
+      ...connection,
+      userEmail: row.user_email as string,
+      includeContent: row.notifications_include_content as boolean,
+    };
+  }));
+  return connections;
+}
+
+export async function updateFhirNotificationLastChecked(connectionId: string, userId: string): Promise<void> {
+  const db = await getPool();
+  await db.query(
+    `UPDATE fhir_connections SET notifications_last_checked_at = NOW() WHERE id = $1 AND user_id = $2`,
+    [connectionId, userId]
+  );
+}
+
 // ── Notification helpers ──
 
 export interface NotificationEnabledInstance extends MyChartInstance {

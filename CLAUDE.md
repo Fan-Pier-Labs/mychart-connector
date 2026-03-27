@@ -118,6 +118,53 @@ Key files:
 - `web/src/app/api/mcp/demo/route.ts` — Demo MCP endpoint (no auth required)
 - `web/src/app/api/mcp-key/route.ts` — API key management endpoint
 
+## FHIR API Integration
+
+Users can connect MyChart accounts via two methods:
+- **Patient Portal** (scraper) — full 30+ category access, requires stored credentials and session management
+- **Official APIs (FHIR)** — Epic SMART on FHIR OAuth 2.0 flow, subset of features, no credentials stored
+
+### How it works
+1. User searches for their hospital via Epic's endpoint directory
+2. OAuth redirect to Epic's authorization page
+3. User logs in and grants consent
+4. App receives access + refresh tokens, stores in `fhir_connections` table
+5. MCP tools route to FHIR client or scraper based on connection type
+
+### FHIR-supported tools
+Profile, medications, allergies, health issues, lab results, vitals, immunizations, visits, care team, documents, imaging reports.
+
+### Scraper-only tools (not available via FHIR)
+Messaging, billing, care journeys, questionnaires, activity feed, education materials, EHI exports, medication refills, letters, preventive care, referrals, emergency contacts, insurance, medical history, linked accounts.
+
+### Environment variables
+- `EPIC_FHIR_CLIENT_ID` — Epic app client ID (required for FHIR connections)
+- `EPIC_FHIR_REDIRECT_URI` — OAuth callback URL (defaults to `{NEXT_PUBLIC_BASE_URL}/api/fhir/callback`)
+
+### Key files
+- `web/src/lib/fhir/config.ts` — Epic client config
+- `web/src/lib/fhir/endpoints.ts` — Epic endpoint directory search/cache
+- `web/src/lib/fhir/oauth.ts` — SMART on FHIR OAuth flow
+- `web/src/lib/fhir/client.ts` — FhirClient class (authenticated requests, token refresh)
+- `web/src/lib/fhir/mappers.ts` — FHIR R4 to app data shape mappers
+- `web/src/app/api/fhir/authorize/route.ts` — Initiate OAuth redirect
+- `web/src/app/api/fhir/callback/route.ts` — OAuth callback
+- `web/src/app/api/fhir/search-endpoints/route.ts` — Organization search
+- `web/src/app/api/fhir-connections/route.ts` — List FHIR connections
+- `web/src/app/api/fhir-connections/[id]/route.ts` — Get/delete FHIR connections
+
+### Database
+Separate `fhir_connections` table (not in `mychart_instances`):
+- `id`, `user_id`, `fhir_server_url`, `organization_name`, `fhir_patient_id`
+- `encrypted_access_token`, `encrypted_refresh_token`, `token_expires_at`, `scopes`
+- `notifications_last_checked_at` for change detection
+
+### MCP routing
+`resolveConnection()` in `server.ts` returns a discriminated union:
+- `{ type: 'scraper', mychartRequest, instance }` — routes to existing scraper functions
+- `{ type: 'fhir', client, connection }` — routes to FHIR client + mappers
+- Scraper-only tools return clear error for FHIR connections
+
 ## Notification System
 
 Daily email notifications when MyChart account changes are detected. Users opt in via the home page UI.

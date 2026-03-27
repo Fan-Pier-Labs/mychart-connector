@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAppContext, type MyChartInstanceInfo } from "@/lib/app-context";
+import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/track";
 import { QRCodeSVG } from "qrcode.react";
@@ -31,10 +32,18 @@ export default function HomePage() {
 
   // Add instance form
   const [showAddForm, setShowAddForm] = useState(false);
+  const [connectMode, setConnectMode] = useState<"scraper" | "fhir">("scraper");
   const [newHostname, setNewHostname] = useState("");
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [addLoading, setAddLoading] = useState(false);
+
+  // FHIR search state
+  const [fhirSearchQuery, setFhirSearchQuery] = useState("");
+  const [fhirSearchResults, setFhirSearchResults] = useState<Array<{ name: string; fhirBaseUrl: string }>>([]);
+  const [fhirSearchLoading, setFhirSearchLoading] = useState(false);
+  const [fhirConnecting, setFhirConnecting] = useState(false);
+  const searchParams = useSearchParams();
 
   // 2FA state
   const [twofaSessionKey, setTwofaSessionKey] = useState("");
@@ -118,6 +127,82 @@ export default function HomePage() {
       }
     } catch {
       // best-effort
+    }
+  }
+
+  // Handle FHIR callback URL params
+  useEffect(() => {
+    const fhirConnected = searchParams.get("fhir_connected");
+    const fhirError = searchParams.get("fhir_error");
+    if (fhirConnected) {
+      toast.success("FHIR connection established successfully!");
+      ctx.refreshInstances();
+      // Clean up URL params
+      window.history.replaceState({}, "", "/home");
+    }
+    if (fhirError) {
+      toast.error(`FHIR connection failed: ${fhirError}`);
+      window.history.replaceState({}, "", "/home");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // FHIR endpoint search with debounce
+  useEffect(() => {
+    if (!fhirSearchQuery.trim() || fhirSearchQuery.length < 2) {
+      setFhirSearchResults([]);
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      setFhirSearchLoading(true);
+      try {
+        const res = await fetch(`/api/fhir/search-endpoints?q=${encodeURIComponent(fhirSearchQuery)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setFhirSearchResults(data.endpoints || []);
+        }
+      } catch {
+        // best-effort
+      } finally {
+        setFhirSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [fhirSearchQuery]);
+
+  async function connectFhir(endpoint: { name: string; fhirBaseUrl: string }) {
+    setFhirConnecting(true);
+    try {
+      const res = await fetch("/api/fhir/authorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fhirBaseUrl: endpoint.fhirBaseUrl, organizationName: endpoint.name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to start FHIR authorization");
+        return;
+      }
+      // Redirect to Epic authorization page
+      window.location.href = data.authorizationUrl;
+    } catch (err) {
+      toast.error("Network error: " + (err as Error).message);
+    } finally {
+      setFhirConnecting(false);
+    }
+  }
+
+  async function deleteFhirConnection(id: string) {
+    try {
+      const res = await fetch(`/api/fhir-connections/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        await ctx.refreshInstances();
+        toast.success("FHIR connection removed.");
+      } else {
+        toast.error("Failed to remove FHIR connection.");
+      }
+    } catch {
+      toast.error("Network error removing FHIR connection.");
     }
   }
 
@@ -771,43 +856,106 @@ export default function HomePage() {
               {/* Add form */}
               {showAddForm && (
                 <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-hostname" className="text-xs">MyChart Hostname</Label>
-                      <Input
-                        id="new-hostname"
-                        placeholder="e.g. mychart.example.org"
-                        value={newHostname}
-                        onChange={(e) => setNewHostname(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-username" className="text-xs">Username</Label>
-                      <Input
-                        id="new-username"
-                        placeholder="MyChart username"
-                        value={newUsername}
-                        onChange={(e) => setNewUsername(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="new-password" className="text-xs">Password</Label>
-                      <Input
-                        id="new-password"
-                        type="password"
-                        placeholder="MyChart password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                      />
-                    </div>
+                  {/* Mode tabs */}
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        connectMode === "scraper"
+                          ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                      onClick={() => setConnectMode("scraper")}
+                    >
+                      Patient Portal
+                    </button>
+                    <button
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        connectMode === "fhir"
+                          ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                      onClick={() => setConnectMode("fhir")}
+                    >
+                      Official APIs (FHIR)
+                    </button>
                   </div>
-                  <Button
-                    className="w-full"
-                    onClick={addInstance}
-                    disabled={addLoading}
-                  >
-                    {addLoading ? "Adding..." : "Add MyChart Account"}
-                  </Button>
+
+                  {connectMode === "scraper" ? (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="new-hostname" className="text-xs">MyChart Hostname</Label>
+                          <Input
+                            id="new-hostname"
+                            placeholder="e.g. mychart.example.org"
+                            value={newHostname}
+                            onChange={(e) => setNewHostname(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="new-username" className="text-xs">Username</Label>
+                          <Input
+                            id="new-username"
+                            placeholder="MyChart username"
+                            value={newUsername}
+                            onChange={(e) => setNewUsername(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="new-password" className="text-xs">Password</Label>
+                          <Input
+                            id="new-password"
+                            type="password"
+                            placeholder="MyChart password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        className="w-full"
+                        onClick={addInstance}
+                        disabled={addLoading}
+                      >
+                        {addLoading ? "Adding..." : "Add MyChart Account"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Connect via Epic&apos;s official FHIR APIs. No credentials stored — you&apos;ll authorize directly with your health system. Supports a subset of features.
+                      </p>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="fhir-search" className="text-xs">Search for your hospital or health system</Label>
+                        <Input
+                          id="fhir-search"
+                          placeholder="e.g. Mass General, Mayo Clinic..."
+                          value={fhirSearchQuery}
+                          onChange={(e) => setFhirSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      {fhirSearchLoading && (
+                        <p className="text-xs text-muted-foreground">Searching...</p>
+                      )}
+                      {fhirSearchResults.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto space-y-1">
+                          {fhirSearchResults.map((ep) => (
+                            <button
+                              key={ep.fhirBaseUrl}
+                              className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 transition-colors"
+                              onClick={() => connectFhir(ep)}
+                              disabled={fhirConnecting}
+                            >
+                              {ep.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {fhirConnecting && (
+                        <p className="text-xs text-muted-foreground">Redirecting to authorization...</p>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -821,7 +969,7 @@ export default function HomePage() {
                   <span className="text-sm text-muted-foreground">Loading accounts...</span>
                 </div>
               )}
-              {!ctx.sessionLoading && ctx.instances.length === 0 && !showAddForm && (
+              {!ctx.sessionLoading && ctx.instances.length === 0 && ctx.fhirConnections.length === 0 && !showAddForm && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No MyChart accounts added yet. Click &quot;Add Account&quot; to get started.
                 </p>
@@ -842,6 +990,7 @@ export default function HomePage() {
                       <div className="flex items-center gap-2">
                         <span className={`inline-flex h-2 w-2 rounded-full ${inst.connected ? "bg-green-500" : "bg-slate-300"}`} />
                         <p className="font-medium text-sm truncate">{inst.hostname}</p>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Portal</span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {inst.username}
@@ -885,6 +1034,36 @@ export default function HomePage() {
                   </div>
                 );
               })}
+
+              {/* FHIR connections */}
+              {ctx.fhirConnections.map((conn) => (
+                <div
+                  key={conn.id}
+                  className="flex items-center justify-between border rounded-lg p-4 border-slate-200"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
+                      <p className="font-medium text-sm truncate">{conn.organizationName}</p>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">FHIR</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Connected via Official APIs
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <span className="text-xs text-green-600 font-medium">Connected</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => deleteFhirConnection(conn.id)}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
 
