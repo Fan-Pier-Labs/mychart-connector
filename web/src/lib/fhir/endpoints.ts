@@ -31,13 +31,13 @@ async function fetchEndpoints(): Promise<EpicEndpoint[]> {
     throw new Error(`Failed to fetch Epic endpoints: ${res.status} ${res.statusText}`);
   }
 
-  const data = await res.json() as { Entries?: Array<{ Name?: string; FHIRPatientFacingURI?: string }> };
+  const data = await res.json() as { Entries?: Array<{ OrganizationName?: string; FHIRPatientFacingURI?: string }> };
   const entries = data.Entries ?? [];
 
   cachedEndpoints = entries
-    .filter((e) => e.Name && e.FHIRPatientFacingURI)
+    .filter((e) => e.OrganizationName && e.FHIRPatientFacingURI)
     .map((e) => ({
-      name: e.Name!,
+      name: e.OrganizationName!,
       fhirBaseUrl: e.FHIRPatientFacingURI!,
     }));
   cacheTimestamp = now;
