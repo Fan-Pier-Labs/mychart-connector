@@ -38,7 +38,10 @@ async function fetchEndpoints(): Promise<EpicEndpoint[]> {
     .filter((e) => e.OrganizationName && e.FHIRPatientFacingURI)
     .map((e) => ({
       name: e.OrganizationName!,
-      fhirBaseUrl: e.FHIRPatientFacingURI!,
+      // Upgrade DSTU2/STU3 URLs to R4 — Epic endpoints follow a consistent pattern
+      fhirBaseUrl: e.FHIRPatientFacingURI!
+        .replace(/\/FHIR\/DSTU2\/?$/, '/FHIR/R4/')
+        .replace(/\/FHIR\/STU3\/?$/, '/FHIR/R4/'),
     }));
   cacheTimestamp = now;
 
