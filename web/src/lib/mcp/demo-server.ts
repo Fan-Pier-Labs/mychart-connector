@@ -39,7 +39,7 @@ const scraperToolData: Record<string, unknown> = {
 
 export function createDemoMcpServer(): McpServer {
   const server = new McpServer({
-    name: 'mychart-health-demo',
+    name: 'openrecord-demo',
     version: '1.0.0',
   });
 

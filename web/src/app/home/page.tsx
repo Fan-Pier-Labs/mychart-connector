@@ -488,7 +488,7 @@ export default function HomePage() {
   async function handleAddPasskey() {
     setPasskeyLoading(true);
     try {
-      const name = `mychart-connector-${ctx.user?.email || "unknown"}`;
+      const name = `openrecord-${ctx.user?.email || "unknown"}`;
       const result = await authClient.passkey.addPasskey({ name });
       if (result?.error) {
         toast.error(result.error.message || "Failed to add passkey.");
@@ -733,7 +733,7 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-2">
             <a
-              href="https://github.com/Fan-Pier-Labs/mychart-connector"
+              href="https://github.com/Fan-Pier-Labs/openrecord"
               target="_blank"
               rel="noopener noreferrer"
               className="text-slate-400 hover:text-slate-600 transition-colors"

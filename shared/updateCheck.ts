@@ -4,7 +4,7 @@
  */
 
 const GITHUB_RELEASES_URL =
-  'https://api.github.com/repos/Fan-Pier-Labs/mychart-connector/releases/latest';
+  'https://api.github.com/repos/Fan-Pier-Labs/openrecord/releases/latest';
 
 /** Compare two semver strings. Returns -1 if a < b, 0 if equal, 1 if a > b. */
 export function compareSemver(a: string, b: string): number {
@@ -48,7 +48,7 @@ export async function checkForUpdate(opts: {
     const updateAvailable = compareSemver(opts.currentVersion, latestVersion) < 0;
 
     if (updateAvailable) {
-      const msg = `\n  Update available: v${opts.currentVersion} → v${latestVersion} — https://github.com/Fan-Pier-Labs/mychart-connector/releases/latest\n`;
+      const msg = `\n  Update available: v${opts.currentVersion} → v${latestVersion} — https://github.com/Fan-Pier-Labs/openrecord/releases/latest\n`;
       if (opts.logger) {
         opts.logger.warn(msg);
       } else {
