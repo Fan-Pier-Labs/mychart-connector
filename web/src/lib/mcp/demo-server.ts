@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod/v3';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import * as demo from './demo-data';
+import { toolDef } from './tool-definitions';
 
 function jsonResult(data: unknown): CallToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -9,38 +9,33 @@ function jsonResult(data: unknown): CallToolResult {
 
 const DEMO_HOSTNAME = 'mychart.springfieldmed.example.org';
 
-type DemoToolDef = {
-  name: string;
-  description: string;
-  data: unknown;
+/** Maps tool name → demo data for simple scraper tools (instance-only param) */
+const scraperToolData: Record<string, unknown> = {
+  get_profile: demo.demoProfile,
+  get_health_summary: demo.demoHealthSummary,
+  get_medications: demo.demoMedications,
+  get_allergies: demo.demoAllergies,
+  get_health_issues: demo.demoHealthIssues,
+  get_upcoming_visits: demo.demoUpcomingVisits,
+  get_care_team: demo.demoCareTeam,
+  get_insurance: demo.demoInsurance,
+  get_immunizations: demo.demoImmunizations,
+  get_preventive_care: demo.demoPreventiveCare,
+  get_referrals: demo.demoReferrals,
+  get_medical_history: demo.demoMedicalHistory,
+  get_letters: demo.demoLetters,
+  get_vitals: demo.demoVitals,
+  get_emergency_contacts: demo.demoEmergencyContacts,
+  get_documents: demo.demoDocuments,
+  get_goals: demo.demoGoals,
+  get_upcoming_orders: demo.demoUpcomingOrders,
+  get_questionnaires: demo.demoQuestionnaires,
+  get_care_journeys: demo.demoCareJourneys,
+  get_activity_feed: demo.demoActivityFeed,
+  get_education_materials: demo.demoEducationMaterials,
+  get_ehi_export: demo.demoEhiExport,
+  get_linked_mychart_accounts: demo.demoLinkedAccounts,
 };
-
-const scraperTools: DemoToolDef[] = [
-  { name: 'get_profile', description: 'Get patient profile (name, DOB, MRN, PCP) and email', data: demo.demoProfile },
-  { name: 'get_health_summary', description: 'Get health summary (vitals, blood type, etc.)', data: demo.demoHealthSummary },
-  { name: 'get_medications', description: 'Get current medications list', data: demo.demoMedications },
-  { name: 'get_allergies', description: 'Get allergies list', data: demo.demoAllergies },
-  { name: 'get_health_issues', description: 'Get health issues / active conditions', data: demo.demoHealthIssues },
-  { name: 'get_upcoming_visits', description: 'Get upcoming appointments', data: demo.demoUpcomingVisits },
-  { name: 'get_care_team', description: 'Get care team members', data: demo.demoCareTeam },
-  { name: 'get_insurance', description: 'Get insurance information', data: demo.demoInsurance },
-  { name: 'get_immunizations', description: 'Get immunization records', data: demo.demoImmunizations },
-  { name: 'get_preventive_care', description: 'Get preventive care items and recommendations', data: demo.demoPreventiveCare },
-  { name: 'get_referrals', description: 'Get referral information', data: demo.demoReferrals },
-  { name: 'get_medical_history', description: 'Get medical history (past conditions, surgical history, family history)', data: demo.demoMedicalHistory },
-  { name: 'get_letters', description: 'Get letters (after-visit summaries, clinical documents)', data: demo.demoLetters },
-  { name: 'get_vitals', description: 'Get vitals and track-my-health flowsheet data (weight, blood pressure, etc.)', data: demo.demoVitals },
-  { name: 'get_emergency_contacts', description: 'Get emergency contacts', data: demo.demoEmergencyContacts },
-  { name: 'get_documents', description: 'Get clinical documents', data: demo.demoDocuments },
-  { name: 'get_goals', description: 'Get care team and patient goals', data: demo.demoGoals },
-  { name: 'get_upcoming_orders', description: 'Get upcoming orders (labs, imaging, procedures)', data: demo.demoUpcomingOrders },
-  { name: 'get_questionnaires', description: 'Get questionnaires and health assessments', data: demo.demoQuestionnaires },
-  { name: 'get_care_journeys', description: 'Get care journeys and care plans', data: demo.demoCareJourneys },
-  { name: 'get_activity_feed', description: 'Get recent activity feed items', data: demo.demoActivityFeed },
-  { name: 'get_education_materials', description: 'Get assigned education materials', data: demo.demoEducationMaterials },
-  { name: 'get_ehi_export', description: 'Get electronic health information export templates', data: demo.demoEhiExport },
-  { name: 'get_linked_mychart_accounts', description: 'Get linked MyChart accounts from other healthcare organizations', data: demo.demoLinkedAccounts },
-];
 
 export function createDemoMcpServer(): McpServer {
   const server = new McpServer({
@@ -48,11 +43,20 @@ export function createDemoMcpServer(): McpServer {
     version: '1.0.0',
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function reg(name: string, handler: (...args: any[]) => Promise<CallToolResult>) {
+    const def = toolDef(name);
+    server.registerTool(
+      name,
+      { description: def.description, inputSchema: def.inputSchema },
+      // @ts-expect-error zod v3/v4 compat
+      handler
+    );
+  }
+
   // ── Meta tools ──
 
-  server.tool(
-    'list_accounts',
-    'List all MyChart accounts and their connection status',
+  reg('list_accounts',
     async (): Promise<CallToolResult> => {
       return jsonResult([
         {
@@ -65,40 +69,19 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    'connect_instance',
-    {
-      description: 'Connect to a MyChart instance by hostname. Auto-completes 2FA if TOTP is configured.',
-      inputSchema: { instance: z.string().describe('MyChart hostname to connect to') },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('connect_instance',
     async (_args: { instance: string }): Promise<CallToolResult> => {
       return jsonResult({ status: 'logged_in', hostname: DEMO_HOSTNAME });
     }
   );
 
-  server.registerTool(
-    'check_session',
-    {
-      description: 'Check current session status and hostname for a MyChart instance',
-      inputSchema: { instance: z.string().optional().describe('MyChart hostname (checks all if omitted)') },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('check_session',
     async (_args: { instance?: string }): Promise<CallToolResult> => {
       return jsonResult({ hostname: DEMO_HOSTNAME, connected: true, cookiesValid: true });
     }
   );
 
-  server.registerTool(
-    'complete_2fa',
-    {
-      description: 'Complete 2FA verification for a MyChart instance. Pass the 2FA code and instance hostname.',
-      inputSchema: {
-        code: z.string(),
-        instance: z.string().describe('MyChart hostname requiring 2FA'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('complete_2fa',
     async (_args: { code: string; instance: string }): Promise<CallToolResult> => {
       return jsonResult({ status: 'logged_in', message: '2FA completed successfully' });
     }
@@ -107,33 +90,14 @@ export function createDemoMcpServer(): McpServer {
   // ── Custom-parameter scraper tools ──
 
   // get_past_visits has a custom parameter
-  server.registerTool(
-    'get_past_visits',
-    {
-      description: 'Get past visits/appointments. Optionally specify years_back (default 2).',
-      inputSchema: {
-        years_back: z.number().optional(),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_past_visits',
     async (_args: { years_back?: number; instance?: string }): Promise<CallToolResult> => {
       return jsonResult(demo.demoPastVisits);
     }
   );
 
   // Lab results — paginated
-  server.registerTool(
-    'get_lab_results',
-    {
-      description: 'Get lab results. Returns trimmed results with component name, value, units, range, and abnormal flag. Supports pagination (default limit 10).',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max results to return (default 10)'),
-        offset: z.number().optional().describe('Number of results to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_lab_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -143,17 +107,7 @@ export function createDemoMcpServer(): McpServer {
   );
 
   // Messages — paginated
-  server.registerTool(
-    'get_messages',
-    {
-      description: 'Get message conversations. Returns subject, date, author, and plain text body (HTML stripped). Supports pagination (default limit 10).',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max conversations to return (default 10)'),
-        offset: z.number().optional().describe('Number of conversations to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_messages',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -163,17 +117,7 @@ export function createDemoMcpServer(): McpServer {
   );
 
   // Billing — paginated
-  server.registerTool(
-    'get_billing',
-    {
-      description: 'Get billing history. Returns date, description, provider, payer, amounts, and coverage summary. Supports pagination on visits (default limit 10).',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max visits per account to return (default 10)'),
-        offset: z.number().optional().describe('Number of visits to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_billing',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -183,17 +127,7 @@ export function createDemoMcpServer(): McpServer {
   );
 
   // Imaging — paginated
-  server.registerTool(
-    'get_imaging_results',
-    {
-      description: 'Get imaging results (X-ray, MRI, CT, ultrasound). Returns order name, date, provider, and report/impression text.',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max results to return (default 10)'),
-        offset: z.number().optional().describe('Number of results to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_imaging_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       const offset = args.offset ?? 0;
       const limit = args.limit ?? 10;
@@ -204,15 +138,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Message recipients + topics ──
 
-  server.registerTool(
-    'get_message_recipients',
-    {
-      description: 'Get list of available message recipients (providers) and message topics/categories',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_message_recipients',
     async (_args: { instance?: string }): Promise<CallToolResult> => {
       return jsonResult(demo.demoMessageRecipients);
     }
@@ -220,19 +146,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Send message ──
 
-  server.registerTool(
-    'send_message',
-    {
-      description: 'Send a new message to a provider, starting a new conversation thread',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        recipient_name: z.string().describe('Name of the recipient provider (fuzzy matched against available recipients)'),
-        topic: z.string().describe('Message topic/category (fuzzy matched against available topics)'),
-        subject: z.string().describe('Message subject line'),
-        message_body: z.string().describe('Message body text'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_message',
     async (args: { instance?: string; recipient_name: string; topic: string; subject: string; message_body: string }): Promise<CallToolResult> => {
       // Fuzzy-match recipient
       const query = args.recipient_name.toLowerCase();
@@ -259,17 +173,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Send reply ──
 
-  server.registerTool(
-    'send_reply',
-    {
-      description: 'Reply to an existing message conversation',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        conversation_id: z.string().describe('The conversation ID (hthId from get_messages) to reply to'),
-        message_body: z.string().describe('Reply message body text'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_reply',
     async (args: { instance?: string; conversation_id: string; message_body: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -280,16 +184,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Request medication refill ──
 
-  server.registerTool(
-    'request_refill',
-    {
-      description: 'Request a medication refill. Use get_medications first to find the medication key for refillable medications.',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        medication_name: z.string().describe('Name of the medication to refill (fuzzy matched against current medications)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('request_refill',
     async (args: { instance?: string; medication_name: string }): Promise<CallToolResult> => {
       const query = args.medication_name.toLowerCase();
       const matched = demo.demoMedications.filter(m =>
@@ -320,17 +215,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Get available appointment slots ──
 
-  server.registerTool(
-    'get_available_appointments',
-    {
-      description: 'Get available appointment slots for scheduling. Optionally filter by provider name or visit type.',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        provider_name: z.string().optional().describe('Filter by provider name (fuzzy match)'),
-        visit_type: z.string().optional().describe('Filter by visit type (e.g. Office Visit, Lab Work, Follow-Up)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_available_appointments',
     async (args: { instance?: string; provider_name?: string; visit_type?: string }): Promise<CallToolResult> => {
       let results = demo.demoAvailableAppointments;
       if (args.provider_name) {
@@ -350,17 +235,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Book appointment ──
 
-  server.registerTool(
-    'book_appointment',
-    {
-      description: 'Book an appointment using a slot ID from get_available_appointments',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        slot_id: z.string().describe('The slot ID from get_available_appointments to book'),
-        reason: z.string().optional().describe('Reason for the visit'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('book_appointment',
     async (args: { instance?: string; slot_id: string; reason?: string }): Promise<CallToolResult> => {
       // Find the slot across all providers
       for (const provider of demo.demoAvailableAppointments) {
@@ -386,18 +261,7 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Emergency contact management ──
 
-  server.registerTool(
-    'add_emergency_contact',
-    {
-      description: 'Add a new emergency contact',
-      inputSchema: {
-        name: z.string().describe('Full name of the emergency contact'),
-        relationship_type: z.string().describe('Relationship to patient (e.g. Spouse, Parent, Friend, Sibling)'),
-        phone_number: z.string().describe('Phone number'),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('add_emergency_contact',
     async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -407,19 +271,7 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    'update_emergency_contact',
-    {
-      description: 'Update an existing emergency contact. Get the contact ID from get_emergency_contacts first.',
-      inputSchema: {
-        id: z.string().describe('Contact ID to update'),
-        name: z.string().optional().describe('New full name'),
-        relationship_type: z.string().optional().describe('New relationship type'),
-        phone_number: z.string().optional().describe('New phone number'),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('update_emergency_contact',
     async (args: { id: string; name?: string; relationship_type?: string; phone_number?: string; instance?: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -428,16 +280,7 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
-  server.registerTool(
-    'remove_emergency_contact',
-    {
-      description: 'Remove an emergency contact. Get the contact ID from get_emergency_contacts first.',
-      inputSchema: {
-        id: z.string().describe('Contact ID to remove'),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('remove_emergency_contact',
     async (args: { id: string; instance?: string }): Promise<CallToolResult> => {
       return jsonResult({
         success: true,
@@ -448,16 +291,10 @@ export function createDemoMcpServer(): McpServer {
 
   // ── Register all standard scraper tools ──
 
-  for (const tool of scraperTools) {
-    server.registerTool(
-      tool.name,
-      {
-        description: tool.description,
-        inputSchema: { instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)') },
-      },
-      // @ts-expect-error zod v3/v4 compat
+  for (const [name, data] of Object.entries(scraperToolData)) {
+    reg(name,
       async (_args: { instance?: string }): Promise<CallToolResult> => {
-        return jsonResult(tool.data);
+        return jsonResult(data);
       }
     );
   }
