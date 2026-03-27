@@ -63,6 +63,12 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - Optional env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth disabled without them)
 - SSL is disabled for Railway Postgres connections (not needed); AWS RDS uses `{ rejectUnauthorized: false }`
 
+## S3 Buckets (us-east-2)
+
+- **mychart-connector** (`arn:aws:s3:::mychart-connector`)
+  - `mychart-logos/` — logos for all MyChart instances, uploaded by `scrapers/list-all-mycharts/fetch-mychart-instances.ts`
+  - Served via `GET /api/mychart-logo?name=<filename>`
+
 ## Secrets (AWS Secrets Manager, us-east-2)
 
 - **RESEND_API_KEY**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:RESEND_API_KEY-vKJonO`
