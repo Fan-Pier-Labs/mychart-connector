@@ -454,7 +454,7 @@ export default function LoginPage() {
           <div className="relative backdrop-blur-xl bg-white/70 border border-white/40 shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-full px-2 py-2 pl-6 flex items-center justify-between transition-all duration-500 hover:bg-white/80 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)]">
             <a href="#" className="flex items-center gap-2">
               <span className="font-medium text-slate-800 tracking-tight text-sm uppercase hidden sm:block">
-                MyChart Connector
+                OpenRecord
               </span>
             </a>
 
@@ -469,7 +469,7 @@ export default function LoginPage() {
 
             <div className="flex items-center gap-2">
               <a
-                href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                href="https://github.com/Fan-Pier-Labs/openrecord"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden sm:inline-flex items-center gap-2 justify-center px-6 py-2.5 text-xs font-medium text-slate-700 uppercase tracking-widest bg-white/60 border border-slate-200/60 rounded-full hover:bg-white transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
@@ -522,7 +522,7 @@ export default function LoginPage() {
                 <Icon icon="lucide:arrow-right" width={18} height={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
               </button>
               <a
-                href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                href="https://github.com/Fan-Pier-Labs/openrecord"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-6 py-3 rounded-full text-sm font-medium text-slate-700 bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_10px_30px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] hover:bg-white/60 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)] transition-all duration-300 flex items-center gap-2"
@@ -715,14 +715,14 @@ export default function LoginPage() {
           <div className="max-w-[1200px] mx-auto px-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <span className="text-lg font-medium text-slate-900 tracking-tight uppercase">
-                MyChart Connector
+                OpenRecord
               </span>
               <p className="text-sm text-slate-500 font-light text-center md:text-left">
                 Open-source health data access for AI assistants.
               </p>
               <div className="flex gap-6 items-center">
                 <a
-                  href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                  href="https://github.com/Fan-Pier-Labs/openrecord"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-slate-400 hover:text-slate-900 transition-colors"

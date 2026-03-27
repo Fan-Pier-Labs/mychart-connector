@@ -1,6 +1,6 @@
-# MyChart Connector
+# OpenRecord
 
-**Let AI manage your healthcare.** Ask Claude to request a prescription refill, message your doctor to schedule an appointment, review your latest lab results, or update your insurance information — all through a natural conversation. MyChart Connector connects to MyChart and exposes 35+ tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Unlike other health MCP servers that only let you read your data, MyChart Connector has full write support — send messages, request refills, and update your insurance information, not just view it.
+**Let AI manage your healthcare.** Ask Claude to request a prescription refill, message your doctor to schedule an appointment, review your latest lab results, or update your insurance information — all through a natural conversation. OpenRecord connects to MyChart and exposes 35+ tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Unlike other health MCP servers that only let you read your data, OpenRecord has full write support — send messages, request refills, and update your insurance information, not just view it.
 
 The project is **open source** and designed to run on your own infrastructure. Deploy your own instance to [Railway](https://railway.com) with one click — it provisions a database, generates secrets, and runs migrations automatically. You'll have a fully functional MCP server in under 3 minutes with zero configuration.
 
@@ -34,7 +34,7 @@ Connects to any Epic MyChart patient portal and exposes 35+ tools for reading an
 
 ## How It Works
 
-MyChart Connector logs in with your credentials, handles 2FA automatically (via TOTP authenticator codes), and interacts with MyChart's APIs on your behalf. No FHIR, no OAuth, no Epic developer account needed — just your MyChart username, password, and optionally a TOTP secret for automatic 2FA.
+OpenRecord logs in with your credentials, handles 2FA automatically (via TOTP authenticator codes), and interacts with MyChart's APIs on your behalf. No FHIR, no OAuth, no Epic developer account needed — just your MyChart username, password, and optionally a TOTP secret for automatic 2FA.
 
 Sessions are kept alive automatically and re-established on expiry.
 
@@ -126,7 +126,7 @@ This builds a Docker image, pushes it to ECR, and deploys to ECS Fargate. Infras
 ## Architecture
 
 ```
-mychart-connector/
+openrecord/
   scrapers/          # Shared MyChart scraper code (login, API calls, parsing)
   web/               # Next.js web app + hosted MCP server
   openclaw-plugin/   # Self-contained OpenClaw plugin

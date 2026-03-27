@@ -1,6 +1,6 @@
-# MyChart Connector Outreach
+# OpenRecord Outreach
 
-Post about MyChart Connector on the communities below and reach out to the contacts listed.
+Post about OpenRecord on the communities below and reach out to the contacts listed.
 
 ---
 
@@ -121,7 +121,7 @@ Post about MyChart Connector on the communities below and reach out to the conta
 
 # Email Outreach Contacts
 
-Publicly available contact info for people who would be interested in MyChart Connector.
+Publicly available contact info for people who would be interested in OpenRecord.
 
 ## Top 10 Priority Contacts
 
@@ -172,7 +172,7 @@ Publicly available contact info for people who would be interested in MyChart Co
 | Christopher Fu | cfu288@meremedical.co | Mere Medical | Complementary approach (FHIR APIs vs scraping) |
 | OpenMRS Community | community@openmrs.org / code@openmrs.org | OpenMRS | Most popular open-source medical record system |
 | Karri Niemela | GitHub: github.com/kakoni (submit PR) | awesome-healthcare list | Curates the most popular list of open-source healthcare software |
-| Reshma Khilnani | GitHub: github.com/reshmakh | Medplum (YC-backed) | Open-source FHIR server — MyChart Connector could be a data source |
+| Reshma Khilnani | GitHub: github.com/reshmakh | Medplum (YC-backed) | Open-source FHIR server — OpenRecord could be a data source |
 
 ## Health Tech Podcast Hosts
 
