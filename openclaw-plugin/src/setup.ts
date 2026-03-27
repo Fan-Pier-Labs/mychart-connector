@@ -13,6 +13,7 @@ import { setupTotp } from '../../scrapers/myChart/setupTotp';
 import { generateTotpCode } from '../../scrapers/myChart/totp';
 import { browserPasswordDbExists, importMyChartAccounts } from './password-import';
 import { clearSession } from './index';
+import { isBlockedInstance } from '../../shared/blockedInstances';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OpenClawApi = any;
@@ -144,6 +145,10 @@ async function setupCommand(): Promise<void> {
       hostname = (await ask(rl, 'MyChart hostname (e.g. mychart.example.org): ')).trim();
       if (!hostname) {
         console.log('Hostname is required. Aborting setup.');
+        return;
+      }
+      if (isBlockedInstance(hostname)) {
+        console.log('This MyChart instance is not supported. central.mychart.org is a portal aggregator and cannot be scraped directly. Please use the individual hospital MyChart instance instead.');
         return;
       }
     }
