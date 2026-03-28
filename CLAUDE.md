@@ -46,9 +46,12 @@ End-to-end tests in `tests/integration/ci/` that exercise the full user journey 
 5. MCP API key generate/revoke lifecycle
 6. Notification preference CRUD
 7. App-level TOTP 2FA enable/verify/sign-in/disable
-8. MyChart instance deletion and cleanup
+8. Password reset request, token validation, password change, old password rejection
+9. MyChart instance deletion and cleanup
 
 **Protocol detection**: Hostnames without a dot (e.g. Docker service names like `fake-mychart:3000`) automatically use HTTP instead of HTTPS.
+
+**Database access**: PostgreSQL is exposed on host port 5433 (mapped from container port 5432) so integration tests can query the DB directly (e.g., to extract password reset tokens from the `verification` table). Connection string: `postgresql://testuser:testpass@localhost:5433/mychart_test` (override with `CI_DATABASE_URL` env var).
 
 ## Reference Docs
 
@@ -114,11 +117,15 @@ BetterAuth handles email+password and Google OAuth sign-in. Two additional auth 
 
 - **Passkeys (WebAuthn)**: Users can register passkeys (Touch ID, Face ID, security keys) from the Security card on the home page. Sign-in with passkey is available on the login page.
 - **TOTP 2FA (Authenticator App)**: Users can enable TOTP-based two-factor authentication from the Security card. When enabled, sign-in with email+password requires a 6-digit code from an authenticator app. Backup codes are provided during setup.
+- **Password Reset**: Users can reset their password via email. The flow: `/forgot-password` (enter email) → receive reset email via Resend → `/reset-password?token=...` (enter new password). Uses BetterAuth's built-in `forgetPassword`/`resetPassword` APIs.
 
 Key files:
-- `web/src/lib/auth.ts` — Server config with `twoFactor()` and `passkey()` plugins
+- `web/src/lib/auth.ts` — Server config with `twoFactor()` and `passkey()` plugins, `sendResetPassword` email handler
 - `web/src/lib/auth-client.ts` — Client config with `twoFactorClient()` and `passkeyClient()` plugins
-- `web/src/app/login/page.tsx` — Passkey sign-in button + TOTP verification step
+- `web/src/lib/email.ts` — Shared transactional email utility (Resend). Supports both AWS Secrets Manager and `RESEND_API_KEY` env var
+- `web/src/app/login/page.tsx` — Passkey sign-in button + TOTP verification step + "Forgot password?" link
+- `web/src/app/forgot-password/page.tsx` — Request password reset email
+- `web/src/app/reset-password/page.tsx` — Set new password with reset token
 - `web/src/app/home/page.tsx` — Security settings card (enable/disable TOTP, manage passkeys)
 
 Database tables (`twoFactor`, `passkey`) are auto-created by `runMigrations()`.
@@ -225,7 +232,8 @@ When reverse engineering health portal APIs (MyChart, etc.), the request headers
 - Always create a PR for new features — never push directly to `main`
 - CI must pass (lint, tests, build) before merging
 - **NEVER merge pull requests or enable auto merge without the user's explicit permission.** Wait for the user to explicitly tell you to do so.
-- Make sure to write tests as well. Unit, and integration when appropriate. 
+- **Always write tests for all changes.** Unit tests for scraper/utility logic, and integration tests (in `tests/integration/ci/integration.test.ts`) for web app features and API endpoints. No PR should be submitted without corresponding test coverage.
+- **Run the web app for the user to test.** When web app changes are ready for review, start the dev server on a random local port (use `python3 -c "import random; print(random.randint(3100, 3999))"` to pick the port, then `cd web && PORT=<port> bun run dev`). Share the URL so the user can test in the browser.
 
 ### Creating / Updating PRs
 

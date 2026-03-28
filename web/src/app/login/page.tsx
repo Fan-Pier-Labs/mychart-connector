@@ -952,18 +952,23 @@ export default function LoginPage() {
                         <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleEmailSignIn}>
                           Sign In
                         </Button>
+                        <div className="flex items-center justify-between text-sm text-slate-500">
+                          <p>
+                            Don&apos;t have an account?{" "}
+                            <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
+                              Sign up
+                            </button>
+                          </p>
+                          <a href="/forgot-password" className="text-blue-600 hover:underline font-medium">
+                            Forgot password?
+                          </a>
+                        </div>
                         <button
                           className="w-full text-sm text-blue-600 hover:underline font-medium py-1"
                           onClick={handleMagicLink}
                         >
                           Sign in with email link instead
                         </button>
-                        <p className="text-center text-sm text-slate-500">
-                          Don&apos;t have an account?{" "}
-                          <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
-                            Sign up
-                          </button>
-                        </p>
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-slate-200" />
