@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { parseTotpUri } from '../../../scrapers/myChart/totp';
+import { Client } from 'pg';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -506,7 +507,140 @@ describe('App-level TOTP 2FA', () => {
 });
 
 // ===================================================================
-// 8. Cleanup
+// 8. Password Reset
+// ===================================================================
+
+describe('Password reset', () => {
+  const RESET_EMAIL = `ci-reset-${Date.now()}@example.com`;
+  const RESET_PASSWORD = 'ResetMe123!';
+  const NEW_PASSWORD = 'NewPassword456!';
+
+  const CI_DB_URL = process.env.CI_DATABASE_URL || 'postgresql://testuser:testpass@localhost:5433/mychart_test';
+
+  /** Query the verification table to extract the reset token (bypasses email). */
+  async function getResetToken(email: string): Promise<string> {
+    const client = new Client({ connectionString: CI_DB_URL });
+    await client.connect();
+    try {
+      // BetterAuth stores verification tokens with identifier "reset-password:<token>"
+      // and value = userId. We need to find the user first, then look up their token.
+      const userResult = await client.query(
+        'SELECT id FROM "user" WHERE email = $1',
+        [email],
+      );
+      const userId = userResult.rows[0]?.id;
+      if (!userId) throw new Error(`No user found with email ${email}`);
+
+      const tokenResult = await client.query(
+        `SELECT identifier FROM verification WHERE value = $1 AND identifier LIKE 'reset-password:%' ORDER BY "expiresAt" DESC LIMIT 1`,
+        [userId],
+      );
+      const identifier = tokenResult.rows[0]?.identifier;
+      if (!identifier) throw new Error('No reset token found in verification table');
+
+      // identifier is "reset-password:<token>", extract the token
+      return identifier.replace('reset-password:', '');
+    } finally {
+      await client.end();
+    }
+  }
+
+  it('creates a dedicated user for password reset testing', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, password: RESET_PASSWORD, name: 'Reset Test' }),
+      redirect: 'manual',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user.email).toBe(RESET_EMAIL);
+  });
+
+  it('requests a password reset', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, redirectTo: '/reset-password' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe(true);
+  });
+
+  it('returns success even for non-existent email (no user enumeration)', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: 'nonexistent@example.com', redirectTo: '/reset-password' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe(true);
+  });
+
+  it('resets the password with a valid token', async () => {
+    const token = await getResetToken(RESET_EMAIL);
+    expect(token).toBeTruthy();
+
+    const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ newPassword: NEW_PASSWORD, token }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe(true);
+  });
+
+  it('can sign in with the new password', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, password: NEW_PASSWORD }),
+      redirect: 'manual',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user).toBeDefined();
+    expect(body.user.email).toBe(RESET_EMAIL);
+  });
+
+  it('cannot sign in with the old password', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, password: RESET_PASSWORD }),
+      redirect: 'manual',
+    });
+    // BetterAuth returns 401 or error for invalid credentials
+    const body = await res.json();
+    expect(body.user).toBeUndefined();
+  });
+
+  it('rejects an already-used token', async () => {
+    // The token was consumed in the reset step above
+    const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ newPassword: 'AnotherPassword789!', token: 'already-consumed-token' }),
+    });
+    // Should fail with 400 (invalid token)
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects reset without a token', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ newPassword: 'SomePassword123!' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ===================================================================
+// 9. Cleanup
 // ===================================================================
 
 describe('Cleanup', () => {
