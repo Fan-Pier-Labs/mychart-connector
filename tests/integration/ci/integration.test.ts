@@ -640,7 +640,116 @@ describe('Password reset', () => {
 });
 
 // ===================================================================
-// 9. Cleanup
+// 9. Instance Enabled/Disabled Toggle
+// ===================================================================
+
+describe('Instance enabled/disabled toggle', () => {
+  it('instance is enabled by default', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(true);
+  });
+
+  it('can disable an instance via PATCH', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(false);
+  });
+
+  it('disabled instance appears in list with enabled=false', async () => {
+    const res = await authedFetch('/api/mychart-instances');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const inst = body.find((i: { id: string }) => i.id === instanceId);
+    expect(inst).toBeDefined();
+    expect(inst.enabled).toBe(false);
+  });
+
+  it('disabled instance is skipped by auto-connect on listing', async () => {
+    const patchRes = await authedFetch(`/api/mychart-instances/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ totpSecret: 'JBSWY3DPEHPK3PXP' }),
+    });
+    expect(patchRes.status).toBe(200);
+
+    const res = await authedFetch('/api/mychart-instances');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const inst = body.find((i: { id: string }) => i.id === instanceId);
+    expect(inst.enabled).toBe(false);
+    expect(inst.hasTotpSecret).toBe(true);
+  });
+
+  it('MCP returns error when all instances are disabled', async () => {
+    const keyRes = await authedFetch('/api/mcp-key', { method: 'POST' });
+    expect(keyRes.status).toBe(200);
+    const { key } = await keyRes.json();
+    expect(key).toBeDefined();
+
+    const mcpRes = await fetch(`${BASE_URL}/api/mcp?key=${key}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_profile', arguments: {} },
+      }),
+    });
+    const mcpBody = await mcpRes.text();
+    expect(mcpBody).toContain('disabled');
+
+    await authedFetch('/api/mcp-key', { method: 'DELETE' });
+  });
+
+  it('can re-enable an instance via PATCH', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(true);
+  });
+
+  it('re-enabled instance can connect again', async () => {
+    const res = await authedFetch('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ myChartInstanceId: instanceId }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    if (body.state === 'need_2fa') {
+      const twofaRes = await authedFetch('/api/twofa', {
+        method: 'POST',
+        body: JSON.stringify({ sessionKey: body.sessionKey, code: '123456' }),
+      });
+      expect(twofaRes.status).toBe(200);
+      sessionKey = (await twofaRes.json()).sessionKey;
+    } else {
+      expect(body.state).toBe('logged_in');
+      sessionKey = body.sessionKey;
+    }
+
+    const listRes = await authedFetch('/api/mychart-instances');
+    const list = await listRes.json();
+    const inst = list.find((i: { id: string }) => i.id === instanceId);
+    expect(inst.enabled).toBe(true);
+    expect(inst.connected).toBe(true);
+  }, 30_000);
+});
+
+// ===================================================================
+// 10. Cleanup
 // ===================================================================
 
 describe('Cleanup', () => {

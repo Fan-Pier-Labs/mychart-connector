@@ -24,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       username: instance.username,
       mychartEmail: instance.mychartEmail,
       hasTotpSecret: !!instance.totpSecret,
+      enabled: instance.enabled,
       connected,
       createdAt: instance.createdAt,
       updatedAt: instance.updatedAt,
@@ -58,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       username: instance.username,
       mychartEmail: instance.mychartEmail,
       hasTotpSecret: !!instance.totpSecret,
+      enabled: instance.enabled,
       createdAt: instance.createdAt,
       updatedAt: instance.updatedAt,
     });
