@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { parseTotpUri } from '../../../scrapers/myChart/totp';
-import { createOTP } from '@better-auth/utils/otp';
+import { createOTP } from '../../../web/node_modules/@better-auth/utils/dist/otp.mjs';
 
 // ---------------------------------------------------------------------------
 // Configuration
