@@ -546,12 +546,22 @@ describe('Password reset', () => {
   }
 
   it('creates a dedicated user for password reset testing', async () => {
-    const res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
+    let res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
       body: JSON.stringify({ email: RESET_EMAIL, password: RESET_PASSWORD, name: 'Reset Test' }),
       redirect: 'manual',
     });
+    // Retry once if rate-limited (429) — multiple test files create users
+    if (res.status === 429) {
+      await new Promise(r => setTimeout(r, 2000));
+      res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+        body: JSON.stringify({ email: RESET_EMAIL, password: RESET_PASSWORD, name: 'Reset Test' }),
+        redirect: 'manual',
+      });
+    }
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.user.email).toBe(RESET_EMAIL);
