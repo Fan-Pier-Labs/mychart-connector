@@ -17,6 +17,7 @@ export interface MyChartInstanceInfo {
   username: string;
   mychartEmail: string | null;
   hasTotpSecret: boolean;
+  enabled: boolean;
   connected: boolean;
   createdAt: string;
   updatedAt: string;

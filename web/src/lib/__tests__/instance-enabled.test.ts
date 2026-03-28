@@ -8,6 +8,9 @@ class MockNextRequest {
     this.url = url;
     this.headers = new Map();
   }
+  async json() {
+    return {};
+  }
 }
 
 class MockNextResponse {
@@ -39,12 +42,20 @@ mock.module('@/lib/auth-helpers', () => ({
 
 // Mock DB
 const mockGetInstances = mock(() => Promise.resolve([] as unknown[]));
+const mockUpdateInstance = mock(() => Promise.resolve(null as unknown));
 mock.module('@/lib/db', () => ({
   getMyChartInstances: mockGetInstances,
   createMyChartInstance: mock(() => Promise.resolve({})),
+  getMyChartInstance: mock(() => Promise.resolve(null)),
+  updateMyChartInstance: mockUpdateInstance,
+  deleteMyChartInstance: mock(() => Promise.resolve(false)),
+  getNotificationEnabledInstances: mock(() => Promise.resolve([])),
+  updateNotificationLastChecked: mock(() => Promise.resolve()),
+  getUserNotificationPreferences: mock(() => Promise.resolve({ enabled: false, includeContent: false })),
+  setUserNotificationPreferences: mock(() => Promise.resolve()),
 }));
 
-// Mock sessionStore (via @/lib/sessions which re-exports it)
+// Mock sessionStore
 const entryStore = new Map<string, { status: string; request: object }>();
 const mockSessionStore = {
   getEntry: (key: string) => entryStore.get(key),
@@ -57,6 +68,8 @@ mock.module('../../../../../scrapers/myChart/sessionStore', () => ({
 }));
 mock.module('@/lib/sessions', () => ({
   sessionStore: mockSessionStore,
+  getSession: (key: string) => entryStore.get(key)?.request,
+  deleteSession: mock(() => {}),
 }));
 
 // Mock auto-connect
@@ -70,7 +83,15 @@ mock.module('@/lib/utils', () => ({
   normalizeHostname: (h: string) => h,
 }));
 
-const { GET } = await import('../route');
+// Mock telemetry
+mock.module('../../../../../../shared/telemetry', () => ({
+  sendTelemetryEvent: () => {},
+}));
+mock.module('../../../../../shared/telemetry', () => ({
+  sendTelemetryEvent: () => {},
+}));
+
+const { GET } = await import('../../app/api/mychart-instances/route');
 
 function makeRequest() {
   return new MockNextRequest('http://localhost:3000/api/mychart-instances');
@@ -92,17 +113,52 @@ function makeInstance(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('GET /api/mychart-instances', () => {
+describe('Instance enabled/disabled', () => {
   beforeEach(() => {
     mockRequireAuth.mockClear();
     mockGetInstances.mockClear();
     mockAutoConnect.mockClear();
+    mockUpdateInstance.mockClear();
     entryStore.clear();
     mockRequireAuth.mockResolvedValue({ id: 'user-1' });
   });
 
-  it('auto-connects TOTP-enabled instances that are not logged in', async () => {
-    const inst = makeInstance({ totpSecret: 'ABCDEF' });
+  it('returns enabled field in GET response', async () => {
+    const inst = makeInstance({ enabled: true });
+    mockGetInstances.mockResolvedValueOnce([inst]);
+
+    const res = await GET(makeRequest() as never);
+    const body = await res.json();
+
+    expect(body).toHaveLength(1);
+    expect(body[0].enabled).toBe(true);
+  });
+
+  it('returns enabled=false for disabled instances', async () => {
+    const inst = makeInstance({ enabled: false });
+    mockGetInstances.mockResolvedValueOnce([inst]);
+
+    const res = await GET(makeRequest() as never);
+    const body = await res.json();
+
+    expect(body).toHaveLength(1);
+    expect(body[0].enabled).toBe(false);
+  });
+
+  it('does not auto-connect disabled instances even with TOTP', async () => {
+    const inst = makeInstance({ totpSecret: 'ABCDEF', enabled: false });
+    mockGetInstances.mockResolvedValueOnce([inst]);
+
+    const res = await GET(makeRequest() as never);
+    const body = await res.json();
+
+    expect(mockAutoConnect).not.toHaveBeenCalled();
+    expect(body[0].connected).toBe(false);
+    expect(body[0].enabled).toBe(false);
+  });
+
+  it('auto-connects enabled instances with TOTP', async () => {
+    const inst = makeInstance({ totpSecret: 'ABCDEF', enabled: true });
     mockGetInstances.mockResolvedValueOnce([inst]);
     mockAutoConnect.mockImplementationOnce(async () => {
       entryStore.set('user-1:inst-1', { status: 'logged_in', request: {} });
@@ -112,67 +168,21 @@ describe('GET /api/mychart-instances', () => {
     const res = await GET(makeRequest() as never);
     const body = await res.json();
 
-    expect(mockAutoConnect).toHaveBeenCalledWith('user-1', inst);
-    expect(body).toHaveLength(1);
-    expect(body[0].connected).toBe(true);
-    expect(body[0].hasTotpSecret).toBe(true);
-  });
-
-  it('skips auto-connect for instances without TOTP', async () => {
-    const inst = makeInstance({ totpSecret: null });
-    mockGetInstances.mockResolvedValueOnce([inst]);
-
-    const res = await GET(makeRequest() as never);
-    const body = await res.json();
-
-    expect(mockAutoConnect).not.toHaveBeenCalled();
-    expect(body[0].connected).toBe(false);
-  });
-
-  it('skips auto-connect for already logged-in instances', async () => {
-    const inst = makeInstance({ totpSecret: 'ABCDEF' });
-    mockGetInstances.mockResolvedValueOnce([inst]);
-    entryStore.set('user-1:inst-1', { status: 'logged_in', request: {} });
-
-    const res = await GET(makeRequest() as never);
-    const body = await res.json();
-
-    expect(mockAutoConnect).not.toHaveBeenCalled();
-    expect(body[0].connected).toBe(true);
-  });
-
-  it('reports connected=false when auto-connect fails', async () => {
-    const inst = makeInstance({ totpSecret: 'ABCDEF' });
-    mockGetInstances.mockResolvedValueOnce([inst]);
-    mockAutoConnect.mockResolvedValueOnce({ state: 'error' });
-
-    const res = await GET(makeRequest() as never);
-    const body = await res.json();
-
     expect(mockAutoConnect).toHaveBeenCalled();
-    expect(body[0].connected).toBe(false);
+    expect(body[0].connected).toBe(true);
+    expect(body[0].enabled).toBe(true);
   });
 
-  it('does not crash if auto-connect throws', async () => {
-    const inst = makeInstance({ totpSecret: 'ABCDEF' });
-    mockGetInstances.mockResolvedValueOnce([inst]);
-    mockAutoConnect.mockRejectedValueOnce(new Error('network error'));
+  it('shows both enabled and disabled instances in the list', async () => {
+    const enabled = makeInstance({ id: 'inst-1', enabled: true });
+    const disabled = makeInstance({ id: 'inst-2', hostname: 'mychart2.example.com', enabled: false });
+    mockGetInstances.mockResolvedValueOnce([enabled, disabled]);
 
     const res = await GET(makeRequest() as never);
     const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(body[0].connected).toBe(false);
-  });
-
-  it('only reports connected=true for logged_in status', async () => {
-    const inst = makeInstance({ totpSecret: null });
-    mockGetInstances.mockResolvedValueOnce([inst]);
-    entryStore.set('user-1:inst-1', { status: 'need_2fa', request: {} });
-
-    const res = await GET(makeRequest() as never);
-    const body = await res.json();
-
-    expect(body[0].connected).toBe(false);
+    expect(body).toHaveLength(2);
+    expect(body[0].enabled).toBe(true);
+    expect(body[1].enabled).toBe(false);
   });
 });
