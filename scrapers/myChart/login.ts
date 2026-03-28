@@ -219,7 +219,9 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   }
 
 
-  const effectiveProtocol = protocol ?? (hostname.startsWith('localhost') ? 'http' : 'https');
+  // Use HTTP for localhost and hostnames without a dot (e.g. Docker service names like "fake-mychart:3000")
+  const hostnameWithoutPort = hostname.split(':')[0];
+  const effectiveProtocol = protocol ?? (hostnameWithoutPort === 'localhost' || !hostnameWithoutPort.includes('.') ? 'http' : 'https');
   const mychartRequest = new MyChartRequest(hostname, effectiveProtocol);
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest)
