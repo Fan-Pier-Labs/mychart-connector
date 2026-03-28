@@ -29,7 +29,7 @@ async function getResend(): Promise<Resend> {
   return cachedResend;
 }
 
-const FROM_ADDRESS = 'OpenRecord <notifications@fanpierlabs.com>';
+const FROM_ADDRESS = 'OpenRecord <noreply@emails.fanpierlabs.com>';
 
 /**
  * Send a transactional email (password reset, etc.) via Resend.
