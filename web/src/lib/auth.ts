@@ -57,6 +57,7 @@ export async function getAuth(): Promise<any> {
     baseURL,
     trustedOrigins,
     secret,
+    rateLimit: process.env.DISABLE_RATE_LIMIT === 'true' ? { enabled: false } : undefined,
     emailAndPassword: {
       enabled: true,
       async sendResetPassword({ user, url }) {

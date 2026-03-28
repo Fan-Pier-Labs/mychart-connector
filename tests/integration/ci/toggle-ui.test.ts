@@ -56,22 +56,12 @@ function extractCookies(res: Response): string {
 }
 
 async function apiSignUp() {
-  let res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
+  const res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
     body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, name: TEST_NAME }),
     redirect: 'manual',
   });
-  // Retry once if rate-limited (429) — multiple test files sign up users
-  if (res.status === 429) {
-    await new Promise(r => setTimeout(r, 10_000));
-    res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
-      body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, name: TEST_NAME }),
-      redirect: 'manual',
-    });
-  }
   authCookies = extractCookies(res);
   return res;
 }
