@@ -100,7 +100,10 @@ async function signIn(email: string, password: string) {
 }
 
 async function signOut() {
-  const res = await authedFetch('/api/auth/sign-out', { method: 'POST' });
+  const res = await authedFetch('/api/auth/sign-out', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
   cookies = extractCookies(res);
   return res;
 }
@@ -470,6 +473,19 @@ describe('App-level TOTP 2FA', () => {
   });
 
   it('verifies TOTP setup with a generated code', async () => {
+    // BetterAuth's nextCookies() plugin may rotate the session during enable
+    // without exposing it via Set-Cookie headers. Re-authenticate to get fresh cookies.
+    const signInRes = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: TFA_EMAIL, password: TFA_PASSWORD }),
+      redirect: 'manual',
+    });
+    expect(signInRes.status).toBe(200);
+    // Reset cookies from the fresh sign-in
+    tfaCookies = '';
+    mergeTfaCookies(signInRes);
+
     const code = await generateTotpCode(totpSecret);
     const res = await fetch(`${BASE_URL}/api/auth/two-factor/verify-totp`, {
       method: 'POST',
@@ -481,11 +497,12 @@ describe('App-level TOTP 2FA', () => {
     mergeTfaCookies(res);
   });
 
-  it('sign-in requires 2FA after enabling', async () => {
+  it('sign-in requires 2FA after setup', async () => {
     // Sign out
     await fetch(`${BASE_URL}/api/auth/sign-out`, {
       method: 'POST',
-      headers: { Cookie: tfaCookies, Origin: BASE_URL },
+      headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
+      body: JSON.stringify({}),
       redirect: 'manual',
     });
 
@@ -538,7 +555,8 @@ describe('App-level TOTP 2FA', () => {
   it('sign-in no longer requires 2FA after disabling', async () => {
     await fetch(`${BASE_URL}/api/auth/sign-out`, {
       method: 'POST',
-      headers: { Cookie: tfaCookies, Origin: BASE_URL },
+      headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
+      body: JSON.stringify({}),
       redirect: 'manual',
     });
 
