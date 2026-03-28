@@ -17,10 +17,10 @@ services:
       FAKE_MYCHART_ACCEPT_ANY: "true"
       PORT: "3000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf -o /dev/null -w '%{http_code}' http://localhost:3000/ | grep 302"]
-      interval: 2s
-      timeout: 5s
-      retries: 15
+      test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:3000/',{redirect:'manual'}).then(r => process.exit(r.status === 302 || r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 3s
+      timeout: 10s
+      retries: 20
 
   web:
     build:
@@ -43,7 +43,7 @@ services:
       fake-mychart:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health"]
+      test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:8080/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 3s
-      timeout: 5s
-      retries: 20
+      timeout: 10s
+      retries: 30
