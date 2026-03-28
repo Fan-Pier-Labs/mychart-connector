@@ -164,7 +164,7 @@ function registerScraperTool(server: McpServer, userId: string, reg: (name: stri
 export function createMcpServer(userId: string): McpServer {
   sendTelemetryEvent('mcp_server_created');
   const server = new McpServer({
-    name: 'mychart-health',
+    name: 'openrecord',
     version: '1.0.0',
   });
 
