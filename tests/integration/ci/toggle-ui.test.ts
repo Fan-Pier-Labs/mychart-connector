@@ -6,6 +6,10 @@
  *
  * Sign-up and instance creation happen via API (faster, more reliable),
  * then we load the home page and test the toggle UI.
+ *
+ * Note: We use Bun's expect() + Playwright's native locator methods
+ * (isVisible, getAttribute, count) rather than @playwright/test's
+ * custom expect matchers which aren't available with Bun's test runner.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
@@ -125,13 +129,16 @@ describe('Toggle UI', () => {
     await page.goto(`${BASE_URL}/home`);
     await page.waitForLoadState('networkidle');
 
-    // The instance hostname should be visible
-    await expect(page.getByText(FAKE_MYCHART_HOSTNAME)).toBeVisible({ timeout: 10_000 });
+    // Wait for the instance hostname to appear
+    const hostnameLocator = page.getByText(FAKE_MYCHART_HOSTNAME);
+    await hostnameLocator.waitFor({ state: 'visible', timeout: 10_000 });
+    expect(await hostnameLocator.isVisible()).toBe(true);
   }, 30_000);
 
   it('toggle switch is visible and enabled by default', async () => {
     const toggle = page.locator('button[role="switch"]').first();
-    await expect(toggle).toBeVisible();
+    await toggle.waitFor({ state: 'visible', timeout: 5_000 });
+    expect(await toggle.isVisible()).toBe(true);
 
     const checked = await toggle.getAttribute('aria-checked');
     expect(checked).toBe('true');
@@ -141,8 +148,14 @@ describe('Toggle UI', () => {
     const toggle = page.locator('button[role="switch"]').first();
     await toggle.click();
 
-    // Wait for API call to complete and UI to re-render
-    await page.waitForResponse(resp => resp.url().includes('/api/mychart-instances/') && resp.request().method() === 'PATCH');
+    // Wait for the PATCH API call to complete
+    await page.waitForResponse(
+      resp => resp.url().includes('/api/mychart-instances/') && resp.request().method() === 'PATCH',
+      { timeout: 5_000 }
+    );
+
+    // Small delay for React re-render
+    await page.waitForTimeout(500);
 
     // Toggle should now be unchecked
     const checked = await toggle.getAttribute('aria-checked');
@@ -150,39 +163,42 @@ describe('Toggle UI', () => {
   });
 
   it('disabled instance shows "Disabled" label', async () => {
-    await expect(page.getByText('Disabled')).toBeVisible();
+    const disabledLabel = page.getByText('Disabled');
+    expect(await disabledLabel.isVisible()).toBe(true);
   });
 
   it('disabled instance card has dimmed styling', async () => {
-    // The instance card should have opacity-60 when disabled
-    const card = page.locator('.opacity-60').first();
-    await expect(card).toBeVisible();
+    const dimmedCards = await page.locator('.opacity-60').count();
+    expect(dimmedCards).toBeGreaterThan(0);
   });
 
   it('Connect button is not visible when disabled', async () => {
-    // When disabled, Connect/Select buttons shouldn't appear
     const connectButton = page.getByRole('button', { name: 'Connect' });
-    await expect(connectButton).not.toBeVisible();
+    expect(await connectButton.isVisible()).toBe(false);
   });
 
   it('clicking toggle re-enables the instance', async () => {
     const toggle = page.locator('button[role="switch"]').first();
     await toggle.click();
 
-    // Wait for API call
-    await page.waitForResponse(resp => resp.url().includes('/api/mychart-instances/') && resp.request().method() === 'PATCH');
+    // Wait for the PATCH API call
+    await page.waitForResponse(
+      resp => resp.url().includes('/api/mychart-instances/') && resp.request().method() === 'PATCH',
+      { timeout: 5_000 }
+    );
 
-    // Toggle should be checked again
+    await page.waitForTimeout(500);
+
     const checked = await toggle.getAttribute('aria-checked');
     expect(checked).toBe('true');
   });
 
   it('"Disabled" label disappears after re-enabling', async () => {
-    await expect(page.getByText('Disabled')).not.toBeVisible();
+    const disabledLabel = page.getByText('Disabled');
+    expect(await disabledLabel.isVisible()).toBe(false);
   });
 
   it('dimmed styling is removed after re-enabling', async () => {
-    // The card should no longer have opacity-60
     const dimmedCards = await page.locator('.opacity-60').count();
     expect(dimmedCards).toBe(0);
   });
