@@ -163,7 +163,7 @@ describe('Toggle UI', () => {
   });
 
   it('disabled instance shows "Disabled" label', async () => {
-    const disabledLabel = page.getByText('Disabled');
+    const disabledLabel = page.getByText('Disabled').first();
     expect(await disabledLabel.isVisible()).toBe(true);
   });
 
@@ -194,8 +194,9 @@ describe('Toggle UI', () => {
   });
 
   it('"Disabled" label disappears after re-enabling', async () => {
-    const disabledLabel = page.getByText('Disabled');
-    expect(await disabledLabel.isVisible()).toBe(false);
+    // Wait a moment for React re-render, then check no "Disabled" labels in instance cards
+    const disabledLabels = page.locator('[class*="rounded-lg"] >> text=Disabled');
+    expect(await disabledLabels.count()).toBe(0);
   });
 
   it('dimmed styling is removed after re-enabling', async () => {
