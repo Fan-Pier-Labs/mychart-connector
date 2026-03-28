@@ -9,6 +9,7 @@ const RDS_PASSWORD_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:s
 const MCP_ENCRYPTION_KEY_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:MCP_ENCRYPTION_KEY-7dAfwd';
 const BETTER_AUTH_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:BETTER_AUTH_SECRET-ViBKHZ';
 const GOOGLE_OAUTH_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:GOOGLE_OAUTH_CREDENTIALS-XtqYdp';
+const RESEND_API_KEY_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:RESEND_API_KEY-vKJonO';
 
 const AWS_REGION = 'us-east-2';
 
@@ -37,6 +38,7 @@ let cachedDbPassword: string | null = null;
 let cachedEncryptionKey: string | null = null;
 let cachedBetterAuthSecret: string | null = null;
 let cachedGoogleOAuth: { clientId: string; clientSecret: string } | null = null;
+let cachedResendApiKey: string | null = null;
 
 async function getSecretValue(arn: string): Promise<string> {
   const resp = await getSmClient().send(new GetSecretValueCommand({ SecretId: arn }));
@@ -121,4 +123,14 @@ export async function getPoolOptions(): Promise<{ connectionString: string; ssl:
     connectionString,
     ssl: isEnvVarMode() ? false : { rejectUnauthorized: false },
   };
+}
+
+export async function getResendApiKey(): Promise<string> {
+  if (cachedResendApiKey) return cachedResendApiKey;
+  if (process.env.RESEND_API_KEY) {
+    cachedResendApiKey = process.env.RESEND_API_KEY;
+    return cachedResendApiKey;
+  }
+  cachedResendApiKey = await getSecretValue(RESEND_API_KEY_SECRET_ARN);
+  return cachedResendApiKey;
 }

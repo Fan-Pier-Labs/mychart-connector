@@ -19,15 +19,18 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  async function handleSubmit() {
-    if (!email) {
+  async function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    const emailValue = email || (document.getElementById("email") as HTMLInputElement)?.value || "";
+    if (!emailValue) {
       toast.error("Please enter your email address.");
       return;
     }
+    if (!email) setEmail(emailValue);
     setLoading(true);
     try {
-      const { error } = await authClient.forgetPassword({
-        email,
+      const { error } = await authClient.requestPasswordReset({
+        email: emailValue,
         redirectTo: "/reset-password",
       });
       if (error) {
@@ -68,7 +71,7 @@ export default function ForgotPasswordPage() {
               </a>
             </div>
           ) : (
-            <>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -77,13 +80,12 @@ export default function ForgotPasswordPage() {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                   autoFocus
                 />
               </div>
               <Button
+                type="submit"
                 className="w-full bg-blue-600 hover:bg-blue-500"
-                onClick={handleSubmit}
                 disabled={loading}
               >
                 {loading ? "Sending..." : "Send Reset Link"}
@@ -94,7 +96,7 @@ export default function ForgotPasswordPage() {
                   Sign in
                 </a>
               </p>
-            </>
+            </form>
           )}
         </CardContent>
       </Card>
