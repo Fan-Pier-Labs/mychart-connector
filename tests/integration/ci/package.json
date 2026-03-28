@@ -1,0 +1,7 @@
+{
+  "name": "ci-integration-tests",
+  "private": true,
+  "dependencies": {
+    "@better-auth/utils": "^0.3.1"
+  }
+}

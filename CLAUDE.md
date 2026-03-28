@@ -30,6 +30,25 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - `cd fake-mychart && bun run dev` — Run fake MyChart server on port 4000
 - `cd fake-mychart && bun run build` — Build fake MyChart for production
 - `bun run web/scripts/migrate.ts` — Run database migrations (BetterAuth tables + mychart_instances)
+- `bun run test:ci-integration` — Run CI integration tests (requires Docker Compose services running)
+- `docker compose -f docker-compose.ci.yaml up -d --build --wait` — Start CI services (PostgreSQL 18, fake-mychart, web app)
+- `docker compose -f docker-compose.ci.yaml down -v` — Tear down CI services
+
+## CI Integration Tests
+
+End-to-end tests in `tests/integration/ci/` that exercise the full user journey against Docker Compose services. Uses `docker-compose.ci.yaml` to spin up PostgreSQL 18, fake-mychart, and the web app.
+
+**Single test file** (`tests/integration/ci/integration.test.ts`) runs all scenarios sequentially to maintain shared state (session cookies, instance IDs). Covers:
+1. Health check canary
+2. Sign up, sign in, sign out
+3. MyChart instance CRUD, connect, login flow
+4. Full 30-category data scrape with Homer Simpson spot-checks
+5. MCP API key generate/revoke lifecycle
+6. Notification preference CRUD
+7. App-level TOTP 2FA enable/verify/sign-in/disable
+8. MyChart instance deletion and cleanup
+
+**Protocol detection**: Hostnames without a dot (e.g. Docker service names like `fake-mychart:3000`) automatically use HTTP instead of HTTPS.
 
 ## Reference Docs
 
@@ -53,7 +72,7 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
-  - Domain: `mychart.fanpierlabs.com` (CloudFront + ALB + Route53)
+  - Domain: `openrecord.fanpierlabs.com` (CloudFront + ALB + Route53). Old domain `mychart.fanpierlabs.com` redirects via next.config.ts.
   - Region: `us-east-2`
 
 ### Railway / Self-Hosted
@@ -62,6 +81,12 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_BASE_URL`
 - Optional env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth disabled without them)
 - SSL is disabled for Railway Postgres connections (not needed); AWS RDS uses `{ rejectUnauthorized: false }`
+
+## S3 Buckets (us-east-2)
+
+- **mychart-connector** (`arn:aws:s3:::mychart-connector`)
+  - `mychart-logos/` — logos for all MyChart instances, uploaded by `scrapers/list-all-mycharts/fetch-mychart-instances.ts`
+  - Served via `GET /api/mychart-logo?name=<filename>`
 
 ## Secrets (AWS Secrets Manager, us-east-2)
 

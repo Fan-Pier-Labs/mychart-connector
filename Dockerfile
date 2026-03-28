@@ -19,7 +19,7 @@ RUN echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new E
     echo 'export {}' > shared/gmail/util.ts
 
 # Build (NEXT_PUBLIC_* must be set at build time for Next.js inlining)
-ARG NEXT_PUBLIC_BASE_URL=https://mychart.fanpierlabs.com
+ARG NEXT_PUBLIC_BASE_URL=https://openrecord.fanpierlabs.com
 ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
 RUN cd web && bun --bun next build
 

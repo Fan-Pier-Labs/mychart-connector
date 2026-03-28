@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: mychart_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d mychart_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  fake-mychart:
+    build: ./fake-mychart
+    environment:
+      FAKE_MYCHART_ACCEPT_ANY: "true"
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:3000/',{redirect:'manual'}).then(r => process.exit(r.status === 302 || r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 3s
+      timeout: 10s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_BASE_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://testuser:testpass@postgres:5432/mychart_test
+      BETTER_AUTH_SECRET: ci-test-secret-not-for-production
+      ENCRYPTION_KEY: ci-test-encryption-key-32chars!!
+      NEXT_PUBLIC_BASE_URL: http://localhost:8080
+      TRUSTED_ORIGINS: http://localhost:8080
+      PORT: "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fake-mychart:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:8080/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 3s
+      timeout: 10s
+      retries: 30

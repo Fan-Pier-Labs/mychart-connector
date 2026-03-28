@@ -1,12 +1,12 @@
-# MyChart Connector
+# OpenRecord
 
-**Let AI manage your healthcare.** Ask Claude to request a prescription refill, message your doctor to schedule an appointment, review your latest lab results, or update your insurance information — all through a natural conversation. MyChart Connector connects to MyChart and exposes 35+ tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Unlike other health MCP servers that only let you read your data, MyChart Connector has full write support — send messages, request refills, and update your insurance information, not just view it.
+**Let AI manage your healthcare.** Ask Claude to request a prescription refill, message your doctor to schedule an appointment, review your latest lab results, or update your insurance information — all through a natural conversation. OpenRecord connects to MyChart and exposes 35+ tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Unlike other health MCP servers that only let you read your data, OpenRecord has full write support — send messages, request refills, and update your insurance information, not just view it.
 
 The project is **open source** and designed to run on your own infrastructure. Deploy your own instance to [Railway](https://railway.com) with one click — it provisions a database, generates secrets, and runs migrations automatically. You'll have a fully functional MCP server in under 3 minutes with zero configuration.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/5F69Mf?referralCode=xrxOUg)
 
-Or try the hosted version at [mychart.fanpierlabs.com](https://mychart.fanpierlabs.com).
+Or try the hosted version at [openrecord.fanpierlabs.com](https://openrecord.fanpierlabs.com).
 
 ## What It Does
 
@@ -34,7 +34,7 @@ Connects to any Epic MyChart patient portal and exposes 35+ tools for reading an
 
 ## How It Works
 
-MyChart Connector logs in with your credentials, handles 2FA automatically (via TOTP authenticator codes), and interacts with MyChart's APIs on your behalf. No FHIR, no OAuth, no Epic developer account needed — just your MyChart username, password, and optionally a TOTP secret for automatic 2FA.
+OpenRecord logs in with your credentials, handles 2FA automatically (via TOTP authenticator codes), and interacts with MyChart's APIs on your behalf. No FHIR, no OAuth, no Epic developer account needed — just your MyChart username, password, and optionally a TOTP secret for automatic 2FA.
 
 Sessions are kept alive automatically and re-established on expiry.
 
@@ -42,7 +42,7 @@ Sessions are kept alive automatically and re-established on expiry.
 
 Try the MCP server with fake patient data — no account or API key required.
 
-**Demo URL:** `https://mychart.fanpierlabs.com/api/mcp/demo`
+**Demo URL:** `https://openrecord.fanpierlabs.com/api/mcp/demo`
 
 The demo server exposes the same 35+ tools as the real MCP server (medications, lab results, vitals, messages, etc.) but returns fictional data for a sample patient. All meta tools (list_accounts, connect_instance, check_session, complete_2fa) work as well — they just return pre-connected status.
 
@@ -52,7 +52,7 @@ The demo server exposes the same 35+ tools as the real MCP server (medications, 
 
 The fastest way to get started. Sign up, connect your MyChart account, and add the MCP server to Claude Desktop.
 
-1. Sign up at [mychart.fanpierlabs.com](https://mychart.fanpierlabs.com) (or your self-hosted instance)
+1. Sign up at [openrecord.fanpierlabs.com](https://openrecord.fanpierlabs.com) (or your self-hosted instance)
 2. Add your MyChart account — hostname, username, and password
 3. Generate an MCP URL
 4. In Claude Desktop: **Settings → MCP Servers → Add** → Name: `mychart` and MCP URL: the one you copied
@@ -126,7 +126,7 @@ This builds a Docker image, pushes it to ECR, and deploys to ECS Fargate. Infras
 ## Architecture
 
 ```
-mychart-connector/
+openrecord/
   scrapers/          # Shared MyChart scraper code (login, API calls, parsing)
   web/               # Next.js web app + hosted MCP server
   openclaw-plugin/   # Self-contained OpenClaw plugin
