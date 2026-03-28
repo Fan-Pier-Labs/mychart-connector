@@ -42,7 +42,7 @@ export default withSentryConfig(nextConfig, {
 
   org: "fan-pier-labs",
 
-  project: "mychart-connector",
+  project: "openrecord",
 
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
