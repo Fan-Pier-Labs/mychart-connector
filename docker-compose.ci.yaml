@@ -34,7 +34,6 @@ services:
       BETTER_AUTH_SECRET: ci-test-secret-not-for-production
       ENCRYPTION_KEY: ci-test-encryption-key-32chars!!
       NEXT_PUBLIC_BASE_URL: http://localhost:8080
-      MYCHART_FORCE_HTTP: "true"
       TRUSTED_ORIGINS: http://localhost:8080
       PORT: "8080"
     depends_on:

@@ -48,7 +48,7 @@ End-to-end tests in `tests/integration/ci/` that exercise the full user journey 
 7. App-level TOTP 2FA enable/verify/sign-in/disable
 8. MyChart instance deletion and cleanup
 
-**Environment**: Set `MYCHART_FORCE_HTTP=true` on the web container to use HTTP for Docker-internal fake-mychart connections.
+**Protocol detection**: Hostnames without a dot (e.g. Docker service names like `fake-mychart:3000`) automatically use HTTP instead of HTTPS.
 
 ## Reference Docs
 
