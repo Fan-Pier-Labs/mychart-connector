@@ -963,12 +963,6 @@ export default function LoginPage() {
                             Forgot password?
                           </a>
                         </div>
-                        <button
-                          className="w-full text-sm text-blue-600 hover:underline font-medium py-1"
-                          onClick={handleMagicLink}
-                        >
-                          Sign in with email link instead
-                        </button>
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-slate-200" />
