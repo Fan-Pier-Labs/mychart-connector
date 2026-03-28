@@ -11,7 +11,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { generateTotpCode, parseTotpUri } from '../../../scrapers/myChart/totp';
+import { parseTotpUri } from '../../../scrapers/myChart/totp';
+import { createOTP } from '@better-auth/utils/otp';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -474,7 +475,7 @@ describe('App-level TOTP 2FA', () => {
 
   it('verifies TOTP setup with a generated code', async () => {
     // Use the original session cookies from sign-up (still valid after enable)
-    const code = await generateTotpCode(totpSecret);
+    const code = await createOTP(totpSecret).totp();
     const res = await fetch(`${BASE_URL}/api/auth/two-factor/verify-totp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
@@ -515,7 +516,7 @@ describe('App-level TOTP 2FA', () => {
   });
 
   it('completes sign-in with TOTP code', async () => {
-    const code = await generateTotpCode(totpSecret);
+    const code = await createOTP(totpSecret).totp();
     const res = await fetch(`${BASE_URL}/api/auth/two-factor/verify-totp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
