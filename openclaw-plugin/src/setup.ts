@@ -41,8 +41,8 @@ function savePluginConfig(config: Record<string, string>) {
   const fullConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   fullConfig.plugins ??= {};
   fullConfig.plugins.entries ??= {};
-  fullConfig.plugins.entries['mychart-health'] ??= {};
-  fullConfig.plugins.entries['mychart-health'].config = config;
+  fullConfig.plugins.entries['openrecord'] ??= {};
+  fullConfig.plugins.entries['openrecord'].config = config;
   fs.writeFileSync(configPath, JSON.stringify(fullConfig, null, 2));
 }
 
