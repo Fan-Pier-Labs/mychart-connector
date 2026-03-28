@@ -1,5 +1,4 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod/v3';
 import { MyChartRequest } from '../mychart/myChartRequest';
 import { sessionStore } from '../../../../scrapers/myChart/sessionStore';
 import { sendTelemetryEvent } from '../../../../shared/telemetry';
@@ -58,6 +57,7 @@ import type { LabTestResultWithHistory, ImagingResult } from '../../../../scrape
 import type { BillingAccount } from '../../../../scrapers/myChart/bills/types';
 import type { ConversationListResponse } from '../../../../scrapers/myChart/messages/conversations';
 import type { LinkedMyChart } from '../../../../scrapers/myChart/other_mycharts/other_mycharts';
+import { toolDef } from './tool-definitions';
 
 function errorResult(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -150,28 +150,20 @@ type ResolvedConnection =
   | { type: 'fhir'; client: FhirClient; connection: FhirConnection }
   | { error: string };
 
-const FHIR_ONLY_ERROR = (toolName: string) =>
-  `"${toolName}" is only available with Patient Portal connections. This account is connected via Official APIs (FHIR) which doesn't support this feature.`;
+const FHIR_ONLY_ERROR = (toolName = 'This feature') =>
+  `${toolName} is only available with Patient Portal connections. This account is connected via Official APIs (FHIR) which doesn't support this feature.`;
 
-/**
- * Resolve a connection for a user — checks both scraper instances and FHIR connections.
- * Returns a discriminated union so tool handlers can route accordingly.
- */
 async function resolveConnection(userId: string, instanceFilter?: string): Promise<ResolvedConnection> {
-  // Try scraper resolution first
   const scraperResult = await resolveRequest(userId, instanceFilter);
   if (!('error' in scraperResult)) {
     return { type: 'scraper', ...scraperResult };
   }
 
-  // Try FHIR connections
   const fhirConnections = await getFhirConnections(userId);
   if (fhirConnections.length === 0) {
-    // Return original scraper error if no FHIR connections either
     return scraperResult;
   }
 
-  // Filter by hostname/org name if specified
   let candidates = fhirConnections;
   if (instanceFilter) {
     candidates = fhirConnections.filter(c =>
@@ -187,38 +179,28 @@ async function resolveConnection(userId: string, instanceFilter?: string): Promi
   if (candidates.length === 1) {
     const conn = candidates[0];
     const client = new FhirClient(
-      conn.fhirServerUrl,
-      conn.fhirPatientId,
-      conn.id,
-      conn.userId,
+      conn.fhirServerUrl, conn.fhirPatientId, conn.id, conn.userId,
       { accessToken: conn.accessToken, refreshToken: conn.refreshToken, tokenExpiresAt: conn.tokenExpiresAt }
     );
     return { type: 'fhir', client, connection: conn };
   }
 
-  // Multiple — check if we also have scraper instances to list both
   const instances = await getMyChartInstances(userId);
-  const scraperHostnames = instances.map(i => i.hostname);
-  const fhirNames = candidates.map(c => c.organizationName);
-  const allNames = [...scraperHostnames, ...fhirNames].join(', ');
+  const allNames = [...instances.map(i => i.hostname), ...candidates.map(c => c.organizationName)].join(', ');
   return { error: `Multiple accounts available. Specify the 'instance' parameter with one of: ${allNames}` };
 }
 
 type ScraperFn = (req: MyChartRequest) => Promise<unknown>;
 type FhirFn = (client: FhirClient) => Promise<unknown>;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RegFn = (name: string, handler: (...args: any[]) => Promise<CallToolResult>) => void;
+
 /**
  * Register a scraper-only tool. FHIR connections get a clear error message.
  */
-function registerScraperTool(server: McpServer, userId: string, name: string, description: string, scraperFn: ScraperFn) {
-  server.registerTool(
-    name,
-    {
-      description,
-      inputSchema: { instance: z.string().optional().describe('MyChart hostname or organization name (required if multiple accounts connected)') },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+function registerScraperTool(server: McpServer, userId: string, reg: RegFn, name: string, scraperFn: ScraperFn) {
+  reg(name,
     async (args: { instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: name });
       console.log(`[mcp] Tool call: ${name} (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -251,17 +233,9 @@ function registerScraperTool(server: McpServer, userId: string, name: string, de
 
 /**
  * Register a tool that works with both scraper and FHIR connections.
- * Routes to the appropriate backend based on connection type.
  */
-function registerDualTool(server: McpServer, userId: string, name: string, description: string, scraperFn: ScraperFn, fhirFn: FhirFn) {
-  server.registerTool(
-    name,
-    {
-      description,
-      inputSchema: { instance: z.string().optional().describe('MyChart hostname or organization name (required if multiple accounts connected)') },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+function registerDualTool(server: McpServer, userId: string, reg: RegFn, name: string, scraperFn: ScraperFn, fhirFn: FhirFn) {
+  reg(name,
     async (args: { instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: name });
       console.log(`[mcp] Tool call: ${name} (user=${userId}, instance=${args.instance || 'auto'})`);
@@ -297,14 +271,23 @@ function registerDualTool(server: McpServer, userId: string, name: string, descr
 export function createMcpServer(userId: string): McpServer {
   sendTelemetryEvent('mcp_server_created');
   const server = new McpServer({
-    name: 'mychart-health',
+    name: 'openrecord',
     version: '1.0.0',
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function reg(name: string, handler: (...args: any[]) => Promise<CallToolResult>) {
+    const def = toolDef(name);
+    server.registerTool(
+      name,
+      { description: def.description, inputSchema: def.inputSchema },
+      // @ts-expect-error zod v3/v4 compat
+      handler
+    );
+  }
+
   // Meta tools
-  server.tool(
-    'list_accounts',
-    'List all MyChart accounts (Patient Portal and FHIR) and their connection status',
+  reg('list_accounts',
     async (): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: list_accounts (user=${userId})`);
       try {
@@ -343,14 +326,7 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'connect_instance',
-    {
-      description: 'Connect to a MyChart instance by hostname. Auto-completes 2FA if TOTP is configured.',
-      inputSchema: { instance: z.string().describe('MyChart hostname to connect to') },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('connect_instance',
     async (args: { instance: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: connect_instance (user=${userId}, instance=${args.instance})`);
       try {
@@ -374,14 +350,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Auth tools
-  server.registerTool(
-    'check_session',
-    {
-      description: 'Check current session status and hostname for a MyChart instance',
-      inputSchema: { instance: z.string().optional().describe('MyChart hostname (checks all if omitted)') },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('check_session',
     async (args: { instance?: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: check_session (user=${userId}, instance=${args.instance || 'all'})`);
       try {
@@ -433,17 +402,7 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'complete_2fa',
-    {
-      description: 'Complete 2FA verification for a MyChart instance. Pass the 2FA code and instance hostname.',
-      inputSchema: {
-        code: z.string(),
-        instance: z.string().describe('MyChart hostname requiring 2FA'),
-      },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('complete_2fa',
     async (args: { code: string; instance: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: complete_2fa (user=${userId}, instance=${args.instance})`);
       try {
@@ -477,8 +436,8 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  // Scraper tools — dual-mode (scraper + FHIR)
-  registerDualTool(server, userId, 'get_profile', 'Get patient profile (name, DOB, MRN, PCP) and email', async (req) => {
+  // Scraper tools (dual-mode where FHIR supports it)
+  registerDualTool(server, userId, reg,'get_profile', async (req) => {
     const profile = await getMyChartProfile(req);
     const email = await getEmail(req);
     return { ...profile, email };
@@ -487,52 +446,37 @@ export function createMcpServer(userId: string): McpServer {
     return mapPatientToProfile(patient);
   });
 
-  registerScraperTool(server, userId, 'get_health_summary', 'Get health summary (vitals, blood type, etc.)', getHealthSummary);
+  registerScraperTool(server, userId, reg,'get_health_summary', getHealthSummary);
 
-  registerDualTool(server, userId, 'get_medications', 'Get current medications list', getMedications, async (client) => {
+  registerDualTool(server, userId, reg,'get_medications', getMedications, async (client) => {
     const resources = await client.getMedicationRequests();
     const patient = await client.getPatient();
     const name = mapPatientToProfile(patient).name;
     return mapMedicationRequests(resources, name);
   });
 
-  registerDualTool(server, userId, 'get_allergies', 'Get allergies list', getAllergies, async (client) => {
-    const resources = await client.getAllergyIntolerances();
-    return mapAllergyIntolerances(resources);
+  registerDualTool(server, userId, reg,'get_allergies', getAllergies, async (client) => {
+    return mapAllergyIntolerances(await client.getAllergyIntolerances());
   });
 
-  registerDualTool(server, userId, 'get_health_issues', 'Get health issues / active conditions', getHealthIssues, async (client) => {
-    const resources = await client.getConditions();
-    return mapConditions(resources);
+  registerDualTool(server, userId, reg,'get_health_issues', getHealthIssues, async (client) => {
+    return mapConditions(await client.getConditions());
   });
 
-  registerDualTool(server, userId, 'get_upcoming_visits', 'Get upcoming appointments', upcomingVisits, async (client) => {
-    const resources = await client.getEncounters('planned');
-    return mapEncountersToVisits(resources);
+  registerDualTool(server, userId, reg,'get_upcoming_visits', upcomingVisits, async (client) => {
+    return mapEncountersToVisits(await client.getEncounters('planned'));
   });
 
-  server.registerTool(
-    'get_past_visits',
-    {
-      description: 'Get past visits/appointments. Optionally specify years_back (default 2).',
-      inputSchema: {
-        years_back: z.number().optional(),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('get_past_visits',
     async (args: { years_back?: number; instance?: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_past_visits (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-
         if (resolved.type === 'fhir') {
           const resources = await resolved.client.getEncounters('finished');
           return jsonResult(mapEncountersToVisits(resources));
         }
-
         const oldest = new Date();
         oldest.setFullYear(oldest.getFullYear() - (args.years_back ?? 2));
         const data = await pastVisits(resolved.mychartRequest, oldest);
@@ -546,30 +490,18 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Lab results — trimmed + paginated
-  server.registerTool(
-    'get_lab_results',
-    {
-      description: 'Get lab results. Returns trimmed results with component name, value, units, range, and abnormal flag. Supports pagination (default limit 10).',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max results to return (default 10)'),
-        offset: z.number().optional().describe('Number of results to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_lab_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_lab_results (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-
         if (resolved.type === 'fhir') {
           const resources = await resolved.client.getObservations('laboratory');
           const mapped = mapObservationsToLabResults(resources);
           const page = paginate(mapped, args.limit ?? 10, args.offset);
           return jsonResult({ total: mapped.length, offset: args.offset ?? 0, count: page.length, results: page });
         }
-
         const raw = await listLabResults(resolved.mychartRequest) as LabTestResultWithHistory[];
         const trimmed = trimLabResults(raw);
         const page = paginate(trimmed, args.limit ?? 10, args.offset);
@@ -583,24 +515,15 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Messages — trimmed + paginated
-  server.registerTool(
-    'get_messages',
-    {
-      description: 'Get message conversations. Returns subject, date, author, and plain text body (HTML stripped). Supports pagination (default limit 10).',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max conversations to return (default 10)'),
-        offset: z.number().optional().describe('Number of conversations to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_messages',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_messages (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('get_messages'));
-        const raw = await listConversations(resolved.mychartRequest) as ConversationListResponse | null;
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
+        const result = resolved;
+        const raw = await listConversations(result.mychartRequest) as ConversationListResponse | null;
         const trimmed = trimMessages(raw);
         const page = paginate(trimmed, args.limit ?? 10, args.offset);
         return jsonResult({ total: trimmed.length, offset: args.offset ?? 0, count: page.length, conversations: page });
@@ -613,27 +536,20 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Message recipients + topics
-  server.registerTool(
-    'get_message_recipients',
-    {
-      description: 'Get list of available message recipients (providers) and message topics/categories',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_message_recipients',
     async (args: { instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_message_recipients' });
       console.log(`[mcp] Tool call: get_message_recipients (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('get_message_recipients'));
-        const token = await getVerificationToken(resolved.mychartRequest);
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
+        const result = resolved;
+        const token = await getVerificationToken(result.mychartRequest);
         if (!token) return errorResult('Could not get verification token');
         const [recipients, topics] = await Promise.all([
-          getMessageRecipients(resolved.mychartRequest, token),
-          getMessageTopics(resolved.mychartRequest, token),
+          getMessageRecipients(result.mychartRequest, token),
+          getMessageTopics(result.mychartRequest, token),
         ]);
         return jsonResult({ recipients, topics });
       } catch (err) {
@@ -645,26 +561,14 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Send new message
-  server.registerTool(
-    'send_message',
-    {
-      description: 'Send a new message to a provider, starting a new conversation thread',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        recipient_name: z.string().describe('Name of the recipient provider (fuzzy matched against available recipients)'),
-        topic: z.string().describe('Message topic/category (fuzzy matched against available topics)'),
-        subject: z.string().describe('Message subject line'),
-        message_body: z.string().describe('Message body text'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_message',
     async (args: { instance?: string; recipient_name: string; topic: string; subject: string; message_body: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_message' });
       console.log(`[mcp] Tool call: send_message (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('send_message'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
         const token = await getVerificationToken(result.mychartRequest);
         if (!token) return errorResult('Could not get verification token');
@@ -718,24 +622,14 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Send reply to existing conversation
-  server.registerTool(
-    'send_reply',
-    {
-      description: 'Reply to an existing message conversation',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        conversation_id: z.string().describe('The conversation ID (hthId from get_messages) to reply to'),
-        message_body: z.string().describe('Reply message body text'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('send_reply',
     async (args: { instance?: string; conversation_id: string; message_body: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_reply' });
       console.log(`[mcp] Tool call: send_reply (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('send_reply'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
         const replyResult = await sendReply(result.mychartRequest, {
           conversationId: args.conversation_id,
@@ -751,23 +645,14 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Request medication refill
-  server.registerTool(
-    'request_refill',
-    {
-      description: 'Request a medication refill. Use get_medications first to find the medication key for refillable medications.',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        medication_name: z.string().describe('Name of the medication to refill (fuzzy matched against current medications)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('request_refill',
     async (args: { instance?: string; medication_name: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'request_refill' });
       console.log(`[mcp] Tool call: request_refill (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('request_refill'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
 
         // Get medications to find the matching one
@@ -806,23 +691,13 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Billing — trimmed + paginated
-  server.registerTool(
-    'get_billing',
-    {
-      description: 'Get billing history including visits/charges, patient payments (MyChart payments made via credit card), and statements. Supports pagination on visits (default limit 10).',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max visits per account to return (default 10)'),
-        offset: z.number().optional().describe('Number of visits to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_billing',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_billing (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('get_billing'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
         const raw = await getBillingHistory(result.mychartRequest) as BillingAccount[];
         const trimmed = trimBilling(raw);
@@ -840,45 +715,30 @@ export function createMcpServer(userId: string): McpServer {
       }
     }
   );
-  registerDualTool(server, userId, 'get_care_team', 'Get care team members', getCareTeam, async (client) => {
-    const resources = await client.getCareTeams();
-    return mapCareTeams(resources);
+  registerDualTool(server, userId, reg,'get_care_team', getCareTeam, async (client) => {
+    return mapCareTeams(await client.getCareTeams());
   });
-  registerScraperTool(server, userId, 'get_insurance', 'Get insurance information', getInsurance);
-  registerDualTool(server, userId, 'get_immunizations', 'Get immunization records', getImmunizations, async (client) => {
-    const resources = await client.getImmunizations();
-    return mapImmunizations(resources);
+  registerScraperTool(server, userId, reg,'get_insurance', getInsurance);
+  registerDualTool(server, userId, reg,'get_immunizations', getImmunizations, async (client) => {
+    return mapImmunizations(await client.getImmunizations());
   });
-  registerScraperTool(server, userId, 'get_preventive_care', 'Get preventive care items and recommendations', getPreventiveCare);
-  registerScraperTool(server, userId, 'get_referrals', 'Get referral information', getReferrals);
-  registerScraperTool(server, userId, 'get_medical_history', 'Get medical history (past conditions, surgical history, family history)', getMedicalHistory);
-  registerScraperTool(server, userId, 'get_letters', 'Get letters (after-visit summaries, clinical documents)', getLetters);
-  registerDualTool(server, userId, 'get_vitals', 'Get vitals and track-my-health flowsheet data (weight, blood pressure, etc.)', getVitals, async (client) => {
-    const resources = await client.getObservations('vital-signs');
-    return mapObservationsToVitals(resources);
+  registerScraperTool(server, userId, reg,'get_preventive_care', getPreventiveCare);
+  registerScraperTool(server, userId, reg,'get_referrals', getReferrals);
+  registerScraperTool(server, userId, reg,'get_medical_history', getMedicalHistory);
+  registerScraperTool(server, userId, reg,'get_letters', getLetters);
+  registerDualTool(server, userId, reg,'get_vitals', getVitals, async (client) => {
+    return mapObservationsToVitals(await client.getObservations('vital-signs'));
   });
-  registerScraperTool(server, userId, 'get_emergency_contacts', 'Get emergency contacts', getEmergencyContacts);
+  registerScraperTool(server, userId, reg,'get_emergency_contacts', getEmergencyContacts);
 
-  server.registerTool(
-    'add_emergency_contact',
-    {
-      description: 'Add a new emergency contact',
-      inputSchema: {
-        name: z.string().describe('Full name of the emergency contact'),
-        relationship_type: z.string().describe('Relationship to patient (e.g. Spouse, Parent, Friend, Sibling)'),
-        phone_number: z.string().describe('Phone number'),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('add_emergency_contact',
     async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'add_emergency_contact' });
       console.log(`[mcp] Tool call: add_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('add_emergency_contact'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
         const data = await addEmergencyContact(result.mychartRequest, {
           name: args.name,
@@ -894,27 +754,14 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'update_emergency_contact',
-    {
-      description: 'Update an existing emergency contact. Get the contact ID from get_emergency_contacts first.',
-      inputSchema: {
-        id: z.string().describe('Contact ID to update'),
-        name: z.string().optional().describe('New full name'),
-        relationship_type: z.string().optional().describe('New relationship type'),
-        phone_number: z.string().optional().describe('New phone number'),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('update_emergency_contact',
     async (args: { id: string; name?: string; relationship_type?: string; phone_number?: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'update_emergency_contact' });
       console.log(`[mcp] Tool call: update_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('update_emergency_contact'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
         const data = await updateEmergencyContact(result.mychartRequest, {
           id: args.id,
@@ -931,24 +778,14 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  server.registerTool(
-    'remove_emergency_contact',
-    {
-      description: 'Remove an emergency contact. Get the contact ID from get_emergency_contacts first.',
-      inputSchema: {
-        id: z.string().describe('Contact ID to remove'),
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-      },
-    },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore zod v3/v4 compat causes deep type recursion in MCP SDK generics
+  reg('remove_emergency_contact',
     async (args: { id: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'remove_emergency_contact' });
       console.log(`[mcp] Tool call: remove_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR('remove_emergency_contact'));
+        if (resolved.type === 'fhir') return errorResult(FHIR_ONLY_ERROR());
         const result = resolved;
         const data = await removeEmergencyContact(result.mychartRequest, args.id);
         return jsonResult(data);
@@ -960,42 +797,29 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  registerDualTool(server, userId, 'get_documents', 'Get clinical documents', getDocuments, async (client) => {
-    const resources = await client.getDocumentReferences();
-    return mapDocumentReferences(resources);
+  registerDualTool(server, userId, reg,'get_documents', getDocuments, async (client) => {
+    return mapDocumentReferences(await client.getDocumentReferences());
   });
-  registerScraperTool(server, userId, 'get_goals', 'Get care team and patient goals', getGoals);
-  registerScraperTool(server, userId, 'get_upcoming_orders', 'Get upcoming orders (labs, imaging, procedures)', getUpcomingOrders);
-  registerScraperTool(server, userId, 'get_questionnaires', 'Get questionnaires and health assessments', getQuestionnaires);
-  registerScraperTool(server, userId, 'get_care_journeys', 'Get care journeys and care plans', getCareJourneys);
-  registerScraperTool(server, userId, 'get_activity_feed', 'Get recent activity feed items', getActivityFeed);
-  registerScraperTool(server, userId, 'get_education_materials', 'Get assigned education materials', getEducationMaterials);
-  registerScraperTool(server, userId, 'get_ehi_export', 'Get electronic health information export templates', getEhiExportTemplates);
+  registerScraperTool(server, userId, reg,'get_goals', getGoals);
+  registerScraperTool(server, userId, reg,'get_upcoming_orders', getUpcomingOrders);
+  registerScraperTool(server, userId, reg,'get_questionnaires', getQuestionnaires);
+  registerScraperTool(server, userId, reg,'get_care_journeys', getCareJourneys);
+  registerScraperTool(server, userId, reg,'get_activity_feed', getActivityFeed);
+  registerScraperTool(server, userId, reg,'get_education_materials', getEducationMaterials);
+  registerScraperTool(server, userId, reg,'get_ehi_export', getEhiExportTemplates);
   // Imaging — trimmed (strips report HTML, keeps impression text)
-  server.registerTool(
-    'get_imaging_results',
-    {
-      description: 'Get imaging results (X-ray, MRI, CT, ultrasound). Returns order name, date, provider, and report/impression text.',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        limit: z.number().optional().describe('Max results to return (default 10)'),
-        offset: z.number().optional().describe('Number of results to skip (default 0)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_imaging_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_imaging_results (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
         const resolved = await resolveConnection(userId, args.instance);
         if ('error' in resolved) return errorResult(resolved.error);
-
         if (resolved.type === 'fhir') {
           const resources = await resolved.client.getDiagnosticReports('imaging');
           const mapped = mapDiagnosticReportsToImaging(resources);
           const page = paginate(mapped, args.limit ?? 10, args.offset);
           return jsonResult({ total: mapped.length, offset: args.offset ?? 0, count: page.length, results: page });
         }
-
         const raw = await getImagingResults(resolved.mychartRequest) as ImagingResult[];
         const trimmed = trimImagingResults(raw);
         const page = paginate(trimmed, args.limit ?? 10, args.offset);
@@ -1009,17 +833,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Get available appointment slots
-  server.registerTool(
-    'get_available_appointments',
-    {
-      description: 'Get available appointment slots for scheduling. Optionally filter by provider name or visit type.',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        provider_name: z.string().optional().describe('Filter by provider name (fuzzy match)'),
-        visit_type: z.string().optional().describe('Filter by visit type (e.g. Office Visit, Lab Work, Follow-Up)'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('get_available_appointments',
     async (_args: { instance?: string; provider_name?: string; visit_type?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_available_appointments' });
       return errorResult('Appointment scheduling is not yet available for real MyChart instances. This feature is coming soon.');
@@ -1027,17 +841,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Book appointment
-  server.registerTool(
-    'book_appointment',
-    {
-      description: 'Book an appointment using a slot ID from get_available_appointments',
-      inputSchema: {
-        instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
-        slot_id: z.string().describe('The slot ID from get_available_appointments to book'),
-        reason: z.string().optional().describe('Reason for the visit'),
-      },
-    },
-    // @ts-expect-error zod v3/v4 compat
+  reg('book_appointment',
     async (_args: { instance?: string; slot_id: string; reason?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'book_appointment' });
       return errorResult('Appointment booking is not yet available for real MyChart instances. This feature is coming soon.');
@@ -1045,7 +849,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Linked accounts — trimmed (drops logo URLs)
-  registerScraperTool(server, userId, 'get_linked_mychart_accounts', 'Get linked MyChart accounts from other healthcare organizations', async (req) => {
+  registerScraperTool(server, userId, reg,'get_linked_mychart_accounts', async (req) => {
     const raw = await getLinkedMyChartAccounts(req) as LinkedMyChart[];
     return trimLinkedAccounts(raw);
   });

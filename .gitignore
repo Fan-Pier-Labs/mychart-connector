@@ -43,3 +43,6 @@ scrapers/myChart/clo-to-jpg-converter/input_study_one/amf_metadata.bin
 *.clo
 # Allow synthetic (non-PII) CLO test images for fake-mychart
 !fake-mychart/src/data/clo-images/*.clo
+
+# Downloaded MyChart logos (large, stored in S3)
+scrapers/list-all-mycharts/logos/

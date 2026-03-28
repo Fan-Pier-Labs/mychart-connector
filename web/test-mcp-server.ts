@@ -102,10 +102,10 @@ async function main() {
   }
 
   // --- 2. Server info ---
-  await runTest("Server identifies as mychart-health", async () => {
+  await runTest("Server identifies as openrecord", async () => {
     const version = client.getServerVersion();
-    if (version?.name !== "mychart-health") {
-      throw new Error(`Expected "mychart-health", got "${version?.name}"`);
+    if (version?.name !== "openrecord") {
+      throw new Error(`Expected "openrecord", got "${version?.name}"`);
     }
     return undefined;
   });

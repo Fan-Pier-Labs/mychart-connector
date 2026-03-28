@@ -17,8 +17,38 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyChart Claude Connector - Manage your Health data with AI",
-  description: "Connect MyChart portal to Claude. Manage your health records, send messages, book appointments, request refills, and more all with AI.",
+  title: "OpenRecord - Manage your Health Data with AI",
+  description:
+    "Connect your MyChart portal to Claude AI. Manage health records, send messages, book appointments, request refills, and more — all with AI.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_BASE_URL || "https://openrecord.fanpierlabs.com"
+  ),
+  openGraph: {
+    title: "OpenRecord - Manage your Health Data with AI",
+    description:
+      "Connect your MyChart portal to Claude AI. Manage health records, send messages, book appointments, request refills, and more — all with AI.",
+    siteName: "OpenRecord",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "OpenRecord — Manage your healthcare with Claude AI",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OpenRecord - Manage your Health Data with AI",
+    description:
+      "Connect your MyChart portal to Claude AI. Manage health records, send messages, book appointments, request refills, and more — all with AI.",
+    images: ["/og-image.png"],
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

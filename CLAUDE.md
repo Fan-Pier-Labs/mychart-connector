@@ -53,7 +53,7 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
-  - Domain: `mychart.fanpierlabs.com` (CloudFront + ALB + Route53)
+  - Domain: `openrecord.fanpierlabs.com` (CloudFront + ALB + Route53). Old domain `mychart.fanpierlabs.com` redirects via next.config.ts.
   - Region: `us-east-2`
 
 ### Railway / Self-Hosted
@@ -62,6 +62,12 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_BASE_URL`
 - Optional env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth disabled without them)
 - SSL is disabled for Railway Postgres connections (not needed); AWS RDS uses `{ rejectUnauthorized: false }`
+
+## S3 Buckets (us-east-2)
+
+- **mychart-connector** (`arn:aws:s3:::mychart-connector`)
+  - `mychart-logos/` — logos for all MyChart instances, uploaded by `scrapers/list-all-mycharts/fetch-mychart-instances.ts`
+  - Served via `GET /api/mychart-logo?name=<filename>`
 
 ## Secrets (AWS Secrets Manager, us-east-2)
 
