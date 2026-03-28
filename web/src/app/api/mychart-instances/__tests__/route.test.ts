@@ -85,6 +85,7 @@ function makeInstance(overrides: Record<string, unknown> = {}) {
     password: 'testpass',
     totpSecret: null,
     mychartEmail: null,
+    enabled: true,
     createdAt: new Date('2025-01-01'),
     updatedAt: new Date('2025-01-01'),
     ...overrides,
@@ -173,5 +174,40 @@ describe('GET /api/mychart-instances', () => {
     const body = await res.json();
 
     expect(body[0].connected).toBe(false);
+  });
+
+  it('includes enabled field in response', async () => {
+    const inst = makeInstance({ enabled: true });
+    mockGetInstances.mockResolvedValueOnce([inst]);
+
+    const res = await GET(makeRequest() as never);
+    const body = await res.json();
+
+    expect(body[0].enabled).toBe(true);
+  });
+
+  it('does not auto-connect disabled instances even with TOTP', async () => {
+    const inst = makeInstance({ totpSecret: 'ABCDEF', enabled: false });
+    mockGetInstances.mockResolvedValueOnce([inst]);
+
+    const res = await GET(makeRequest() as never);
+    const body = await res.json();
+
+    expect(mockAutoConnect).not.toHaveBeenCalled();
+    expect(body[0].connected).toBe(false);
+    expect(body[0].enabled).toBe(false);
+  });
+
+  it('returns both enabled and disabled instances', async () => {
+    const enabled = makeInstance({ id: 'inst-1', enabled: true });
+    const disabled = makeInstance({ id: 'inst-2', hostname: 'other.com', enabled: false });
+    mockGetInstances.mockResolvedValueOnce([enabled, disabled]);
+
+    const res = await GET(makeRequest() as never);
+    const body = await res.json();
+
+    expect(body).toHaveLength(2);
+    expect(body[0].enabled).toBe(true);
+    expect(body[1].enabled).toBe(false);
   });
 });

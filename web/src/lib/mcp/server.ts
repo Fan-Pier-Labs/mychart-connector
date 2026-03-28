@@ -62,10 +62,13 @@ async function resolveRequest(
   instanceHostname?: string
 ): Promise<{ mychartRequest: MyChartRequest; instance: MyChartInstance } | { error: string }> {
   console.log(`[mcp] resolveRequest: userId=${userId}, instanceHostname=${instanceHostname || 'auto'}`);
-  const instances = await getMyChartInstances(userId);
-  console.log(`[mcp] resolveRequest: found ${instances.length} instance(s): ${instances.map(i => i.hostname).join(', ')}`);
+  const allInstances = await getMyChartInstances(userId);
+  const instances = allInstances.filter(i => i.enabled);
+  console.log(`[mcp] resolveRequest: found ${allInstances.length} instance(s), ${instances.length} enabled: ${instances.map(i => i.hostname).join(', ')}`);
   if (instances.length === 0) {
-    return { error: 'No MyChart accounts configured. Add one at the web app.' };
+    return { error: allInstances.length > 0
+      ? 'All MyChart accounts are disabled. Enable one at the web app.'
+      : 'No MyChart accounts configured. Add one at the web app.' };
   }
 
   // Find connected instances (only logged_in status, not need_2fa or expired)
@@ -194,6 +197,7 @@ export function createMcpServer(userId: string): McpServer {
             username: inst.username,
             connected: !!entry && entry.status === 'logged_in',
             hasTotpSecret: !!inst.totpSecret,
+            enabled: inst.enabled,
           };
         });
         return jsonResult(accounts);
