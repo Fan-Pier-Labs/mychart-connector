@@ -233,6 +233,7 @@ When reverse engineering health portal APIs (MyChart, etc.), the request headers
 - CI must pass (lint, tests, build) before merging
 - **NEVER merge pull requests or enable auto merge without the user's explicit permission.** Wait for the user to explicitly tell you to do so.
 - **Always write tests for all changes.** Unit tests for scraper/utility logic, and integration tests (in `tests/integration/ci/integration.test.ts`) for web app features and API endpoints. No PR should be submitted without corresponding test coverage.
+- **Run the web app for the user to test.** When web app changes are ready for review, start the dev server on a random local port (use `python3 -c "import random; print(random.randint(3100, 3999))"` to pick the port, then `cd web && PORT=<port> bun run dev`). Share the URL so the user can test in the browser.
 
 ### Creating / Updating PRs
 
