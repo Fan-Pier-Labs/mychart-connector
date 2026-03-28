@@ -14,6 +14,7 @@
     "test:integration": "NODE_ENV=development bun test scrapers/myChart/__tests__/integration/",
     "test:fake-mychart": "bun test scrapers/myChart/__tests__/fake-mychart/fake-mychart.test.ts",
     "test:fake-mychart-terms": "bun test scrapers/myChart/__tests__/fake-mychart/terms-and-conditions.test.ts",
+    "test:ci-integration": "bun test tests/integration/ci/",
     "deploy": "python3 node_modules/deploy/main.py --config web/deploy.yaml"
   },
   "dependencies": {
