@@ -12,7 +12,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import { parseTotpUri } from '../../../scrapers/myChart/totp';
-import { createOTP } from '@better-auth/utils/otp';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -107,6 +106,17 @@ async function signOut() {
   });
   cookies = extractCookies(res);
   return res;
+}
+
+/** Generate a TOTP code using BetterAuth's server-side generation endpoint. */
+async function generateTotpCode(secret: string, authCookies: string): Promise<string> {
+  const res = await fetch(`${BASE_URL}/api/auth/two-factor/generate-totp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: authCookies, Origin: BASE_URL },
+    body: JSON.stringify({ secret }),
+  });
+  const body = await res.json();
+  return body.code;
 }
 
 // ===================================================================
@@ -475,7 +485,7 @@ describe('App-level TOTP 2FA', () => {
 
   it('verifies TOTP setup with a generated code', async () => {
     // Use the original session cookies from sign-up (still valid after enable)
-    const code = await createOTP(totpSecret).totp();
+    const code = await generateTotpCode(totpSecret, tfaCookies);
     const res = await fetch(`${BASE_URL}/api/auth/two-factor/verify-totp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
@@ -516,7 +526,7 @@ describe('App-level TOTP 2FA', () => {
   });
 
   it('completes sign-in with TOTP code', async () => {
-    const code = await createOTP(totpSecret).totp();
+    const code = await generateTotpCode(totpSecret, tfaCookies);
     const res = await fetch(`${BASE_URL}/api/auth/two-factor/verify-totp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
