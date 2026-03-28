@@ -14,7 +14,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAppContext, type MyChartInstanceInfo } from "@/lib/app-context";
-import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/track";
 import { QRCodeSVG } from "qrcode.react";
@@ -43,7 +42,6 @@ export default function HomePage() {
   const [fhirSearchResults, setFhirSearchResults] = useState<Array<{ name: string; fhirBaseUrl: string }>>([]);
   const [fhirSearchLoading, setFhirSearchLoading] = useState(false);
   const [fhirConnecting, setFhirConnecting] = useState(false);
-  const searchParams = useSearchParams();
 
   // 2FA state
   const [twofaSessionKey, setTwofaSessionKey] = useState("");
@@ -132,12 +130,12 @@ export default function HomePage() {
 
   // Handle FHIR callback URL params
   useEffect(() => {
-    const fhirConnected = searchParams.get("fhir_connected");
-    const fhirError = searchParams.get("fhir_error");
+    const params = new URLSearchParams(window.location.search);
+    const fhirConnected = params.get("fhir_connected");
+    const fhirError = params.get("fhir_error");
     if (fhirConnected) {
       toast.success("FHIR connection established successfully!");
       ctx.refreshInstances();
-      // Clean up URL params
       window.history.replaceState({}, "", "/home");
     }
     if (fhirError) {
@@ -145,7 +143,7 @@ export default function HomePage() {
       window.history.replaceState({}, "", "/home");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, []);
 
   // FHIR endpoint search with debounce
   useEffect(() => {
