@@ -146,9 +146,17 @@ describe('Authentication', () => {
   });
 
   it('signs out successfully', async () => {
-    await signOut();
-    const res = await authedFetch('/api/mychart-instances');
-    expect(res.status).toBe(401);
+    const res = await signOut();
+    // Sign-out should return 200
+    expect(res.status).toBe(200);
+
+    // Clear cookies locally and verify unauthenticated access fails
+    const savedCookies = cookies;
+    cookies = '';
+    const unauthedRes = await authedFetch('/api/mychart-instances');
+    expect(unauthedRes.status).toBe(401);
+    // Restore cookies for subsequent tests (sign-in will overwrite)
+    cookies = savedCookies;
   });
 
   it('signs in with existing credentials', async () => {
@@ -413,6 +421,20 @@ describe('App-level TOTP 2FA', () => {
   let tfaCookies = '';
   let totpSecret = '';
 
+  /** Merge Set-Cookie headers into tfaCookies (don't replace, merge). */
+  function mergeTfaCookies(res: Response) {
+    const setCookieHeaders = res.headers.getSetCookie?.() ?? [];
+    const existing = parseCookieString(tfaCookies);
+    for (const header of setCookieHeaders) {
+      const nameValue = header.split(';')[0];
+      const eqIdx = nameValue.indexOf('=');
+      if (eqIdx > 0) {
+        existing[nameValue.slice(0, eqIdx).trim()] = nameValue.slice(eqIdx + 1).trim();
+      }
+    }
+    tfaCookies = Object.entries(existing).map(([k, v]) => `${k}=${v}`).join('; ');
+  }
+
   it('creates a dedicated user for 2FA testing', async () => {
     const res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
       method: 'POST',
@@ -421,8 +443,7 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
     expect(res.status).toBe(200);
-    const setCookies = res.headers.getSetCookie?.() ?? [];
-    tfaCookies = setCookies.map((h: string) => h.split(';')[0]).join('; ');
+    mergeTfaCookies(res);
     expect(tfaCookies).toContain('better-auth.session_token');
   });
 
@@ -434,6 +455,7 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
     expect(res.status).toBe(200);
+    mergeTfaCookies(res);
 
     const body = await res.json();
     expect(body.totpURI).toBeDefined();
@@ -445,11 +467,6 @@ describe('App-level TOTP 2FA', () => {
     const parsed = parseTotpUri(body.totpURI);
     totpSecret = parsed.secret;
     expect(totpSecret).toBeTruthy();
-
-    const setCookies = res.headers.getSetCookie?.() ?? [];
-    if (setCookies.length > 0) {
-      tfaCookies = setCookies.map((h: string) => h.split(';')[0]).join('; ');
-    }
   });
 
   it('verifies TOTP setup with a generated code', async () => {
@@ -461,11 +478,7 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
     expect(res.status).toBe(200);
-
-    const setCookies = res.headers.getSetCookie?.() ?? [];
-    if (setCookies.length > 0) {
-      tfaCookies = setCookies.map((h: string) => h.split(';')[0]).join('; ');
-    }
+    mergeTfaCookies(res);
   });
 
   it('sign-in requires 2FA after enabling', async () => {
@@ -476,6 +489,9 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
 
+    // Clear cookies for fresh sign-in
+    tfaCookies = '';
+
     // Sign in — should get twoFactorRedirect
     const res = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
       method: 'POST',
@@ -484,13 +500,9 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
     expect(res.status).toBe(200);
+    mergeTfaCookies(res);
     const body = await res.json();
     expect(body.twoFactorRedirect).toBe(true);
-
-    const setCookies = res.headers.getSetCookie?.() ?? [];
-    if (setCookies.length > 0) {
-      tfaCookies = setCookies.map((h: string) => h.split(';')[0]).join('; ');
-    }
   });
 
   it('completes sign-in with TOTP code', async () => {
@@ -502,11 +514,7 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
     expect(res.status).toBe(200);
-
-    const setCookies = res.headers.getSetCookie?.() ?? [];
-    if (setCookies.length > 0) {
-      tfaCookies = setCookies.map((h: string) => h.split(';')[0]).join('; ');
-    }
+    mergeTfaCookies(res);
 
     // Verify we're authenticated
     const sessionRes = await fetch(`${BASE_URL}/api/mcp-key`, {
@@ -524,6 +532,7 @@ describe('App-level TOTP 2FA', () => {
       redirect: 'manual',
     });
     expect(res.status).toBe(200);
+    mergeTfaCookies(res);
   });
 
   it('sign-in no longer requires 2FA after disabling', async () => {
