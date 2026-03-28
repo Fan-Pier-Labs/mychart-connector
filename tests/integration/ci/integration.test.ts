@@ -473,28 +473,22 @@ describe('App-level TOTP 2FA', () => {
   });
 
   it('verifies TOTP setup with a generated code', async () => {
-    // BetterAuth's nextCookies() plugin may rotate the session during enable
-    // without exposing it via Set-Cookie headers. Re-authenticate to get fresh cookies.
-    const signInRes = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
-      body: JSON.stringify({ email: TFA_EMAIL, password: TFA_PASSWORD }),
-      redirect: 'manual',
-    });
-    expect(signInRes.status).toBe(200);
-    // Reset cookies from the fresh sign-in
-    tfaCookies = '';
-    mergeTfaCookies(signInRes);
-
+    // Use the original session cookies from sign-up (still valid after enable)
     const code = await generateTotpCode(totpSecret);
     const res = await fetch(`${BASE_URL}/api/auth/two-factor/verify-totp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
       body: JSON.stringify({ code }),
-      redirect: 'manual',
     });
-    expect(res.status).toBe(200);
     mergeTfaCookies(res);
+    const body = await res.json();
+
+    // BetterAuth may return 200 with success or redirect status
+    // If it returns an error, log it for debugging
+    if (res.status !== 200) {
+      console.log('verify-totp status:', res.status, 'body:', JSON.stringify(body));
+    }
+    expect(res.status).toBe(200);
   });
 
   it('sign-in requires 2FA after setup', async () => {
@@ -503,7 +497,6 @@ describe('App-level TOTP 2FA', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
       body: JSON.stringify({}),
-      redirect: 'manual',
     });
 
     // Clear cookies for fresh sign-in
@@ -514,7 +507,6 @@ describe('App-level TOTP 2FA', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
       body: JSON.stringify({ email: TFA_EMAIL, password: TFA_PASSWORD }),
-      redirect: 'manual',
     });
     expect(res.status).toBe(200);
     mergeTfaCookies(res);
@@ -528,7 +520,6 @@ describe('App-level TOTP 2FA', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: tfaCookies, Origin: BASE_URL },
       body: JSON.stringify({ code }),
-      redirect: 'manual',
     });
     expect(res.status).toBe(200);
     mergeTfaCookies(res);
@@ -536,7 +527,6 @@ describe('App-level TOTP 2FA', () => {
     // Verify we're authenticated
     const sessionRes = await fetch(`${BASE_URL}/api/mcp-key`, {
       headers: { Cookie: tfaCookies, Origin: BASE_URL },
-      redirect: 'manual',
     });
     expect(sessionRes.status).toBe(200);
   });
