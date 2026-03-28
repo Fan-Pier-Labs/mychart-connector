@@ -200,6 +200,7 @@ export default function LoginPage() {
   const [showModal, setShowModal] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [showMagicLinkInput, setShowMagicLinkInput] = useState(false);
   const [modalStep, setModalStep] = useState<"choose" | "signin">("choose");
   const timelineSectionRef = useRef<HTMLElement>(null);
 
@@ -360,22 +361,21 @@ export default function LoginPage() {
   }
 
   async function handleMagicLink() {
-    if (!email) {
+    if (!magicLinkEmail) {
       toast.error("Enter your email address.");
       return;
     }
-    track("auth_magic_link_attempt", { email });
+    track("auth_magic_link_attempt", { email: magicLinkEmail });
     setLoading(true);
     try {
-      const result = await authClient.signIn.magicLink({ email, callbackURL: "/home" });
+      const result = await authClient.signIn.magicLink({ email: magicLinkEmail, callbackURL: "/home" });
       if (result.error) {
-        track("auth_magic_link_failed", { email, error: result.error.message });
+        track("auth_magic_link_failed", { email: magicLinkEmail, error: result.error.message });
         toast.error(result.error.message || "Failed to send magic link.");
         setLoading(false);
         return;
       }
-      track("auth_magic_link_sent", { email });
-      setMagicLinkEmail(email);
+      track("auth_magic_link_sent", { email: magicLinkEmail });
       setMagicLinkSent(true);
       setLoading(false);
     } catch (err) {
@@ -964,6 +964,34 @@ export default function LoginPage() {
                             Sign up
                           </button>
                         </p>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-slate-200" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-white px-2 text-slate-400">or</span>
+                          </div>
+                        </div>
+                        {!showMagicLinkInput ? (
+                          <Button variant="outline" className="w-full" onClick={() => setShowMagicLinkInput(true)}>
+                            <Icon icon="solar:letter-linear" width={20} height={20} className="mr-2" />
+                            Sign in with Email Link
+                          </Button>
+                        ) : (
+                          <div className="space-y-2">
+                            <Input
+                              type="email"
+                              placeholder="you@example.com"
+                              value={magicLinkEmail}
+                              onChange={(e) => setMagicLinkEmail(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleMagicLink()}
+                              autoFocus
+                            />
+                            <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleMagicLink}>
+                              Send Sign-in Link
+                            </Button>
+                          </div>
+                        )}
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-slate-200" />

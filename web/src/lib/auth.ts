@@ -77,10 +77,12 @@ export async function getAuth(): Promise<any> {
       }),
       magicLink({
         sendMagicLink: async ({ email, url }) => {
+          console.log('[Auth] Sending magic link to', email, 'url:', url);
           const apiKey = await getResendApiKey();
+          console.log('[Auth] Got Resend API key:', apiKey.slice(0, 10) + '...');
           const resend = new Resend(apiKey);
           const { error } = await resend.emails.send({
-            from: 'MyChart MCP <notifications@fanpierlabs.com>',
+            from: 'MyChart MCP <noreply@emails.fanpierlabs.com>',
             to: email,
             subject: 'Sign in to MyChart Connector',
             html: `
@@ -93,8 +95,10 @@ export async function getAuth(): Promise<any> {
             `,
           });
           if (error) {
+            console.error('[Auth] Resend error:', error);
             throw new Error(`Failed to send magic link email: ${error.message}`);
           }
+          console.log('[Auth] Magic link email sent successfully');
         },
       }),
       passkey({
