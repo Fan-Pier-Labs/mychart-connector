@@ -198,6 +198,9 @@ export default function LoginPage() {
   const [totpCode, setTotpCode] = useState("");
   const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode>("totp");
   const [showModal, setShowModal] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [showMagicLinkInput, setShowMagicLinkInput] = useState(false);
   const [modalStep, setModalStep] = useState<"choose" | "signin">("choose");
   const timelineSectionRef = useRef<HTMLElement>(null);
 
@@ -350,9 +353,33 @@ export default function LoginPage() {
     track("auth_google_signin_attempt");
     setLoading(true);
     try {
-      await authClient.signIn.social({ provider: "google" });
+      await authClient.signIn.social({ provider: "google", callbackURL: "/home" });
     } catch (err) {
       toast.error("Google sign in failed: " + (err as Error).message);
+      setLoading(false);
+    }
+  }
+
+  async function handleMagicLink() {
+    if (!magicLinkEmail) {
+      toast.error("Enter your email address.");
+      return;
+    }
+    track("auth_magic_link_attempt", { email: magicLinkEmail });
+    setLoading(true);
+    try {
+      const result = await authClient.signIn.magicLink({ email: magicLinkEmail, callbackURL: "/home" });
+      if (result.error) {
+        track("auth_magic_link_failed", { email: magicLinkEmail, error: result.error.message });
+        toast.error(result.error.message || "Failed to send magic link.");
+        setLoading(false);
+        return;
+      }
+      track("auth_magic_link_sent", { email: magicLinkEmail });
+      setMagicLinkSent(true);
+      setLoading(false);
+    } catch (err) {
+      toast.error("Failed to send magic link: " + (err as Error).message);
       setLoading(false);
     }
   }
@@ -382,6 +409,39 @@ export default function LoginPage() {
             <p className="text-muted-foreground">
               {authMode === "signup" ? "Creating your account..." : "Signing in..."}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (magicLinkSent) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Check your email</CardTitle>
+            <CardDescription>
+              We sent a sign-in link to <strong>{magicLinkEmail}</strong>. Click the link in the email to sign in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-center py-4">
+              <Icon icon="solar:letter-linear" width={48} height={48} className="text-blue-500" />
+            </div>
+            <p className="text-sm text-center text-slate-500">
+              Didn&apos;t receive it? Check your spam folder or try again.
+            </p>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setMagicLinkSent(false);
+                setMagicLinkEmail("");
+              }}
+            >
+              Back to sign in
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -454,7 +514,7 @@ export default function LoginPage() {
           <div className="relative backdrop-blur-xl bg-white/70 border border-white/40 shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-full px-2 py-2 pl-6 flex items-center justify-between transition-all duration-500 hover:bg-white/80 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)]">
             <a href="#" className="flex items-center gap-2">
               <span className="font-medium text-slate-800 tracking-tight text-sm uppercase hidden sm:block">
-                MyChart Connector
+                OpenRecord
               </span>
             </a>
 
@@ -469,7 +529,7 @@ export default function LoginPage() {
 
             <div className="flex items-center gap-2">
               <a
-                href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                href="https://github.com/Fan-Pier-Labs/openrecord"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden sm:inline-flex items-center gap-2 justify-center px-6 py-2.5 text-xs font-medium text-slate-700 uppercase tracking-widest bg-white/60 border border-slate-200/60 rounded-full hover:bg-white transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
@@ -522,7 +582,7 @@ export default function LoginPage() {
                 <Icon icon="lucide:arrow-right" width={18} height={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
               </button>
               <a
-                href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                href="https://github.com/Fan-Pier-Labs/openrecord"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-6 py-3 rounded-full text-sm font-medium text-slate-700 bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_10px_30px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] hover:bg-white/60 hover:shadow-[0_15px_40px_rgba(0,0,0,0.08)] transition-all duration-300 flex items-center gap-2"
@@ -715,14 +775,14 @@ export default function LoginPage() {
           <div className="max-w-[1200px] mx-auto px-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <span className="text-lg font-medium text-slate-900 tracking-tight uppercase">
-                MyChart Connector
+                OpenRecord
               </span>
               <p className="text-sm text-slate-500 font-light text-center md:text-left">
                 Open-source health data access for AI assistants.
               </p>
               <div className="flex gap-6 items-center">
                 <a
-                  href="https://github.com/Fan-Pier-Labs/mychart-connector"
+                  href="https://github.com/Fan-Pier-Labs/openrecord"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-slate-400 hover:text-slate-900 transition-colors"
@@ -892,12 +952,45 @@ export default function LoginPage() {
                         <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleEmailSignIn}>
                           Sign In
                         </Button>
-                        <p className="text-center text-sm text-slate-500">
-                          Don&apos;t have an account?{" "}
-                          <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
-                            Sign up
-                          </button>
-                        </p>
+                        <div className="flex items-center justify-between text-sm text-slate-500">
+                          <p>
+                            Don&apos;t have an account?{" "}
+                            <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
+                              Sign up
+                            </button>
+                          </p>
+                          <a href="/forgot-password" className="text-blue-600 hover:underline font-medium">
+                            Forgot password?
+                          </a>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-slate-200" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-white px-2 text-slate-400">or</span>
+                          </div>
+                        </div>
+                        {!showMagicLinkInput ? (
+                          <Button variant="outline" className="w-full" onClick={() => setShowMagicLinkInput(true)}>
+                            <Icon icon="solar:letter-linear" width={20} height={20} className="mr-2" />
+                            Sign in with Email Link
+                          </Button>
+                        ) : (
+                          <div className="space-y-2">
+                            <Input
+                              type="email"
+                              placeholder="you@example.com"
+                              value={magicLinkEmail}
+                              onChange={(e) => setMagicLinkEmail(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleMagicLink()}
+                              autoFocus
+                            />
+                            <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleMagicLink}>
+                              Send Sign-in Link
+                            </Button>
+                          </div>
+                        )}
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-slate-200" />

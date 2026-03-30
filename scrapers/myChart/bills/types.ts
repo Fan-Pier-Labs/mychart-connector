@@ -15,6 +15,9 @@ export type BillingAccount = {
   // Statement list for PDF downloads
   statementList?: StatementListResponse;
 
+  // Payment history (MyChart payments made by the patient)
+  paymentList?: PaymentListResponse;
+
   // Encrypted billing ID needed for PDF downloads
   encBillingId?: string;
 }
@@ -321,4 +324,16 @@ export interface StatementItem {
   // this is the billSys param on the PDF download call
   EncBillingSystem: string;
   RecordID: string;
+}
+
+/**
+ * Response from /Billing/Details/LoadPaymentList
+ * Contains patient payment history (MyChart payments made through the portal)
+ */
+export interface PaymentListResponse {
+  Success: boolean;
+  Data: {
+    PaymentList: Payment[];
+    Filters: unknown;
+  };
 }

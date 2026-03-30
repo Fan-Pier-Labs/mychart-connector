@@ -6,6 +6,7 @@ import { getRequestVerificationTokenFromBody } from "./util";
 import { changeDirToPackageRoot } from "../../shared/util";
 import { sendTelemetryEvent } from "../../shared/telemetry";
 import { acceptTermsAndConditions } from "./termsAndConditions";
+import { isBlockedInstance } from "../../shared/blockedInstances";
 
 
 // Just for testing / local development
@@ -28,6 +29,52 @@ export function parseFirstPathPartFromLocation(locationHeader: string, hostname:
   return part || null;
 }
 
+/**
+ * When the root URL redirects cross-domain (e.g. to a marketing/landing page),
+ * fetch that page and look for URLs pointing back to the original MyChart hostname.
+ * These appear in script tags, data attributes, and links embedded on the marketing page.
+ * Extract the firstPathPart from the first matching URL.
+ *
+ * NOTE: This is experimental — not fully confident this works for all edge cases.
+ * If it causes issues, it can be safely removed (the login flow will fall through
+ * to the body/meta-refresh detection instead).
+ */
+export async function extractFirstPathPartFromMarketingPage(mychartRequest: MyChartRequest, marketingPageUrl: string): Promise<string | null> {
+  try {
+    const resp = await mychartRequest.makeRequest({ url: marketingPageUrl });
+    const html = await resp.text();
+
+    // Look for any URL that points back to the original hostname with a path.
+    // Matches patterns like:
+    //   https://mychart.uchealth.org/MyChart/Scripts/...
+    //   https://mychart.uchealth.org/MyChart-PRD/
+    //   data-mhc-url="https://mychart.uchealth.org/MyChart"
+    const escapedHostname = mychartRequest.hostname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`https?://${escapedHostname}/([A-Za-z][A-Za-z0-9_-]*)(?:/|"|'|\\s)`, 'g');
+
+    const candidates = new Map<string, number>();
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      const candidate = match[1];
+      candidates.set(candidate, (candidates.get(candidate) || 0) + 1);
+    }
+
+    if (candidates.size > 0) {
+      // Pick the most frequently referenced path part
+      const sorted = [...candidates.entries()].sort((a, b) => b[1] - a[1]);
+      const bestCandidate = sorted[0][0];
+      console.log('Extracted firstPathPart from marketing page:', bestCandidate, `(found ${candidates.size} candidate(s):`, [...candidates.entries()].map(([k, v]) => `${k}=${v}`).join(', ') + ')');
+      return bestCandidate;
+    }
+
+    console.log('No MyChart URLs found on marketing page for hostname:', mychartRequest.hostname);
+    return null;
+  } catch (e) {
+    console.log('Failed to fetch marketing page:', e);
+    return null;
+  }
+}
+
 async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<MyChartRequest | null> {
 
   if (mychartRequest.firstPathPart) {
@@ -43,8 +90,19 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
   let firstPathPart;
 
   if (locationResponseHeader) {
-    firstPathPart = parseFirstPathPartFromLocation(locationResponseHeader, mychartRequest.hostname, mychartRequest.protocol);
-    console.log('first path part', firstPathPart)
+    // Only use the Location header if it stays on the same host.
+    // Cross-domain redirects (e.g. to a marketing page) need special handling.
+    // Use redirectUrl.host (includes port) since mychartRequest.hostname may include a port.
+    const redirectUrl = new URL(locationResponseHeader, mychartRequest.protocol + '://' + mychartRequest.hostname);
+    if (redirectUrl.host !== mychartRequest.hostname) {
+      console.log('Cross-domain redirect detected:', mychartRequest.hostname, '->', redirectUrl.host);
+      // Follow the redirect and scrape the marketing page for MyChart URLs
+      // that point back to the original hostname (e.g. script tags, data attributes, links).
+      firstPathPart = await extractFirstPathPartFromMarketingPage(mychartRequest, redirectUrl.href);
+    } else {
+      firstPathPart = parseFirstPathPartFromLocation(locationResponseHeader, mychartRequest.hostname, mychartRequest.protocol);
+      console.log('first path part', firstPathPart)
+    }
   }
   else {
     console.log('Looking for first path part: no location response header')
@@ -156,8 +214,14 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
     throw new Error('Missing hostname, user, or pass')
   }
 
+  if (isBlockedInstance(hostname)) {
+    throw new Error(`${hostname} is not supported. central.mychart.org is a portal aggregator and cannot be scraped directly. Please use the individual hospital MyChart instance instead.`);
+  }
 
-  const effectiveProtocol = protocol ?? (hostname.startsWith('localhost') ? 'http' : 'https');
+
+  // Use HTTP for localhost and hostnames without a dot (e.g. Docker service names like "fake-mychart:3000")
+  const hostnameWithoutPort = hostname.split(':')[0];
+  const effectiveProtocol = protocol ?? (hostnameWithoutPort === 'localhost' || !hostnameWithoutPort.includes('.') ? 'http' : 'https');
   const mychartRequest = new MyChartRequest(hostname, effectiveProtocol);
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest)
@@ -334,7 +398,9 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   }
 
   // Check if we landed on Terms & Conditions page — auto-accept silently
-  if (bodyLower.includes('termsconditions') || bodyLower.includes('terms and conditions')) {
+  // Use the response URL to avoid false positives from pages that merely
+  // reference "termsconditions" in CSS/JS/footer links.
+  if (urlLower.includes('termsconditions') || (bodyLower.includes('terms and conditions') && !urlLower.includes('/home'))) {
     console.log('Landed on Terms & Conditions page after login, auto-accepting');
     const accepted = await acceptTermsAndConditions(mychartRequest);
     if (accepted) {
@@ -425,7 +491,10 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
       const insideBodyLower = insideBody.toLowerCase();
 
       // Check if we landed on Terms & Conditions page — auto-accept silently
-      if (insideBodyLower.includes('termsconditions') || insideBodyLower.includes('terms and conditions')) {
+      // Use the response URL (not just body content) to avoid false positives from
+      // pages that merely reference "termsconditions" in CSS/JS/footer links.
+      const insideUrl = (insideResp.url || '').toLowerCase();
+      if (insideUrl.includes('termsconditions') || (insideBodyLower.includes('terms and conditions') && !insideUrl.includes('/home'))) {
         console.log('Landed on Terms & Conditions page after 2FA, auto-accepting');
         const accepted = await acceptTermsAndConditions(mychartRequest);
         if (!accepted) {

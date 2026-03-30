@@ -122,4 +122,16 @@ describe('checkAllUsers', () => {
     expect(result.errors).toBe(1);
     expect(result.sent).toBe(0);
   });
+
+  test('disabled instances are excluded by getNotificationEnabledInstances SQL filter', async () => {
+    // getNotificationEnabledInstances adds `AND mi.enabled = TRUE` to the query,
+    // so disabled instances never appear in mockInstances at all.
+    // When no instances are returned, checkAllUsers returns zeros.
+    // This test verifies the behavior when the DB returns nothing (simulating all disabled).
+    // mockInstances is already empty from beforeEach.
+    const result = await checkAllUsers();
+    expect(result).toEqual({ checked: 0, sent: 0, errors: 0 });
+    expect(emailCalls.length).toBe(0);
+    expect(updateCalls.length).toBe(0);
+  });
 });

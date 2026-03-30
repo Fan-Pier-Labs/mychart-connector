@@ -134,15 +134,23 @@ export function VisitsCard({ title, data, getVisits }: { title: string; data: Da
 }
 
 export function VisitItem({ visit }: { visit: Visit }) {
+  // TODO: normalize all visit types in the backend scrapers so the frontend doesn't need these guards
+  if (!visit || typeof visit !== 'object') return null;
+  // TODO: normalize all types in the backend in TypeScript so alternate formats are handled before reaching the UI
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const v = visit as any;
+  const isAlternate = 'Patient' in v || 'Physician' in v;
   return (
     <div className="bg-muted rounded-md p-3 text-sm">
       <div className="font-medium">
         {safeText(visit.Date)} {safeText(visit.Time)} {visit.VisitTypeName ? `- ${safeText(visit.VisitTypeName)}` : ''}
       </div>
       <div className="text-xs text-muted-foreground mt-1">
-        {visit.PrimaryProviderName && <span>Provider: {safeText(visit.PrimaryProviderName)}</span>}
-        {visit.PrimaryDepartment?.Name && (
-          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment.Name)}</span>
+        {(visit.PrimaryProviderName || (isAlternate && v.Physician)) && (
+          <span>Provider: {safeText(visit.PrimaryProviderName || v.Physician)}</span>
+        )}
+        {(visit.PrimaryDepartment?.Name || (isAlternate && v.Department)) && (
+          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment?.Name || v.Department)}</span>
         )}
         {visit.Location && (
           <span className="ml-3">Location: {safeText(visit.Location)}</span>

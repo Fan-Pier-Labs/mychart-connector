@@ -14,7 +14,7 @@ async function ensureHandler() {
 export async function GET(req: Request) {
   try {
     const h = await ensureHandler();
-    return h.GET(req);
+    return await h.GET(req);
   } catch (err) {
     console.error(`[Auth Route] GET error:`, err);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
@@ -25,15 +25,18 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const url = new URL(req.url);
-  console.log(`[Auth Route] POST ${url.pathname} origin=${req.headers.get('origin')}`);
-  const h = await ensureHandler();
   try {
+    const url = new URL(req.url);
+    console.log(`[Auth Route] POST ${url.pathname} origin=${req.headers.get('origin')}`);
+    const h = await ensureHandler();
     const res = await h.POST(req);
     console.log(`[Auth Route] POST ${url.pathname} => ${res.status}`);
     return res;
   } catch (err) {
-    console.error(`[Auth Route] POST ${url.pathname} error:`, err);
-    throw err;
+    console.error(`[Auth Route] POST error:`, err);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

@@ -55,6 +55,7 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
   // Determine the POST URL
   let postPath = formAction;
   if (!postPath || postPath === '#') {
+    // Use path (not root-relative) so makeRequest prepends the firstPathPart
     postPath = '/Authentication/TermsConditions';
   }
 
@@ -62,13 +63,15 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
   // includes the firstPathPart (e.g. "/MyChart/Authentication/TermsConditions").
   // Convert it to an absolute URL to avoid makeRequest prepending firstPathPart again.
   const isAbsolute = postPath.startsWith('http');
-  const isRootRelative = postPath.startsWith('/');
+  const isRootRelative = postPath.startsWith('/') && formAction && formAction !== '#';
   let requestConfig: { url?: string; path?: string };
   if (isAbsolute) {
     requestConfig = { url: postPath };
   } else if (isRootRelative) {
+    // Form action from the page already includes firstPathPart
     requestConfig = { url: `${mychartRequest.protocol}://${mychartRequest.hostname}${postPath}` };
   } else {
+    // Fallback or relative path — let makeRequest prepend firstPathPart
     requestConfig = { path: postPath };
   }
 

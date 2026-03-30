@@ -1,6 +1,6 @@
 # Self-Hosting Guide
 
-Run the MyChart Connector web app on your own machine with a public URL via ngrok or Cloudflare Tunnel.
+Run the OpenRecord web app on your own machine with a public URL via ngrok or Cloudflare Tunnel.
 
 ## Prerequisites
 

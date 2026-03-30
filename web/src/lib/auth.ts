@@ -3,7 +3,9 @@ import { Pool } from 'pg';
 import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoogleOAuth } from './mcp/config';
 import { nextCookies } from 'better-auth/next-js';
 import { twoFactor } from 'better-auth/plugins/two-factor';
+import { magicLink } from 'better-auth/plugins/magic-link';
 import { passkey } from '@better-auth/passkey';
+import { sendEmail } from './email';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let authInstance: any = null;
@@ -37,7 +39,7 @@ export async function getAuth(): Promise<any> {
   }
 
   // Build trusted origins list, always including the base URL
-  const trustedOrigins = ['http://localhost:2343', 'http://localhost:3000', 'https://mychartscrapers-staging.fanpierlabs.com', 'https://mychart.fanpierlabs.com'];
+  const trustedOrigins = ['http://localhost:2343', 'http://localhost:3000', 'https://mychartscrapers-staging.fanpierlabs.com', 'https://openrecord.fanpierlabs.com', 'https://mychart.fanpierlabs.com'];
   if (baseURL && !trustedOrigins.includes(baseURL)) {
     trustedOrigins.push(baseURL);
   }
@@ -55,8 +57,31 @@ export async function getAuth(): Promise<any> {
     baseURL,
     trustedOrigins,
     secret,
+    rateLimit: process.env.DISABLE_RATE_LIMIT === 'true' ? { enabled: false } : undefined,
     emailAndPassword: {
       enabled: true,
+      async sendResetPassword({ user, url }) {
+        void sendEmail({
+          to: user.email,
+          subject: 'Reset your password',
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+              <h2 style="color: #1a1a24; font-size: 24px; font-weight: 600; margin-bottom: 16px;">Reset your password</h2>
+              <p style="color: #5a5a6a; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+                We received a request to reset the password for your OpenRecord account. Click the button below to choose a new password.
+              </p>
+              <a href="${url}" style="display: inline-block; background: #1a1a24; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-size: 14px; font-weight: 500;">
+                Reset Password
+              </a>
+              <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-top: 32px;">
+                If you didn't request this, you can safely ignore this email. This link will expire shortly.
+              </p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 16px;" />
+              <p style="color: #9ca3af; font-size: 12px;">OpenRecord</p>
+            </div>
+          `,
+        });
+      },
     },
     ...(useGoogle && googleOAuth
       ? {
@@ -72,6 +97,22 @@ export async function getAuth(): Promise<any> {
       nextCookies(),
       twoFactor({
         issuer: 'MyChart MCP',
+      }),
+      magicLink({
+        sendMagicLink: async ({ email, url }) => {
+          await sendEmail({
+            to: email,
+            subject: 'Sign in to MyChart Connector',
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+                <h2 style="font-size: 24px; font-weight: 600; color: #1a1a24; margin-bottom: 8px;">Sign in to MyChart Connector</h2>
+                <p style="color: #5a5a6a; font-size: 16px; line-height: 1.5; margin-bottom: 32px;">Click the button below to sign in. This link expires in 10 minutes.</p>
+                <a href="${url}" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 9999px; font-weight: 500; font-size: 16px;">Sign in</a>
+                <p style="color: #94a3b8; font-size: 13px; margin-top: 32px;">If you didn't request this email, you can safely ignore it.</p>
+              </div>
+            `,
+          });
+        },
       }),
       passkey({
         rpID: new URL(baseURL).hostname,

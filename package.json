@@ -14,11 +14,13 @@
     "test:integration": "NODE_ENV=development bun test scrapers/myChart/__tests__/integration/",
     "test:fake-mychart": "bun test scrapers/myChart/__tests__/fake-mychart/fake-mychart.test.ts",
     "test:fake-mychart-terms": "bun test scrapers/myChart/__tests__/fake-mychart/terms-and-conditions.test.ts",
+    "test:ci-integration": "bun test tests/integration/ci/",
     "deploy": "python3 node_modules/deploy/main.py --config web/deploy.yaml"
   },
   "dependencies": {
     "@amplitude/unified": "^1.0.4",
     "@astronautlabs/amf": "^0.0.6",
+    "@aws-sdk/client-s3": "^3.1019.0",
     "@aws-sdk/client-secrets-manager": "^3.1000.0",
     "@primno/dpapi": "^2.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.6",

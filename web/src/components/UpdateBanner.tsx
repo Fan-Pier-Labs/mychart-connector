@@ -30,7 +30,7 @@ export function UpdateBanner() {
       <span>
         Update available: v{update.currentVersion} &rarr; v{update.latestVersion} &mdash;{' '}
         <a
-          href="https://github.com/Fan-Pier-Labs/mychart-connector/releases/latest"
+          href="https://github.com/Fan-Pier-Labs/openrecord/releases/latest"
           target="_blank"
           rel="noopener noreferrer"
           className="underline font-medium"

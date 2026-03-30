@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
       },
       instances: instancesWithStatus,
     });
-  } catch {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+  } catch (err) {
+    console.error('[Session] Error:', err);
+    return NextResponse.json({ authenticated: false, googleOAuthEnabled: hasGoogleOAuth() }, { status: 401 });
   }
 }

@@ -6,7 +6,7 @@ import fs from 'fs';
 import { subYears, addYears } from 'date-fns';
 import { date2dte } from "./utils";
 // import '../../../util'
-import { BillingAccount, BillingDetails, BillingVisit, StatementItem, StatementListResponse } from "./types";
+import { BillingAccount, BillingDetails, BillingVisit, PaymentListResponse, StatementItem, StatementListResponse } from "./types";
 import { mkdirp } from 'mkdirp';
 import { MOCK_DATA } from '../../../shared/env';
 
@@ -64,6 +64,15 @@ export function parseBillingAccountsHtml(html: string, hostname: string): Billin
       ID = new URL(link, 'https://' + hostname).searchParams.get('ID')
       Context = new URL(link, 'https://' + hostname).searchParams.get('Context')
     }
+    // Fallback: look for any link to /Billing/Details within the card (e.g. "View Account Details" link)
+    if (!ID || !Context) {
+      const detailsLink = $('a[href*="Billing/Details"]', billing_account).attr('href');
+      if (detailsLink) {
+        const detailsUrl = new URL(detailsLink, 'https://' + hostname);
+        ID = detailsUrl.searchParams.get('ID');
+        Context = detailsUrl.searchParams.get('Context');
+      }
+    }
     if (!ID || !Context) {
       const paymentUrl = parsePaymentUrl(html)
       ID = paymentUrl?.id;
@@ -97,6 +106,15 @@ async function getBillingAccountDetails(mychartRequest: MyChartRequest, billingA
   console.log(json)
 
   return json
+}
+
+export async function getPaymentList(mychartRequest: MyChartRequest, billingAccount: BillingAccount): Promise<PaymentListResponse> {
+
+  const paymentListResponse = await mychartRequest.makeRequest({ path: `/Billing/Details/LoadPaymentList?noCache=${Math.random()}&id=${billingAccount.id}&context=${billingAccount.context}&searchStartDTE=&searchEndDTE=&cid=` })
+
+  const paymentList = await paymentListResponse.json() as PaymentListResponse;
+
+  return paymentList;
 }
 
 export async function getStatementList(mychartRequest: MyChartRequest, billingAccount: BillingAccount): Promise<StatementListResponse> {
@@ -156,16 +174,18 @@ export async function getBillingHistory(mychartRequest: MyChartRequest): Promise
 
     billingAccount.billingDetails = billingDetails;
 
-    // Also fetch statement list and encBillingId for PDF downloads
+    // Also fetch statement list, payment list, and encBillingId for PDF downloads
     try {
-      const [statementList, encBillingId] = await Promise.all([
+      const [statementList, paymentList, encBillingId] = await Promise.all([
         getStatementList(mychartRequest, billingAccount),
+        getPaymentList(mychartRequest, billingAccount),
         getEncBillingId(mychartRequest, billingAccount),
       ]);
       billingAccount.statementList = statementList;
+      billingAccount.paymentList = paymentList;
       billingAccount.encBillingId = encBillingId || undefined;
     } catch (err) {
-      console.log('Failed to fetch statement list:', (err as Error).message);
+      console.log('Failed to fetch billing details:', (err as Error).message);
     }
   }
 

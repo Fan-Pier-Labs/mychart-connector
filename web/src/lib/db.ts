@@ -19,6 +19,7 @@ export interface MyChartInstance {
   password: string;
   totpSecret: string | null;
   mychartEmail: string | null;
+  enabled: boolean;
   createdAt: Date;
   updatedAt: Date;
   notificationsLastCheckedAt: Date | null;
@@ -38,6 +39,7 @@ export interface UpdateMyChartInstanceInput {
   password?: string;
   totpSecret?: string | null;
   mychartEmail?: string | null;
+  enabled?: boolean;
 }
 
 async function rowToInstance(row: Record<string, unknown>): Promise<MyChartInstance> {
@@ -49,6 +51,7 @@ async function rowToInstance(row: Record<string, unknown>): Promise<MyChartInsta
     password: await decrypt(row.encrypted_password as string),
     totpSecret: row.encrypted_totp_secret ? await decrypt(row.encrypted_totp_secret as string) : null,
     mychartEmail: row.mychart_email as string | null,
+    enabled: row.enabled !== false,
     createdAt: row.created_at as Date,
     updatedAt: row.updated_at as Date,
     notificationsLastCheckedAt: row.notifications_last_checked_at as Date | null,
@@ -116,6 +119,10 @@ export async function updateMyChartInstance(id: string, userId: string, updates:
     setClauses.push(`mychart_email = $${paramIndex++}`);
     values.push(updates.mychartEmail);
   }
+  if (updates.enabled !== undefined) {
+    setClauses.push(`enabled = $${paramIndex++}`);
+    values.push(updates.enabled);
+  }
 
   if (setClauses.length === 0) {
     return getMyChartInstance(id, userId);
@@ -157,6 +164,7 @@ export async function getNotificationEnabledInstances(): Promise<NotificationEna
      JOIN "user" u ON mi.user_id = u.id
      WHERE u.notifications_enabled = TRUE
        AND mi.encrypted_totp_secret IS NOT NULL
+       AND mi.enabled = TRUE
      ORDER BY mi.created_at ASC`
   );
   const instances = await Promise.all(result.rows.map(async (row) => {

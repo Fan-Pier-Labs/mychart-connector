@@ -450,3 +450,67 @@ export const demoImagingResults = [
 export const demoLinkedAccounts = [
   { organization: 'Springfield General Hospital', hostname: 'mychart.springfieldmed.example.org', status: 'Active' },
 ];
+
+export const demoMessageRecipients = {
+  recipients: [
+    {
+      displayName: 'Dr. Julius Hibbert',
+      specialty: 'Internal Medicine',
+      department: 'Primary Care',
+    },
+    {
+      displayName: 'Dr. Nick Riviera',
+      specialty: 'General Surgery',
+      department: 'Surgery',
+    },
+    {
+      displayName: 'Nurse Ruth Powers',
+      specialty: 'Nursing',
+      department: 'Care Coordination',
+    },
+  ],
+  topics: [
+    { displayName: 'Medical Question', value: 'TOPIC-001' },
+    { displayName: 'Medication Refill', value: 'TOPIC-002' },
+    { displayName: 'Appointment Request', value: 'TOPIC-003' },
+    { displayName: 'Test Results Question', value: 'TOPIC-004' },
+    { displayName: 'Other', value: 'TOPIC-005' },
+  ],
+};
+
+export const demoAvailableAppointments = [
+  {
+    provider: 'Dr. Julius Hibbert',
+    department: 'Internal Medicine',
+    location: 'Springfield General Hospital, Suite 200',
+    visitType: 'Office Visit',
+    slots: [
+      { date: '2026-04-02', time: '9:00 AM', slotId: 'slot-001' },
+      { date: '2026-04-02', time: '10:30 AM', slotId: 'slot-002' },
+      { date: '2026-04-03', time: '2:00 PM', slotId: 'slot-003' },
+      { date: '2026-04-07', time: '11:00 AM', slotId: 'slot-004' },
+    ],
+  },
+  {
+    provider: 'Dr. Nick Riviera',
+    department: 'General Surgery',
+    location: 'Springfield General Hospital, Suite 105',
+    visitType: 'Follow-Up',
+    slots: [
+      { date: '2026-04-04', time: '1:00 PM', slotId: 'slot-005' },
+      { date: '2026-04-08', time: '3:30 PM', slotId: 'slot-006' },
+    ],
+  },
+  {
+    provider: 'Lab Services',
+    department: 'Laboratory',
+    location: 'Springfield General Hospital, 1st Floor',
+    visitType: 'Lab Work',
+    slots: [
+      { date: '2026-04-01', time: '7:30 AM', slotId: 'slot-007' },
+      { date: '2026-04-01', time: '8:00 AM', slotId: 'slot-008' },
+      { date: '2026-04-02', time: '7:30 AM', slotId: 'slot-009' },
+      { date: '2026-04-03', time: '8:30 AM', slotId: 'slot-010' },
+    ],
+  },
+];

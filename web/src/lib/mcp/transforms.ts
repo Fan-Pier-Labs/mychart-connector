@@ -94,11 +94,19 @@ export interface TrimmedBillingVisit {
   }[];
 }
 
+export interface TrimmedBillingPayment {
+  date: string;
+  description: string;
+  amount: string;
+  paymentMethod: string | null;
+}
+
 export interface TrimmedBillingAccount {
   guarantorNumber: string;
   patientName: string;
   amountDue?: number;
   visits: TrimmedBillingVisit[];
+  payments: TrimmedBillingPayment[];
   statements: {
     date: string;
     description: string;
@@ -111,8 +119,22 @@ function billingStatusLabel(statusCode: number): string {
     0: 'open',
     1: 'closed',
     2: 'pending',
+    3: 'outstanding',
+    7: 'paid_off',
+    8: 'closed',
+    9: 'closed',
   };
   return map[statusCode] ?? `status_${statusCode}`;
+}
+
+/** Strip HTML tags from payment method display (e.g. img tags for card brand) and return clean text */
+function extractPaymentMethod(htmlSubText: string | null): string | null {
+  if (!htmlSubText) return null;
+  // Extract alt text from img tag (card brand) + remaining text
+  const altMatch = htmlSubText.match(/alt="([^"]+)"/);
+  const brand = altMatch?.[1] ?? '';
+  const textOnly = htmlSubText.replace(/<[^>]+>/g, '').trim();
+  return brand ? `${brand} ${textOnly}`.trim() : textOnly || null;
 }
 
 export function trimBilling(raw: BillingAccount[]): TrimmedBillingAccount[] {
@@ -147,6 +169,12 @@ export function trimBilling(raw: BillingAccount[]): TrimmedBillingAccount[] {
               })),
             }
           : {}),
+      })),
+      payments: (acct.paymentList?.Data?.PaymentList ?? []).map(p => ({
+        date: p.FormattedDateDisplay ?? '',
+        description: p.Description,
+        amount: p.PaymentAmountDisplay,
+        paymentMethod: extractPaymentMethod(p.HtmlSubText),
       })),
       statements: [
         ...(acct.statementList?.DataStatement?.StatementList ?? []),
