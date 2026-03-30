@@ -17,12 +17,18 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { Pool } from 'pg'
-import { createMyChartInstance, getMyChartInstances } from '../../db'
+import { createMyChartInstance, getMyChartInstances, updateMyChartInstance, deleteMyChartInstance } from '../../db'
 import { myChartUserPassLogin } from '../../mychart/login'
 import { getMyChartProfile } from '../../mychart/profile'
 import { getMedications } from '../../mychart/medications'
+import { getAllergies } from '../../mychart/allergies'
+import { getImmunizations } from '../../mychart/immunizations'
+import { getHealthIssues } from '../../mychart/healthIssues'
+import { getHealthSummary } from '../../mychart/healthSummary'
+import { upcomingVisits, pastVisits } from '../../mychart/visits/visits'
 import { listLabResults } from '../../mychart/labs/labResults'
 import { listConversations } from '../../mychart/messages/conversations'
+import { generateApiKey, hasApiKey, revokeApiKey } from '../../mcp/api-keys'
 
 const DATABASE_URL = process.env.DATABASE_URL
 const FAKE_MYCHART_HOST = process.env.FAKE_MYCHART_HOST ?? 'localhost:4000'
@@ -157,5 +163,205 @@ describe('full-stack integration', () => {
       const result = await listConversations(loginResult.mychartRequest)
       expect(result).toBeDefined()
     }, 30_000)
+
+    it('getAllergies returns allergy data', async () => {
+      if (!hasServices) return
+      const [instance] = await getMyChartInstances(testUserId)
+      const loginResult = await myChartUserPassLogin({
+        hostname: instance.hostname,
+        user: instance.username,
+        pass: instance.password,
+        protocol: 'http',
+      })
+      const result = await getAllergies(loginResult.mychartRequest)
+      expect(result).toBeDefined()
+      expect(typeof result).toBe('object')
+    }, 30_000)
+
+    it('getImmunizations returns immunization records', async () => {
+      if (!hasServices) return
+      const [instance] = await getMyChartInstances(testUserId)
+      const loginResult = await myChartUserPassLogin({
+        hostname: instance.hostname,
+        user: instance.username,
+        pass: instance.password,
+        protocol: 'http',
+      })
+      const result = await getImmunizations(loginResult.mychartRequest)
+      expect(result).toBeDefined()
+    }, 30_000)
+
+    it('getHealthIssues returns health issues list', async () => {
+      if (!hasServices) return
+      const [instance] = await getMyChartInstances(testUserId)
+      const loginResult = await myChartUserPassLogin({
+        hostname: instance.hostname,
+        user: instance.username,
+        pass: instance.password,
+        protocol: 'http',
+      })
+      const result = await getHealthIssues(loginResult.mychartRequest)
+      expect(result).toBeDefined()
+    }, 30_000)
+
+    it('getHealthSummary returns health summary', async () => {
+      if (!hasServices) return
+      const [instance] = await getMyChartInstances(testUserId)
+      const loginResult = await myChartUserPassLogin({
+        hostname: instance.hostname,
+        user: instance.username,
+        pass: instance.password,
+        protocol: 'http',
+      })
+      const result = await getHealthSummary(loginResult.mychartRequest)
+      expect(result).toBeDefined()
+    }, 30_000)
+
+    it('upcomingVisits returns upcoming visit data', async () => {
+      if (!hasServices) return
+      const [instance] = await getMyChartInstances(testUserId)
+      const loginResult = await myChartUserPassLogin({
+        hostname: instance.hostname,
+        user: instance.username,
+        pass: instance.password,
+        protocol: 'http',
+      })
+      const result = await upcomingVisits(loginResult.mychartRequest)
+      expect(result).toBeDefined()
+    }, 30_000)
+
+    it('pastVisits returns past visit data', async () => {
+      if (!hasServices) return
+      const [instance] = await getMyChartInstances(testUserId)
+      const loginResult = await myChartUserPassLogin({
+        hostname: instance.hostname,
+        user: instance.username,
+        pass: instance.password,
+        protocol: 'http',
+      })
+      const result = await pastVisits(loginResult.mychartRequest)
+      expect(result).toBeDefined()
+    }, 30_000)
+  })
+
+  describe('instance CRUD', () => {
+    let crudInstanceId: string
+
+    it('creates a second instance for CRUD testing', async () => {
+      if (!hasServices) return
+      const instance = await createMyChartInstance(testUserId, {
+        hostname: FAKE_MYCHART_HOST,
+        username: 'crud_test_user',
+        password: 'crud_test_pass',
+      })
+      crudInstanceId = instance.id
+      expect(instance.username).toBe('crud_test_user')
+    }, 15_000)
+
+    it('updates instance username', async () => {
+      if (!hasServices) return
+      const updated = await updateMyChartInstance(crudInstanceId, testUserId, {
+        username: 'updated_user',
+      })
+      expect(updated).not.toBeNull()
+      expect(updated!.username).toBe('updated_user')
+      expect(updated!.id).toBe(crudInstanceId)
+    }, 10_000)
+
+    it('updates instance password (re-encrypts)', async () => {
+      if (!hasServices) return
+      const updated = await updateMyChartInstance(crudInstanceId, testUserId, {
+        password: 'new_password',
+      })
+      expect(updated).not.toBeNull()
+      // Round-trip: password should decrypt to the new value
+      expect(updated!.password).toBe('new_password')
+    }, 10_000)
+
+    it('returns null when updating non-existent instance', async () => {
+      if (!hasServices) return
+      const result = await updateMyChartInstance('00000000-0000-0000-0000-000000000000', testUserId, {
+        username: 'ghost',
+      })
+      expect(result).toBeNull()
+    }, 10_000)
+
+    it('deletes instance successfully', async () => {
+      if (!hasServices) return
+      const deleted = await deleteMyChartInstance(crudInstanceId, testUserId)
+      expect(deleted).toBe(true)
+    }, 10_000)
+
+    it('returns false when deleting already-deleted instance', async () => {
+      if (!hasServices) return
+      const deleted = await deleteMyChartInstance(crudInstanceId, testUserId)
+      expect(deleted).toBe(false)
+    }, 10_000)
+
+    it('cannot delete another user\'s instance', async () => {
+      if (!hasServices) return
+      // Use the main test instance with a different userId
+      const [instance] = await getMyChartInstances(testUserId)
+      const deleted = await deleteMyChartInstance(instance.id, 'other-user-id')
+      expect(deleted).toBe(false)
+    }, 10_000)
+  })
+
+  describe('MCP API key management', () => {
+    it('starts with no API key', async () => {
+      if (!hasServices) return
+      const exists = await hasApiKey(testUserId)
+      expect(exists).toBe(false)
+    }, 10_000)
+
+    it('generates a 64-char hex API key', async () => {
+      if (!hasServices) return
+      const key = await generateApiKey(testUserId)
+      expect(key).toHaveLength(64)
+      expect(key).toMatch(/^[a-f0-9]{64}$/)
+    }, 10_000)
+
+    it('reports hasKey=true after generating', async () => {
+      if (!hasServices) return
+      const exists = await hasApiKey(testUserId)
+      expect(exists).toBe(true)
+    }, 10_000)
+
+    it('generates a new key (replaces old)', async () => {
+      if (!hasServices) return
+      const key1 = await generateApiKey(testUserId)
+      const key2 = await generateApiKey(testUserId)
+      expect(key1).not.toBe(key2)
+      expect(await hasApiKey(testUserId)).toBe(true)
+    }, 10_000)
+
+    it('revokes the API key', async () => {
+      if (!hasServices) return
+      await revokeApiKey(testUserId)
+      const exists = await hasApiKey(testUserId)
+      expect(exists).toBe(false)
+    }, 10_000)
+  })
+
+  describe('MCP HTTP endpoint', () => {
+    const WEB_BASE = `http://localhost:3000`
+
+    it('rejects requests with no API key (401)', async () => {
+      if (!hasServices) return
+      const res = await fetch(`${WEB_BASE}/api/mcp`, { method: 'POST' })
+      expect(res.status).toBe(401)
+      const body = await res.json()
+      expect(body.error).toMatch(/API key/i)
+    }, 10_000)
+
+    it('rejects requests with an invalid API key (401)', async () => {
+      if (!hasServices) return
+      const res = await fetch(`${WEB_BASE}/api/mcp?key=invalidkey`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      })
+      expect(res.status).toBe(401)
+    }, 10_000)
   })
 })

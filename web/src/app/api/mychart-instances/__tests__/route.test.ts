@@ -4,9 +4,14 @@ import { describe, it, expect, mock, beforeEach } from 'bun:test';
 class MockNextRequest {
   url: string;
   headers: Map<string, string>;
-  constructor(url: string) {
+  _body: unknown;
+  constructor(url: string, body?: unknown) {
     this.url = url;
     this.headers = new Map();
+    this._body = body;
+  }
+  json() {
+    return Promise.resolve(this._body);
   }
 }
 
@@ -26,22 +31,21 @@ mock.module('next/server', () => ({
 
 // Mock auth
 const mockRequireAuth = mock(() => Promise.resolve({ id: 'user-1' }));
-mock.module('@/lib/auth-helpers', () => ({
-  requireAuth: mockRequireAuth,
-  AuthError: class AuthError extends Error {
-    status: number;
-    constructor(msg: string, status: number) {
-      super(msg);
-      this.status = status;
-    }
-  },
-}));
+class AuthError extends Error {
+  status: number;
+  constructor(msg: string, status: number) { super(msg); this.status = status; }
+}
+mock.module('@/lib/auth-helpers', () => ({ requireAuth: mockRequireAuth, AuthError }));
 
-// Mock DB
+// Mock DB — include all exports needed by this file and any [id]/* routes in the same test run
 const mockGetInstances = mock(() => Promise.resolve([] as unknown[]));
+const mockCreateInstance = mock(() => Promise.resolve(makeInstance()));
 mock.module('@/lib/db', () => ({
   getMyChartInstances: mockGetInstances,
-  createMyChartInstance: mock(() => Promise.resolve({})),
+  createMyChartInstance: mockCreateInstance,
+  getMyChartInstance: mock(() => Promise.resolve(null)),
+  updateMyChartInstance: mock(() => Promise.resolve(null)),
+  deleteMyChartInstance: mock(() => Promise.resolve(false)),
 }));
 
 // Mock sessionStore (via @/lib/sessions which re-exports it)
@@ -55,8 +59,12 @@ const mockSessionStore = {
 mock.module('../../../../../scrapers/myChart/sessionStore', () => ({
   sessionStore: mockSessionStore,
 }));
+// Include all @/lib/sessions exports needed by this and child route test files
 mock.module('@/lib/sessions', () => ({
   sessionStore: mockSessionStore,
+  getSession: (key: string) => mockSessionStore.get(key),
+  deleteSession: mock((_key: string) => {}),
+  setSession: mock(() => {}),
 }));
 
 // Mock auto-connect
@@ -70,7 +78,7 @@ mock.module('@/lib/utils', () => ({
   normalizeHostname: (h: string) => h,
 }));
 
-const { GET } = await import('../route');
+const { GET, POST } = await import('../route');
 
 function makeRequest() {
   return new MockNextRequest('http://localhost:3000/api/mychart-instances');
@@ -173,5 +181,93 @@ describe('GET /api/mychart-instances', () => {
     const body = await res.json();
 
     expect(body[0].connected).toBe(false);
+  });
+
+  it('returns 401 when not authenticated', async () => {
+    mockRequireAuth.mockRejectedValueOnce(new AuthError('Unauthorized', 401));
+    const res = await GET(makeRequest() as never);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/mychart-instances', () => {
+  beforeEach(() => {
+    mockRequireAuth.mockClear();
+    mockCreateInstance.mockClear();
+    mockRequireAuth.mockResolvedValue({ id: 'user-1' });
+    mockCreateInstance.mockResolvedValue(makeInstance());
+  });
+
+  function makePostRequest(body: unknown) {
+    return new MockNextRequest('http://localhost:3000/api/mychart-instances', body);
+  }
+
+  it('creates and returns an instance with 201', async () => {
+    const res = await POST(makePostRequest({
+      hostname: 'mychart.example.com',
+      username: 'testuser',
+      password: 'testpass',
+    }) as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.hostname).toBe('mychart.example.com');
+    expect(body.username).toBe('testuser');
+    expect(body.connected).toBe(false);
+    expect(body).not.toHaveProperty('password');
+    expect(mockCreateInstance).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      hostname: 'mychart.example.com',
+      username: 'testuser',
+      password: 'testpass',
+    }));
+  });
+
+  it('stores optional totpSecret and mychartEmail', async () => {
+    mockCreateInstance.mockResolvedValueOnce(makeInstance({ totpSecret: 'SECRET', mychartEmail: 'homer@example.com' }));
+    const res = await POST(makePostRequest({
+      hostname: 'mychart.example.com',
+      username: 'testuser',
+      password: 'testpass',
+      totpSecret: 'SECRET',
+      mychartEmail: 'homer@example.com',
+    }) as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.hasTotpSecret).toBe(true);
+    expect(body.mychartEmail).toBe('homer@example.com');
+  });
+
+  it('returns 400 when hostname is missing', async () => {
+    const res = await POST(makePostRequest({ username: 'u', password: 'p' }) as never);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/hostname/);
+  });
+
+  it('returns 400 when username is missing', async () => {
+    const res = await POST(makePostRequest({ hostname: 'h', password: 'p' }) as never);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when password is missing', async () => {
+    const res = await POST(makePostRequest({ hostname: 'h', username: 'u' }) as never);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 409 on duplicate account', async () => {
+    mockCreateInstance.mockRejectedValueOnce(Object.assign(new Error('duplicate'), { code: '23505' }));
+    const res = await POST(makePostRequest({
+      hostname: 'mychart.example.com',
+      username: 'testuser',
+      password: 'testpass',
+    }) as never);
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 401 when not authenticated', async () => {
+    mockRequireAuth.mockRejectedValueOnce(new AuthError('Unauthorized', 401));
+    const res = await POST(makePostRequest({ hostname: 'h', username: 'u', password: 'p' }) as never);
+    expect(res.status).toBe(401);
   });
 });
