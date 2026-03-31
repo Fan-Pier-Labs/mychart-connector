@@ -129,6 +129,12 @@ function normalizePastVisits(raw: any) {
         ...orgData,
         List: orgData.List.map(normalizeVisit),
       };
+    } else if (orgData && typeof orgData === 'object' && orgData.List && typeof orgData.List === 'object' && !Array.isArray(orgData.List)) {
+      // org.List is a plain object (not array) — treat its values as a map of visit objects
+      normalized[orgKey] = {
+        ...orgData,
+        List: Object.values(orgData.List).filter(Boolean).map((v) => normalizeVisit(v as Record<string, unknown>)),
+      };
     } else if (orgData && typeof orgData === 'object' && ('Patient' in orgData || 'Physician' in orgData || 'Date' in orgData)) {
       // Org value is itself a visit object (flat structure with numeric keys)
       normalized[orgKey] = { List: [normalizeVisit(orgData)] };
