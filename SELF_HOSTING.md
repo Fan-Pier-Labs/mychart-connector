@@ -143,7 +143,7 @@ Visit your public URL to sign up and start using the app.
 
 ### `baseURL` shows `http://localhost:3000`
 
-Make sure `BETTER_AUTH_URL` is set in `web/.env.local` (not just `NEXT_PUBLIC_BASE_URL`). Restart the dev server after changing env vars.
+Make sure `BETTER_AUTH_URL` is set in `web/.env.local`. Restart the dev server after changing env vars.
 
 ### `CredentialsProviderError: Could not load credentials from any providers`
 

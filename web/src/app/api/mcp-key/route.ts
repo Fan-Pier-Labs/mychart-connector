@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const user = await requireAuth(req);
     const key = await generateApiKey(user.id);
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+    const baseUrl = `${req.nextUrl.protocol}//${req.nextUrl.host}`;
     const mcpUrl = `${baseUrl}/api/mcp?key=${key}`;
 
     return NextResponse.json({ key, mcpUrl });
