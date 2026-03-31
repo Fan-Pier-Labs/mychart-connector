@@ -31,7 +31,7 @@ export async function getAuth(): Promise<any> {
     useGoogle ? getGoogleOAuthCredentials() : Promise.resolve(null),
   ]);
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined;
-  const baseURL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
+  const baseURL = process.env.BETTER_AUTH_URL || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
   if (useGoogle && googleOAuth) {
     console.log('[Auth] Secrets loaded. Google clientId:', googleOAuth.clientId.slice(0, 20) + '...', 'baseURL:', baseURL);
   } else {
