@@ -723,7 +723,7 @@ export default function ScrapeResultsPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {Object.values(results.pastVisits.List)
-              .flatMap((org: PastVisitOrganization) => org.List || [])
+              .flatMap((org: PastVisitOrganization) => Array.isArray(org.List) ? org.List : [])
               .slice(0, 20)
               .map((v, i: number) => (
                 <VisitItem key={i} visit={v} />
