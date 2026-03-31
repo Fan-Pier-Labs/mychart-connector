@@ -30,6 +30,7 @@ export async function getAuth(): Promise<any> {
     getBetterAuthSecret(),
     useGoogle ? getGoogleOAuthCredentials() : Promise.resolve(null),
   ]);
+  // RAILWAY_PUBLIC_DOMAIN is a reference variable (not auto-injected); use it when available.
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined;
   const baseURL = process.env.BETTER_AUTH_URL || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
   if (useGoogle && googleOAuth) {
@@ -38,8 +39,13 @@ export async function getAuth(): Promise<any> {
     console.log('[Auth] Secrets loaded. Google OAuth: disabled. baseURL:', baseURL);
   }
 
-  // Build trusted origins list, always including the base URL
-  const trustedOrigins = ['http://localhost:2343', 'http://localhost:3000', 'https://mychartscrapers-staging.fanpierlabs.com', 'https://openrecord.fanpierlabs.com', 'https://mychart.fanpierlabs.com'];
+  // Build trusted origins list. Wildcards supported by BetterAuth.
+  const trustedOrigins = [
+    'http://localhost:2343',
+    'http://localhost:3000',
+    // Trust all Railway-provided subdomains so any deployment works without extra config.
+    'https://*.up.railway.app',
+  ];
   if (baseURL && !trustedOrigins.includes(baseURL)) {
     trustedOrigins.push(baseURL);
   }
