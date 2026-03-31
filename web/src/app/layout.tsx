@@ -20,9 +20,10 @@ export const metadata: Metadata = {
   title: "OpenRecord - Manage your Health Data with AI",
   description:
     "Connect your MyChart portal to Claude AI. Manage health records, send messages, book appointments, request refills, and more — all with AI.",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_BASE_URL || "https://openrecord.fanpierlabs.com"
-  ),
+  metadataBase: (() => {
+    try { return new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://openrecord.fanpierlabs.com"); }
+    catch { return new URL("https://openrecord.fanpierlabs.com"); }
+  })(),
   openGraph: {
     title: "OpenRecord - Manage your Health Data with AI",
     description:
