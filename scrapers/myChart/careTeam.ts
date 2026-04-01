@@ -1,4 +1,5 @@
 import { MyChartRequest } from "./myChartRequest";
+import { getRequestVerificationTokenFromBody } from "./util";
 import * as cheerio from 'cheerio';
 
 export type CareTeamMember = {
@@ -14,8 +15,7 @@ export async function getCareTeam(mychartRequest: MyChartRequest): Promise<CareT
 
   const members: CareTeamMember[] = [];
 
-  // Care team members are rendered as cards/list items in the page
-  // Each provider card typically has a name, role, and specialty
+  // Try structured HTML selectors first (works for some instances and fake-mychart)
   $('.careteam-provider, .provider-card, [data-testid="care-team-member"]').each((_, el) => {
     const name = $(el).find('.provider-name, .name, h3, h4').first().text().trim();
     const role = $(el).find('.provider-role, .role').first().text().trim();
@@ -25,43 +25,44 @@ export async function getCareTeam(mychartRequest: MyChartRequest): Promise<CareT
     }
   });
 
-  // Fallback: parse from page text if structured selectors didn't match
-  if (members.length === 0) {
-    const bodyText = $('body').text();
-    // Look for provider patterns in the text
-    const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (members.length > 0) return members;
 
-    let i = 0;
-    while (i < lines.length) {
-      // Provider names typically end with credentials like "MD", "NP", "DO", "PA"
-      const nameMatch = lines[i].match(/^(.+\b(?:MD|DO|NP|PA|RN|LCSW|PhD|DNP|APRN)\b.*)$/i);
-      if (nameMatch) {
-        const name = nameMatch[1].trim();
-        let role = '';
-        let specialty = '';
+  // Fallback: call the message recipients API which returns structured JSON.
+  // Many instances (e.g. UCSF) render care team via client-side JS, so the HTML
+  // above yields nothing. The recipients endpoint reliably returns providers.
+  const token = getRequestVerificationTokenFromBody(html);
+  if (token) {
+    try {
+      const apiResp = await mychartRequest.makeRequest({
+        path: '/api/medicaladvicerequests/GetMedicalAdviceRequestRecipients',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          '__RequestVerificationToken': token,
+        },
+        body: JSON.stringify({ organizationId: '' }),
+      });
+      const text = await apiResp.text();
+      const json = JSON.parse(text);
 
-        // Check next lines for role/specialty info
-        if (i + 1 < lines.length && !lines[i + 1].match(/\b(?:MD|DO|NP|PA|RN)\b,?\s*$/i)) {
-          // Could be role like "Primary Care Provider" or specialty like "Family Medicine"
-          const next = lines[i + 1];
-          if (next.toLowerCase().includes('primary care') || next.toLowerCase().includes('provider') || next.toLowerCase().includes('poc')) {
-            role = next;
-          } else {
-            specialty = next;
-          }
-        }
-        if (i + 2 < lines.length && !lines[i + 2].match(/\b(?:MD|DO|NP|PA|RN)\b,?\s*$/i)) {
-          const next2 = lines[i + 2];
-          if (!role && (next2.toLowerCase().includes('primary care') || next2.toLowerCase().includes('provider'))) {
-            role = next2;
-          } else if (!specialty) {
-            specialty = next2;
-          }
-        }
+      // Different instances wrap the list differently
+      const list: unknown[] = Array.isArray(json)
+        ? json
+        : (json?.recipients ?? json?.recipientList ?? json?.Providers ??
+           json?.providers ?? json?.ProviderList ?? json?.providerList ?? []);
 
-        members.push({ name, role, specialty });
+      for (const item of list) {
+        const r = item as Record<string, unknown>;
+        const name = String(r.displayName ?? r.DisplayName ?? r.name ?? r.Name ?? '').trim();
+        if (!name) continue;
+        members.push({
+          name,
+          role: String(r.pcpTypeDisplayName ?? r.PcpTypeDisplayName ?? r.role ?? r.Role ?? '').trim(),
+          specialty: String(r.specialty ?? r.Specialty ?? '').trim(),
+        });
       }
-      i++;
+    } catch {
+      // API not available on this instance — return empty
     }
   }
 
