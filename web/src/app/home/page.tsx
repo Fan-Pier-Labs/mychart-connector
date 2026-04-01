@@ -353,8 +353,8 @@ export default function HomePage() {
       if (data.error) {
         toast.error(data.error);
       } else {
-        ctx.setMcpUrl(data.mcpUrl);
-        if (data.mcpUrlSsl) ctx.setMcpUrlSsl(data.mcpUrlSsl);
+        const mcpUrl = `${window.location.origin}/api/mcp?key=${data.key}`;
+        ctx.setMcpUrl(mcpUrl);
         setMcpKeyGenerated(true);
         setHasExistingKey(true);
       }
