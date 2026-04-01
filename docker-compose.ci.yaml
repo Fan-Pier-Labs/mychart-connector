@@ -38,6 +38,7 @@ services:
       NEXT_PUBLIC_BASE_URL: http://localhost:8080
       TRUSTED_ORIGINS: http://localhost:8080
       DISABLE_RATE_LIMIT: "true"
+      DB_SSL: "false"
       PORT: "8080"
     depends_on:
       postgres:
