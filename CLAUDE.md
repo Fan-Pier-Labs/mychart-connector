@@ -81,9 +81,10 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 ### Railway / Self-Hosted
 
 - Config: `railway.toml` (Dockerfile-based build)
-- Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_BASE_URL`
+- Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`
+- Railway deployments work zero-config: `*.up.railway.app` is always trusted. Set `BETTER_AUTH_URL` only if using a custom domain.
 - Optional env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth disabled without them)
-- SSL is disabled for Railway Postgres connections (not needed); AWS RDS uses `{ rejectUnauthorized: false }`
+- SSL is enabled by default for all Postgres connections (Railway and AWS). Set `DB_SSL=false` only for local dev with a plain Postgres container. AWS RDS uses `{ rejectUnauthorized: false }` to accept its self-signed cert.
 
 ## S3 Buckets (us-east-2)
 
@@ -98,7 +99,7 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
   - Inbound email address: `healthapp@bocuedpo.resend.app`
 - **BETTER_AUTH_SECRET**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:BETTER_AUTH_SECRET-ViBKHZ`
   - BetterAuth session signing secret, loaded automatically from Secrets Manager
-- **BETTER_AUTH_URL**: Base URL for BetterAuth (defaults to `NEXT_PUBLIC_BASE_URL` or `http://localhost:3000`)
+- **BETTER_AUTH_URL**: Base URL for BetterAuth (defaults to `RAILWAY_PUBLIC_DOMAIN` or `http://localhost:3000`)
 - **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET**: Google OAuth credentials (optional, Google sign-in disabled without them)
 - **SENTRY_AUTH_TOKEN**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:mychart-connector-sentry-auth-token-UputCa`
   - Sentry auth token for error monitoring and source map uploads

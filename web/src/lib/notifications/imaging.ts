@@ -23,10 +23,10 @@ export async function getImagingAttachments(
 
   // Dynamic imports — clo-to-jpg-converter may not be available in all environments
   let downloadImagingStudyDirect: typeof import('../../../../scrapers/myChart/eunity/imagingDirectDownload').downloadImagingStudyDirect;
-  let convertCloToJpg: typeof import('../../../../clo-to-jpg-converter/clo_to_jpg').convertCloToJpg;
+  let convertCloToJpg: typeof import('../../../../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg').convertCloToJpg;
   try {
-    ({ downloadImagingStudyDirect } = await import('../../../../scrapers/myChart/eunity/imagingDirectDownload'));
-    ({ convertCloToJpg } = await import('../../../../clo-to-jpg-converter/clo_to_jpg'));
+    ({ downloadImagingStudyDirect } = await import(/* webpackIgnore: true */ '../../../../scrapers/myChart/eunity/imagingDirectDownload'));
+    ({ convertCloToJpg } = await import(/* webpackIgnore: true */ '../../../../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg'));
   } catch {
     console.warn('[notifications] Imaging pipeline unavailable (missing clo-to-jpg-converter or deps)');
     return [];

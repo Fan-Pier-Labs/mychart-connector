@@ -1,10 +1,7 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
-// Hardcoded infrastructure config for AWS Fargate mode
-const RDS_HOST = 'ryans-side-project.csoofaracapo.us-east-2.rds.amazonaws.com';
 const RDS_PORT = 5432;
-const RDS_USER = 'postgres';
-const RDS_DATABASE = 'mychartscrapers';
+const RDS_CONNECTION_INFO_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:RDS_CONNECTION_INFO-vSoq60';
 const RDS_PASSWORD_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:rds!db-e8257e96-5388-431e-84fe-828624f5ae16-VAxdIu';
 const MCP_ENCRYPTION_KEY_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:MCP_ENCRYPTION_KEY-7dAfwd';
 const BETTER_AUTH_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:BETTER_AUTH_SECRET-ViBKHZ';
@@ -34,6 +31,7 @@ function getSmClient(): SecretsManagerClient {
 }
 
 // Cache resolved secrets in memory
+let cachedRdsConnectionInfo: { host: string; user: string; database: string } | null = null;
 let cachedDbPassword: string | null = null;
 let cachedEncryptionKey: string | null = null;
 let cachedBetterAuthSecret: string | null = null;
@@ -44,6 +42,14 @@ async function getSecretValue(arn: string): Promise<string> {
   const resp = await getSmClient().send(new GetSecretValueCommand({ SecretId: arn }));
   if (!resp.SecretString) throw new Error(`Secret ${arn} has no string value`);
   return resp.SecretString;
+}
+
+async function getRdsConnectionInfo(): Promise<{ host: string; user: string; database: string }> {
+  if (cachedRdsConnectionInfo) return cachedRdsConnectionInfo;
+  const raw = await getSecretValue(RDS_CONNECTION_INFO_SECRET_ARN);
+  const parsed = JSON.parse(raw);
+  cachedRdsConnectionInfo = { host: parsed.host, user: parsed.user, database: parsed.database };
+  return cachedRdsConnectionInfo;
 }
 
 export async function getRdsPassword(): Promise<string> {
@@ -109,19 +115,29 @@ export async function getDatabaseUrl(): Promise<string> {
   if (isEnvVarMode()) {
     return process.env.DATABASE_URL!;
   }
-  const password = await getRdsPassword();
-  return `postgresql://${RDS_USER}:${encodeURIComponent(password)}@${RDS_HOST}:${RDS_PORT}/${RDS_DATABASE}`;
+  const [{ host, user, database }, password] = await Promise.all([
+    getRdsConnectionInfo(),
+    getRdsPassword(),
+  ]);
+  return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${RDS_PORT}/${database}`;
 }
 
 /**
  * Returns pool connection options with appropriate SSL config.
- * Railway Postgres doesn't need SSL; AWS RDS needs { rejectUnauthorized: false }.
+ * SSL is enabled by default in env-var mode (Railway / self-hosted).
+ * Set DB_SSL=false to disable SSL (e.g. local dev with a plain Postgres container).
+ * AWS RDS always uses SSL with { rejectUnauthorized: false } (self-signed cert).
  */
 export async function getPoolOptions(): Promise<{ connectionString: string; ssl: false | { rejectUnauthorized: false } }> {
   const connectionString = await getDatabaseUrl();
+  if (!isEnvVarMode()) {
+    // AWS RDS: always SSL, accept self-signed cert
+    return { connectionString, ssl: { rejectUnauthorized: false } };
+  }
+  const sslDisabled = process.env.DB_SSL === 'false';
   return {
     connectionString,
-    ssl: isEnvVarMode() ? false : { rejectUnauthorized: false },
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
   };
 }
 

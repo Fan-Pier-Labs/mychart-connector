@@ -128,6 +128,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: cd tests/integration/ci && bun install
+      - name: Install Playwright browsers
+        run: cd tests/integration/ci && bunx playwright install --with-deps chromium
       - name: Start services
         run: docker compose -f docker-compose.ci.yaml up -d --build --wait
         timeout-minutes: 10
