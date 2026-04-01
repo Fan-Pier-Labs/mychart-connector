@@ -58,15 +58,7 @@ const SafeVisitsCard = withRenderErrorBoundary(VisitsCard, "VisitsCard", (p) => 
 const SafeVisitItem = withRenderErrorBoundary(VisitItem, "VisitItem", (p) => p.visit);
 const SafeLabItem = withRenderErrorBoundary(LabItem, "LabItem", (p) => p.lab);
 
-function isAdvancedImaging(orderName: string, totalStudies: number): boolean {
-  const name = orderName.toLowerCase();
-  return totalStudies > 10
-    || name.includes('ct ') || name.includes('ct,') || name.startsWith('ct ')
-    || name.includes('mri') || name.includes('ultrasound')
-    || name.includes('mammogram') || name.includes('fluoroscop')
-    || name.includes('arthrogram') || name.includes('pet ')
-    || name.includes('nuclear') || name.includes('angiography');
-}
+import { isAdvancedImaging } from "@/lib/imaging-utils";
 
 export default function ScrapeResultsPage() {
   const router = useRouter();
