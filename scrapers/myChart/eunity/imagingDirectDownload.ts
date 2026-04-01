@@ -683,6 +683,8 @@ export interface DirectDownloadedImage {
 
 export interface DirectDownloadOptions {
   skipFileWrite?: boolean;
+  /** Stop after downloading this many images (default: unlimited). */
+  maxImages?: number;
 }
 
 /**
@@ -1101,7 +1103,9 @@ export async function downloadImagingStudyDirect(
     console.log(`      Found ${studyInfo.series.length} series, studyUID: ${studyInfo.studyUID.substring(0, 30)}...`);
 
     // Step 6: Download images for each series
+    const maxImages = options?.maxImages ?? Infinity;
     for (const series of studyInfo.series) {
+      if (result.images.length >= maxImages) break;
       console.log(`      Downloading ${series.seriesDescription}...`);
       const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
       const safeDesc = series.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');

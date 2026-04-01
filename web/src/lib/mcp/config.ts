@@ -1,6 +1,5 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { RDS_CA_BUNDLE } from '../rds-ca-bundle';
 
 const RDS_PORT = 5432;
 const RDS_CONNECTION_INFO_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:RDS_CONNECTION_INFO-vSoq60';
@@ -124,14 +123,8 @@ export async function getDatabaseUrl(): Promise<string> {
   return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${RDS_PORT}/${database}`;
 }
 
-/** Lazily loaded RDS CA bundle (committed at web/certs/rds-global-bundle.pem). */
-let _rdsCaBundle: string | null = null;
 function getRdsCaBundle(): string {
-  if (!_rdsCaBundle) {
-    // In production the working dir is /app/web; in dev it varies, so resolve relative to this file.
-    _rdsCaBundle = readFileSync(join(__dirname, '../../certs/rds-global-bundle.pem'), 'utf8');
-  }
-  return _rdsCaBundle;
+  return RDS_CA_BUNDLE;
 }
 
 /**

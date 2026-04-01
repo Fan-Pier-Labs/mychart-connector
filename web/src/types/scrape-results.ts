@@ -137,6 +137,7 @@ export type ImagingResultType = {
   scanCount: number;
   resultDate: string;
   orderProvider: string;
+  fdiContext?: { fdi: string; ord: string } | null;
 };
 
 export type UpcomingOrderType = {
