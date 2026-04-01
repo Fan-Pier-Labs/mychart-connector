@@ -198,6 +198,9 @@ export default function LoginPage() {
   const [totpCode, setTotpCode] = useState("");
   const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode>("totp");
   const [showModal, setShowModal] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [showMagicLinkInput, setShowMagicLinkInput] = useState(false);
   const [modalStep, setModalStep] = useState<"choose" | "signin">("choose");
   const timelineSectionRef = useRef<HTMLElement>(null);
 
@@ -357,6 +360,30 @@ export default function LoginPage() {
     }
   }
 
+  async function handleMagicLink() {
+    if (!magicLinkEmail) {
+      toast.error("Enter your email address.");
+      return;
+    }
+    track("auth_magic_link_attempt", { email: magicLinkEmail });
+    setLoading(true);
+    try {
+      const result = await authClient.signIn.magicLink({ email: magicLinkEmail, callbackURL: "/home" });
+      if (result.error) {
+        track("auth_magic_link_failed", { email: magicLinkEmail, error: result.error.message });
+        toast.error(result.error.message || "Failed to send magic link.");
+        setLoading(false);
+        return;
+      }
+      track("auth_magic_link_sent", { email: magicLinkEmail });
+      setMagicLinkSent(true);
+      setLoading(false);
+    } catch (err) {
+      toast.error("Failed to send magic link: " + (err as Error).message);
+      setLoading(false);
+    }
+  }
+
   async function loadDemo() {
     track("demo_button_clicked");
     setLoading(true);
@@ -382,6 +409,39 @@ export default function LoginPage() {
             <p className="text-muted-foreground">
               {authMode === "signup" ? "Creating your account..." : "Signing in..."}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (magicLinkSent) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Check your email</CardTitle>
+            <CardDescription>
+              We sent a sign-in link to <strong>{magicLinkEmail}</strong>. Click the link in the email to sign in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-center py-4">
+              <Icon icon="solar:letter-linear" width={48} height={48} className="text-blue-500" />
+            </div>
+            <p className="text-sm text-center text-slate-500">
+              Didn&apos;t receive it? Check your spam folder or try again.
+            </p>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setMagicLinkSent(false);
+                setMagicLinkEmail("");
+              }}
+            >
+              Back to sign in
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -892,12 +952,45 @@ export default function LoginPage() {
                         <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleEmailSignIn}>
                           Sign In
                         </Button>
-                        <p className="text-center text-sm text-slate-500">
-                          Don&apos;t have an account?{" "}
-                          <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
-                            Sign up
-                          </button>
-                        </p>
+                        <div className="flex items-center justify-between text-sm text-slate-500">
+                          <p>
+                            Don&apos;t have an account?{" "}
+                            <button className="text-blue-600 hover:underline font-medium" onClick={() => setAuthMode("signup")}>
+                              Sign up
+                            </button>
+                          </p>
+                          <a href="/forgot-password" className="text-blue-600 hover:underline font-medium">
+                            Forgot password?
+                          </a>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-slate-200" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-white px-2 text-slate-400">or</span>
+                          </div>
+                        </div>
+                        {!showMagicLinkInput ? (
+                          <Button variant="outline" className="w-full" onClick={() => setShowMagicLinkInput(true)}>
+                            <Icon icon="solar:letter-linear" width={20} height={20} className="mr-2" />
+                            Sign in with Email Link
+                          </Button>
+                        ) : (
+                          <div className="space-y-2">
+                            <Input
+                              type="email"
+                              placeholder="you@example.com"
+                              value={magicLinkEmail}
+                              onChange={(e) => setMagicLinkEmail(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleMagicLink()}
+                              autoFocus
+                            />
+                            <Button className="w-full bg-blue-600 hover:bg-blue-500" onClick={handleMagicLink}>
+                              Send Sign-in Link
+                            </Button>
+                          </div>
+                        )}
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-slate-200" />

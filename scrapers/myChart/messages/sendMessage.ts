@@ -112,7 +112,19 @@ export async function getMessageRecipients(
     { organizationId },
     token,
   );
-  return (result.json as MessageRecipient[]) ?? [];
+  // Some instances return a bare array; others wrap it in an object.
+  if (Array.isArray(result.json)) {
+    return result.json as MessageRecipient[];
+  }
+  const data = result.json as Record<string, unknown> | null;
+  const list =
+    data?.recipients ??
+    data?.recipientList ??
+    data?.Providers ??
+    data?.providers ??
+    data?.ProviderList ??
+    data?.providerList;
+  return Array.isArray(list) ? (list as MessageRecipient[]) : [];
 }
 
 /** Get the viewer (patient) wprId needed for sending */

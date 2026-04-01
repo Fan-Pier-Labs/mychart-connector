@@ -13,10 +13,11 @@ export async function GET(req: NextRequest) {
     const user = await requireAuth(req);
     const instances = await getMyChartInstances(user.id);
 
-    // Auto-connect TOTP-enabled instances that aren't already logged in
+    // Auto-connect TOTP-enabled instances that aren't already logged in (skip disabled)
     await Promise.all(
       instances
         .filter((inst) => {
+          if (!inst.enabled) return false;
           if (!inst.totpSecret) return false;
           const entry = sessionStore.getEntry(`${user.id}:${inst.id}`);
           return !entry || entry.status !== 'logged_in';
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
         username: inst.username,
         mychartEmail: inst.mychartEmail,
         hasTotpSecret: !!inst.totpSecret,
+        enabled: inst.enabled,
         connected,
         createdAt: inst.createdAt,
         updatedAt: inst.updatedAt,
@@ -84,6 +86,7 @@ export async function POST(req: NextRequest) {
       username: instance.username,
       mychartEmail: instance.mychartEmail,
       hasTotpSecret: !!instance.totpSecret,
+      enabled: instance.enabled,
       connected: false,
       createdAt: instance.createdAt,
       updatedAt: instance.updatedAt,

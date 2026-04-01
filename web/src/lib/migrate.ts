@@ -53,6 +53,11 @@ export async function runMigrations(): Promise<void> {
     ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS notifications_last_checked_at TIMESTAMPTZ;
   `);
 
+  // 6. Add enabled column to mychart_instances (default TRUE)
+  await pool.query(`
+    ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE;
+  `);
+
   await pool.end();
   console.log('[migrate] Database migrations complete.');
 }
