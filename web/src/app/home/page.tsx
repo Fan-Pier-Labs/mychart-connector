@@ -289,6 +289,25 @@ export default function HomePage() {
     setTotpWarning(false);
   }
 
+  async function toggleInstance(id: string, enabled: boolean) {
+    try {
+      const res = await fetch(`/api/mychart-instances/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to update instance.");
+        return;
+      }
+      await ctx.refreshInstances();
+      toast.success(enabled ? "Account enabled." : "Account disabled.");
+    } catch (err) {
+      toast.error("Network error: " + (err as Error).message);
+    }
+  }
+
   async function deleteInstance(id: string) {
     track('instance_deleted');
     try {
@@ -334,8 +353,8 @@ export default function HomePage() {
       if (data.error) {
         toast.error(data.error);
       } else {
-        ctx.setMcpUrl(data.mcpUrl);
-        if (data.mcpUrlSsl) ctx.setMcpUrlSsl(data.mcpUrlSsl);
+        const mcpUrl = `${window.location.origin}/api/mcp?key=${data.key}`;
+        ctx.setMcpUrl(mcpUrl);
         setMcpKeyGenerated(true);
         setHasExistingKey(true);
       }
@@ -835,13 +854,20 @@ export default function HomePage() {
                   <div
                     key={inst.id}
                     className={`flex items-center justify-between border rounded-lg p-4 ${
+                      !inst.enabled ? "border-slate-200 bg-slate-50 opacity-60" :
                       isActive ? "border-blue-300 bg-blue-50" : "border-slate-200"
                     }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex h-2 w-2 rounded-full ${inst.connected ? "bg-green-500" : "bg-slate-300"}`} />
+                        <span className={`inline-flex h-2 w-2 rounded-full ${
+                          !inst.enabled ? "bg-slate-300" :
+                          inst.connected ? "bg-green-500" : "bg-slate-300"
+                        }`} />
                         <p className="font-medium text-sm truncate">{inst.hostname}</p>
+                        {!inst.enabled && (
+                          <span className="text-xs text-slate-400 font-medium">Disabled</span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {inst.username}
@@ -849,7 +875,23 @@ export default function HomePage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 ml-4">
-                      {!inst.connected ? (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={inst.enabled}
+                        aria-label={inst.enabled ? "Disable account" : "Enable account"}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                          inst.enabled ? "bg-blue-600" : "bg-slate-200"
+                        }`}
+                        onClick={() => toggleInstance(inst.id, !inst.enabled)}
+                      >
+                        <span
+                          className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                            inst.enabled ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                      {inst.enabled && !inst.connected ? (
                         <Button
                           size="sm"
                           onClick={() => connectInstance(inst)}
@@ -857,9 +899,9 @@ export default function HomePage() {
                         >
                           {isConnecting ? "Connecting..." : "Connect"}
                         </Button>
-                      ) : isActive ? (
+                      ) : inst.enabled && isActive ? (
                         <span className="text-xs text-blue-600 font-medium">Active</span>
-                      ) : (
+                      ) : inst.enabled && inst.connected ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -872,7 +914,7 @@ export default function HomePage() {
                         >
                           Select
                         </Button>
-                      )}
+                      ) : null}
                       <Button
                         size="sm"
                         variant="ghost"

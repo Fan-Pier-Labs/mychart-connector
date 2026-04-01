@@ -46,9 +46,12 @@ End-to-end tests in `tests/integration/ci/` that exercise the full user journey 
 5. MCP API key generate/revoke lifecycle
 6. Notification preference CRUD
 7. App-level TOTP 2FA enable/verify/sign-in/disable
-8. MyChart instance deletion and cleanup
+8. Password reset request, token validation, password change, old password rejection
+9. MyChart instance deletion and cleanup
 
 **Protocol detection**: Hostnames without a dot (e.g. Docker service names like `fake-mychart:3000`) automatically use HTTP instead of HTTPS.
+
+**Database access**: PostgreSQL is exposed on host port 5433 (mapped from container port 5432) so integration tests can query the DB directly (e.g., to extract password reset tokens from the `verification` table). Connection string: `postgresql://testuser:testpass@localhost:5433/mychart_test` (override with `CI_DATABASE_URL` env var).
 
 ## Reference Docs
 
@@ -78,9 +81,10 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 ### Railway / Self-Hosted
 
 - Config: `railway.toml` (Dockerfile-based build)
-- Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_BASE_URL`
+- Required env vars: `DATABASE_URL` (auto from Postgres plugin), `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`
+- Railway deployments work zero-config: `*.up.railway.app` is always trusted. Set `BETTER_AUTH_URL` only if using a custom domain.
 - Optional env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google OAuth disabled without them)
-- SSL is disabled for Railway Postgres connections (not needed); AWS RDS uses `{ rejectUnauthorized: false }`
+- SSL is enabled by default for all Postgres connections (Railway and AWS). Set `DB_SSL=false` only for local dev with a plain Postgres container. AWS RDS uses full certificate verification (`rejectUnauthorized: true`) with the committed CA bundle at `web/certs/rds-global-bundle.pem`. Railway uses `rejectUnauthorized: false` (self-signed certs).
 
 ## S3 Buckets (us-east-2)
 
@@ -95,7 +99,7 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
   - Inbound email address: `healthapp@bocuedpo.resend.app`
 - **BETTER_AUTH_SECRET**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:BETTER_AUTH_SECRET-ViBKHZ`
   - BetterAuth session signing secret, loaded automatically from Secrets Manager
-- **BETTER_AUTH_URL**: Base URL for BetterAuth (defaults to `NEXT_PUBLIC_BASE_URL` or `http://localhost:3000`)
+- **BETTER_AUTH_URL**: Base URL for BetterAuth (defaults to `RAILWAY_PUBLIC_DOMAIN` or `http://localhost:3000`)
 - **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET**: Google OAuth credentials (optional, Google sign-in disabled without them)
 - **SENTRY_AUTH_TOKEN**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:mychart-connector-sentry-auth-token-UputCa`
   - Sentry auth token for error monitoring and source map uploads
@@ -114,11 +118,15 @@ BetterAuth handles email+password and Google OAuth sign-in. Two additional auth 
 
 - **Passkeys (WebAuthn)**: Users can register passkeys (Touch ID, Face ID, security keys) from the Security card on the home page. Sign-in with passkey is available on the login page.
 - **TOTP 2FA (Authenticator App)**: Users can enable TOTP-based two-factor authentication from the Security card. When enabled, sign-in with email+password requires a 6-digit code from an authenticator app. Backup codes are provided during setup.
+- **Password Reset**: Users can reset their password via email. The flow: `/forgot-password` (enter email) → receive reset email via Resend → `/reset-password?token=...` (enter new password). Uses BetterAuth's built-in `forgetPassword`/`resetPassword` APIs.
 
 Key files:
-- `web/src/lib/auth.ts` — Server config with `twoFactor()` and `passkey()` plugins
+- `web/src/lib/auth.ts` — Server config with `twoFactor()` and `passkey()` plugins, `sendResetPassword` email handler
 - `web/src/lib/auth-client.ts` — Client config with `twoFactorClient()` and `passkeyClient()` plugins
-- `web/src/app/login/page.tsx` — Passkey sign-in button + TOTP verification step
+- `web/src/lib/email.ts` — Shared transactional email utility (Resend). Supports both AWS Secrets Manager and `RESEND_API_KEY` env var
+- `web/src/app/login/page.tsx` — Passkey sign-in button + TOTP verification step + "Forgot password?" link
+- `web/src/app/forgot-password/page.tsx` — Request password reset email
+- `web/src/app/reset-password/page.tsx` — Set new password with reset token
 - `web/src/app/home/page.tsx` — Security settings card (enable/disable TOTP, manage passkeys)
 
 Database tables (`twoFactor`, `passkey`) are auto-created by `runMigrations()`.
@@ -226,7 +234,8 @@ When reverse engineering health portal APIs (MyChart, etc.), the request headers
 - Always create a PR for new features — never push directly to `main`
 - CI must pass (lint, tests, build) before merging
 - **NEVER merge pull requests or enable auto merge without the user's explicit permission.** Wait for the user to explicitly tell you to do so.
-- Make sure to write tests as well. Unit, and integration when appropriate. 
+- **Always write tests for all changes.** Unit tests for scraper/utility logic, and integration tests (in `tests/integration/ci/integration.test.ts`) for web app features and API endpoints. No PR should be submitted without corresponding test coverage.
+- **Run the web app for the user to test.** When web app changes are ready for review, start the dev server on a random local port (use `python3 -c "import random; print(random.randint(3100, 3999))"` to pick the port, then `cd web && PORT=<port> bun run dev`). Share the URL so the user can test in the browser.
 
 ### Creating / Updating PRs
 

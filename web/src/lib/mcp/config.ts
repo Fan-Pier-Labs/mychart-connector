@@ -1,14 +1,14 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-// Hardcoded infrastructure config for AWS Fargate mode
-const RDS_HOST = 'openrecord-prod.csoofaracapo.us-east-2.rds.amazonaws.com';
 const RDS_PORT = 5432;
-const RDS_USER = 'postgres';
-const RDS_DATABASE = 'mychartscrapers';
+const RDS_CONNECTION_INFO_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:RDS_CONNECTION_INFO-vSoq60';
 const RDS_PASSWORD_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:rds!db-e8257e96-5388-431e-84fe-828624f5ae16-VAxdIu';
 const MCP_ENCRYPTION_KEY_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:MCP_ENCRYPTION_KEY-7dAfwd';
 const BETTER_AUTH_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:BETTER_AUTH_SECRET-ViBKHZ';
 const GOOGLE_OAUTH_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:GOOGLE_OAUTH_CREDENTIALS-XtqYdp';
+const RESEND_API_KEY_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:RESEND_API_KEY-vKJonO';
 
 const AWS_REGION = 'us-east-2';
 
@@ -33,15 +33,25 @@ function getSmClient(): SecretsManagerClient {
 }
 
 // Cache resolved secrets in memory
+let cachedRdsConnectionInfo: { host: string; user: string; database: string } | null = null;
 let cachedDbPassword: string | null = null;
 let cachedEncryptionKey: string | null = null;
 let cachedBetterAuthSecret: string | null = null;
 let cachedGoogleOAuth: { clientId: string; clientSecret: string } | null = null;
+let cachedResendApiKey: string | null = null;
 
 async function getSecretValue(arn: string): Promise<string> {
   const resp = await getSmClient().send(new GetSecretValueCommand({ SecretId: arn }));
   if (!resp.SecretString) throw new Error(`Secret ${arn} has no string value`);
   return resp.SecretString;
+}
+
+async function getRdsConnectionInfo(): Promise<{ host: string; user: string; database: string }> {
+  if (cachedRdsConnectionInfo) return cachedRdsConnectionInfo;
+  const raw = await getSecretValue(RDS_CONNECTION_INFO_SECRET_ARN);
+  const parsed = JSON.parse(raw);
+  cachedRdsConnectionInfo = { host: parsed.host, user: parsed.user, database: parsed.database };
+  return cachedRdsConnectionInfo;
 }
 
 export async function getRdsPassword(): Promise<string> {
@@ -107,18 +117,48 @@ export async function getDatabaseUrl(): Promise<string> {
   if (isEnvVarMode()) {
     return process.env.DATABASE_URL!;
   }
-  const password = await getRdsPassword();
-  return `postgresql://${RDS_USER}:${encodeURIComponent(password)}@${RDS_HOST}:${RDS_PORT}/${RDS_DATABASE}`;
+  const [{ host, user, database }, password] = await Promise.all([
+    getRdsConnectionInfo(),
+    getRdsPassword(),
+  ]);
+  return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${RDS_PORT}/${database}`;
+}
+
+/** Lazily loaded RDS CA bundle (committed at web/certs/rds-global-bundle.pem). */
+let _rdsCaBundle: string | null = null;
+function getRdsCaBundle(): string {
+  if (!_rdsCaBundle) {
+    // In production the working dir is /app/web; in dev it varies, so resolve relative to this file.
+    _rdsCaBundle = readFileSync(join(__dirname, '../../certs/rds-global-bundle.pem'), 'utf8');
+  }
+  return _rdsCaBundle;
 }
 
 /**
  * Returns pool connection options with appropriate SSL config.
- * Railway Postgres doesn't need SSL; AWS RDS needs { rejectUnauthorized: false }.
+ * - AWS RDS: SSL with full certificate verification using the committed CA bundle.
+ * - Railway / self-hosted: SSL with rejectUnauthorized: false (self-signed certs).
+ * - Set DB_SSL=false to disable SSL entirely (e.g. local dev with a plain Postgres container).
  */
-export async function getPoolOptions(): Promise<{ connectionString: string; ssl: false | { rejectUnauthorized: false } }> {
+export async function getPoolOptions(): Promise<{ connectionString: string; ssl: false | { rejectUnauthorized: boolean; ca?: string } }> {
   const connectionString = await getDatabaseUrl();
+  if (!isEnvVarMode()) {
+    // AWS RDS: full cert verification against the RDS CA bundle
+    return { connectionString, ssl: { rejectUnauthorized: true, ca: getRdsCaBundle() } };
+  }
+  const sslDisabled = process.env.DB_SSL === 'false';
   return {
     connectionString,
-    ssl: isEnvVarMode() ? false : { rejectUnauthorized: false },
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
   };
+}
+
+export async function getResendApiKey(): Promise<string> {
+  if (cachedResendApiKey) return cachedResendApiKey;
+  if (process.env.RESEND_API_KEY) {
+    cachedResendApiKey = process.env.RESEND_API_KEY;
+    return cachedResendApiKey;
+  }
+  cachedResendApiKey = await getSecretValue(RESEND_API_KEY_SECRET_ARN);
+  return cachedResendApiKey;
 }

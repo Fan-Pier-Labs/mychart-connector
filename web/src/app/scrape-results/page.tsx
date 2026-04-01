@@ -16,6 +16,7 @@ import { DataRow, DataSection, ArraySection, BillingVisits, VisitsCard, VisitIte
 import { CorrelatedTimeline } from "@/components/correlated-timeline";
 import { SafeHtml } from "@/components/SafeHtml";
 import { SectionErrorBoundary } from "@/components/SectionErrorBoundary";
+import { withRenderErrorBoundary, ErrorBoundary } from "@/components/with-render-error-boundary";
 import type {
   MedicationType,
   AllergyType,
@@ -48,6 +49,14 @@ import type {
 } from "@/types/scrape-results";
 import type { BillingAccount } from "@/lib/mychart/bills/bills";
 import type { LabTestResultWithHistory } from "../../../../scrapers/myChart/labs_and_procedure_results/labtestresulttype";
+
+const SafeCorrelatedTimeline = withRenderErrorBoundary(CorrelatedTimeline, "CorrelatedTimeline", (p) => p.data);
+const SafeDataSection = withRenderErrorBoundary(DataSection, "DataSection", (p) => p.data);
+const SafeArraySection = withRenderErrorBoundary(ArraySection, "ArraySection", (p) => p.data);
+const SafeBillingVisits = withRenderErrorBoundary(BillingVisits, "BillingVisits", (p) => p.visits);
+const SafeVisitsCard = withRenderErrorBoundary(VisitsCard, "VisitsCard", (p) => p.data);
+const SafeVisitItem = withRenderErrorBoundary(VisitItem, "VisitItem", (p) => p.visit);
+const SafeLabItem = withRenderErrorBoundary(LabItem, "LabItem", (p) => p.lab);
 
 export default function ScrapeResultsPage() {
   const router = useRouter();
@@ -277,10 +286,11 @@ export default function ScrapeResultsPage() {
       )}
 
       {/* Correlated Timeline */}
-      <CorrelatedTimeline data={results} />
+      <SafeCorrelatedTimeline data={results} />
 
       {/* Profile */}
       {results.profile && !results.profile.error && (
+        <ErrorBoundary name="Profile" data={results.profile}>
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
@@ -295,10 +305,11 @@ export default function ScrapeResultsPage() {
             </div>
           </CardContent>
         </Card>
+        </ErrorBoundary>
       )}
 
       {/* Health Summary */}
-      <DataSection title="Health Summary" data={results.healthSummary}>
+      <SafeDataSection title="Health Summary" data={results.healthSummary}>
         {results.healthSummary && (
           <div className="grid grid-cols-2 gap-3 text-sm">
             <DataRow label="Age" value={results.healthSummary.patientAge} />
@@ -314,10 +325,10 @@ export default function ScrapeResultsPage() {
             )}
           </div>
         )}
-      </DataSection>
+      </SafeDataSection>
 
       {/* Medications */}
-      <DataSection title="Medications" data={results.medications} count={results.medications?.medications?.length}>
+      <SafeDataSection title="Medications" data={results.medications} count={results.medications?.medications?.length}>
         {results.medications?.medications?.map((med: MedicationType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
@@ -332,10 +343,10 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </DataSection>
+      </SafeDataSection>
 
       {/* Allergies */}
-      <DataSection title="Allergies" data={results.allergies} count={results.allergies?.allergies?.length}>
+      <SafeDataSection title="Allergies" data={results.allergies} count={results.allergies?.allergies?.length}>
         {results.allergies?.allergies?.map((a: AllergyType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
@@ -350,10 +361,10 @@ export default function ScrapeResultsPage() {
             )}
           </div>
         ))}
-      </DataSection>
+      </SafeDataSection>
 
       {/* Immunizations */}
-      <ArraySection title="Immunizations" data={results.immunizations}>
+      <SafeArraySection title="Immunizations" data={results.immunizations}>
         {Array.isArray(results.immunizations) && results.immunizations.map((imm: ImmunizationType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-medium">{imm.name}</span>
@@ -365,10 +376,10 @@ export default function ScrapeResultsPage() {
             )}
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Insurance */}
-      <DataSection title="Insurance" data={results.insurance} count={results.insurance?.coverages?.length}>
+      <SafeDataSection title="Insurance" data={results.insurance} count={results.insurance?.coverages?.length}>
         {results.insurance?.coverages?.map((cov: InsuranceCoverageType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-medium">{cov.planName}</span>
@@ -382,10 +393,10 @@ export default function ScrapeResultsPage() {
             ))}
           </div>
         ))}
-      </DataSection>
+      </SafeDataSection>
 
       {/* Care Team */}
-      <ArraySection title="Care Team" data={results.careTeam}>
+      <SafeArraySection title="Care Team" data={results.careTeam}>
         {Array.isArray(results.careTeam) && results.careTeam.map((m: CareTeamMemberType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-medium">{m.name}</span>
@@ -393,10 +404,10 @@ export default function ScrapeResultsPage() {
             {m.specialty && <p className="text-xs text-muted-foreground mt-1">{safeText(m.specialty)}</p>}
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Referrals */}
-      <ArraySection title="Referrals" data={results.referrals}>
+      <SafeArraySection title="Referrals" data={results.referrals}>
         {Array.isArray(results.referrals) && results.referrals.map((ref: ReferralType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
@@ -411,10 +422,10 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Health Issues */}
-      <ArraySection title="Health Issues" data={results.healthIssues}>
+      <SafeArraySection title="Health Issues" data={results.healthIssues}>
         {Array.isArray(results.healthIssues) && results.healthIssues.map((hi: HealthIssueType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
@@ -423,10 +434,10 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Vitals */}
-      <ArraySection title="Vitals" data={results.vitals}>
+      <SafeArraySection title="Vitals" data={results.vitals}>
         {Array.isArray(results.vitals) && results.vitals.map((flowsheet: FlowsheetType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-semibold">{flowsheet.name}</span>
@@ -440,10 +451,10 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Emergency Contacts */}
-      <ArraySection title="Emergency Contacts" data={results.emergencyContacts}>
+      <SafeArraySection title="Emergency Contacts" data={results.emergencyContacts}>
         {Array.isArray(results.emergencyContacts) && results.emergencyContacts.map((ec: EmergencyContactType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-medium">{ec.name}</span>
@@ -452,10 +463,10 @@ export default function ScrapeResultsPage() {
             {ec.isEmergencyContact && <Badge variant="outline" className="text-[10px] mt-1">Emergency Contact</Badge>}
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Medical History */}
-      <DataSection title="Medical History" data={results.medicalHistory}>
+      <SafeDataSection title="Medical History" data={results.medicalHistory}>
         {results.medicalHistory && (
           <div className="space-y-4">
             {(results.medicalHistory.medicalHistory?.diagnoses?.length ?? 0) > 0 && (
@@ -494,10 +505,10 @@ export default function ScrapeResultsPage() {
             )}
           </div>
         )}
-      </DataSection>
+      </SafeDataSection>
 
       {/* Preventive Care */}
-      <ArraySection title="Preventive Care" data={results.preventiveCare}>
+      <SafeArraySection title="Preventive Care" data={results.preventiveCare}>
         {Array.isArray(results.preventiveCare) && results.preventiveCare.map((item: PreventiveCareType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
@@ -517,10 +528,10 @@ export default function ScrapeResultsPage() {
             </Badge>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Goals */}
-      <DataSection title="Goals" data={results.goals}>
+      <SafeDataSection title="Goals" data={results.goals}>
         {results.goals && (
           <div className="space-y-3">
             {results.goals.careTeamGoals?.map((g: GoalType, i: number) => (
@@ -547,10 +558,10 @@ export default function ScrapeResultsPage() {
             ))}
           </div>
         )}
-      </DataSection>
+      </SafeDataSection>
 
       {/* Letters */}
-      <ArraySection title="Letters" data={results.letters}>
+      <SafeArraySection title="Letters" data={results.letters}>
         {Array.isArray(results.letters) && results.letters.map((l: LetterType, i: number) => {
           const key = `${l.hnoId}-${l.csn}`;
           const hasContent = !!letterHtml[key];
@@ -609,10 +620,10 @@ export default function ScrapeResultsPage() {
             </div>
           );
         })}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Documents */}
-      <ArraySection title="Documents" data={results.documents}>
+      <SafeArraySection title="Documents" data={results.documents}>
         {Array.isArray(results.documents) && results.documents.map((doc: DocumentType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
@@ -625,10 +636,10 @@ export default function ScrapeResultsPage() {
             </p>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Activity Feed */}
-      <ArraySection title="Activity Feed" data={results.activityFeed}>
+      <SafeArraySection title="Activity Feed" data={results.activityFeed}>
         {Array.isArray(results.activityFeed) && results.activityFeed.map((item: ActivityFeedItemType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
@@ -642,10 +653,11 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Billing */}
       {results.billing && Array.isArray(results.billing) && results.billing.length > 0 && (
+        <ErrorBoundary name="Billing" data={results.billing}>
         <Card>
           <CardHeader>
             <CardTitle>Billing</CardTitle>
@@ -715,7 +727,7 @@ export default function ScrapeResultsPage() {
                   )}
 
                   {account.billingDetails?.Data && (
-                    <BillingVisits
+                    <SafeBillingVisits
                       visits={[
                         ...(account.billingDetails.Data.UnifiedVisitList || []),
                         ...(account.billingDetails.Data.InformationalVisitList || []),
@@ -728,70 +740,60 @@ export default function ScrapeResultsPage() {
             })}
           </CardContent>
         </Card>
+        </ErrorBoundary>
       )}
 
       {/* Upcoming Visits */}
-      <SectionErrorBoundary section="Upcoming Visits">
-        <VisitsCard
-          title="Upcoming Visits"
-          data={results.upcomingVisits}
-          getVisits={(d) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const visits = d as any;
-            if (Array.isArray(visits)) return visits;
-            const toArr = (v: unknown) => Array.isArray(v) ? v : [];
-            return [
-              ...toArr(visits?.LaterVisitsList),
-              ...toArr(visits?.NextNDaysVisits),
-              ...toArr(visits?.InProgressVisits),
-            ];
-          }}
-        />
-      </SectionErrorBoundary>
+      <SafeVisitsCard
+        title="Upcoming Visits"
+        data={results.upcomingVisits}
+        getVisits={(d) => {
+          const visits = d as NonNullable<typeof results.upcomingVisits>;
+          return [
+            ...(visits?.LaterVisitsList || []),
+            ...(visits?.NextNDaysVisits || []),
+            ...(visits?.InProgressVisits || []),
+          ];
+        }}
+      />
 
       {/* Past Visits */}
-      <SectionErrorBoundary section="Past Visits">
-        {results.pastVisits && !results.pastVisits?.error && results.pastVisits?.List && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Past Visits</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {(Array.isArray(results.pastVisits.List)
-                ? results.pastVisits.List
-                : Object.values(results.pastVisits.List)
-                  .flatMap((org: PastVisitOrganization) => {
-                    if (Array.isArray(org?.List)) return org.List;
-                    if (Array.isArray(org)) return org;
-                    if (org && typeof org === 'object' && ('Date' in org || 'Patient' in org)) return [org];
-                    return [];
-                  })
-              )
-                .slice(0, 20)
-                .map((v, i: number) => (
-                  <VisitItem key={i} visit={v} />
-                ))}
-            </CardContent>
-          </Card>
-        )}
-      </SectionErrorBoundary>
+      {results.pastVisits && !results.pastVisits?.error && results.pastVisits?.List && (
+        <ErrorBoundary name="PastVisits" data={results.pastVisits}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Past Visits</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {Object.values(results.pastVisits.List)
+              .flatMap((org: PastVisitOrganization) => Array.isArray(org.List) ? org.List : [])
+              .slice(0, 20)
+              .map((v, i: number) => (
+                <SafeVisitItem key={i} visit={v} />
+              ))}
+          </CardContent>
+        </Card>
+        </ErrorBoundary>
+      )}
 
       {/* Lab Results */}
       {results.labResults && Array.isArray(results.labResults) && results.labResults.length > 0 && (
+        <ErrorBoundary name="LabResults" data={results.labResults}>
         <Card>
           <CardHeader>
             <CardTitle>Lab Results ({results.labResults.length})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {results.labResults.slice(0, 15).map((lab: LabTestResultWithHistory, i: number) => (
-              <LabItem key={i} lab={lab} />
+              <SafeLabItem key={i} lab={lab} />
             ))}
           </CardContent>
         </Card>
+        </ErrorBoundary>
       )}
 
       {/* Imaging Results */}
-      <ArraySection title="Imaging Results" data={results.imagingResults}>
+      <SafeArraySection title="Imaging Results" data={results.imagingResults}>
         {Array.isArray(results.imagingResults) && results.imagingResults.map((img: ImagingResultType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-semibold">{img.orderName}</span>
@@ -842,10 +844,10 @@ export default function ScrapeResultsPage() {
             )}
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Upcoming Orders */}
-      <ArraySection title="Upcoming Orders" data={results.upcomingOrders}>
+      <SafeArraySection title="Upcoming Orders" data={results.upcomingOrders}>
         {Array.isArray(results.upcomingOrders) && results.upcomingOrders.map((order: UpcomingOrderType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
@@ -859,10 +861,10 @@ export default function ScrapeResultsPage() {
             </p>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Questionnaires */}
-      <ArraySection title="Questionnaires" data={results.questionnaires}>
+      <SafeArraySection title="Questionnaires" data={results.questionnaires}>
         {Array.isArray(results.questionnaires) && results.questionnaires.map((q: QuestionnaireType, i: number) => (
           <div key={i} className="flex items-center justify-between bg-muted rounded-md p-3 text-sm">
             <div>
@@ -875,10 +877,10 @@ export default function ScrapeResultsPage() {
             </Badge>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Care Journeys */}
-      <ArraySection title="Care Journeys" data={results.careJourneys}>
+      <SafeArraySection title="Care Journeys" data={results.careJourneys}>
         {Array.isArray(results.careJourneys) && results.careJourneys.map((cj: CareJourneyType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
@@ -889,10 +891,10 @@ export default function ScrapeResultsPage() {
             {cj.providerName && <p className="text-xs text-muted-foreground">Provider: {cj.providerName}</p>}
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Education Materials */}
-      <ArraySection title="Education Materials" data={results.educationMaterials}>
+      <SafeArraySection title="Education Materials" data={results.educationMaterials}>
         {Array.isArray(results.educationMaterials) && results.educationMaterials.map((ed: EducationMaterialType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <span className="font-medium">{ed.title}</span>
@@ -903,10 +905,10 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* EHI Export */}
-      <ArraySection title="Health Information Export" data={results.ehiExport}>
+      <SafeArraySection title="Health Information Export" data={results.ehiExport}>
         {Array.isArray(results.ehiExport) && results.ehiExport.map((t: EhiTemplateType, i: number) => (
           <div key={i} className="bg-muted rounded-md p-3 text-sm">
             <div className="flex items-center gap-2">
@@ -916,10 +918,10 @@ export default function ScrapeResultsPage() {
             {t.description && <p className="text-xs text-muted-foreground mt-1">{t.description}</p>}
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Linked MyChart Accounts */}
-      <ArraySection title="Linked MyChart Accounts" data={results.linkedMyChartAccounts}>
+      <SafeArraySection title="Linked MyChart Accounts" data={results.linkedMyChartAccounts}>
         {Array.isArray(results.linkedMyChartAccounts) && results.linkedMyChartAccounts.map((acct: LinkedMyChartAccountType, i: number) => (
           <div key={i} className="flex items-center gap-3 bg-muted rounded-md p-3 text-sm">
             {acct.logoUrl && (
@@ -934,10 +936,11 @@ export default function ScrapeResultsPage() {
             </div>
           </div>
         ))}
-      </ArraySection>
+      </SafeArraySection>
 
       {/* Messages / Conversations */}
       {results.messages && !results.messages?.error && (
+        <ErrorBoundary name="Messages" data={results.messages}>
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -1157,6 +1160,7 @@ export default function ScrapeResultsPage() {
             )}
           </CardContent>
         </Card>
+        </ErrorBoundary>
       )}
 
       {/* Raw JSON */}
