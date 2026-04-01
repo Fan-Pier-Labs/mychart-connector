@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAppContext } from "@/lib/app-context";
 import { DataRow, DataSection, ArraySection, BillingVisits, VisitsCard, VisitItem, LabItem, safeText } from "@/components/data-display";
 import { CorrelatedTimeline } from "@/components/correlated-timeline";
+import { SafeHtml } from "@/components/SafeHtml";
 import type {
   MedicationType,
   AllergyType,
@@ -74,6 +75,31 @@ export default function ScrapeResultsPage() {
   const [sendingNew, setSendingNew] = useState(false);
   const [messageStatus, setMessageStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // X-ray viewing state
+  const [xrayImages, setXrayImages] = useState<Record<number, string | null>>({});
+  const [xrayLoading, setXrayLoading] = useState<Record<number, boolean>>({});
+  const [xrayErrors, setXrayErrors] = useState<Record<number, string | null>>({});
+
+  const fetchXray = useCallback(async (index: number, fdiContext: { fdi: string; ord: string }) => {
+    setXrayLoading(prev => ({ ...prev, [index]: true }));
+    setXrayErrors(prev => ({ ...prev, [index]: null }));
+    try {
+      const fdiParam = btoa(JSON.stringify(fdiContext));
+      const resp = await fetch(`/api/mychart-xray?token=${encodeURIComponent(token)}&fdi=${encodeURIComponent(fdiParam)}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Failed to load X-ray' }));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      setXrayImages(prev => ({ ...prev, [index]: url }));
+    } catch (err) {
+      setXrayErrors(prev => ({ ...prev, [index]: (err as Error).message }));
+    } finally {
+      setXrayLoading(prev => ({ ...prev, [index]: false }));
+    }
+  }, [token]);
 
   const fetchLetterContent = useCallback(async (hnoId: string, csn: string) => {
     const key = `${hnoId}-${csn}`;
@@ -572,9 +598,10 @@ export default function ScrapeResultsPage() {
                 </div>
               </div>
               {hasContent && (
-                <div
+                <SafeHtml
+                  html={letterHtml[key]}
+                  token={token}
                   className="mt-3 border rounded bg-white p-4 text-xs overflow-auto max-h-96"
-                  dangerouslySetInnerHTML={{ __html: letterHtml[key] }}
                 />
               )}
             </div>
@@ -768,6 +795,33 @@ export default function ScrapeResultsPage() {
                 <summary className="text-xs font-medium cursor-pointer">Full Report</summary>
                 <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{img.narrative}</p>
               </details>
+            )}
+            {img.fdiContext && !isDemo && (
+              <div className="mt-2">
+                {!xrayImages[i] && !xrayLoading[i] && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => fetchXray(i, img.fdiContext!)}
+                  >
+                    View X-ray
+                  </Button>
+                )}
+                {xrayLoading[i] && (
+                  <p className="text-xs text-muted-foreground">Loading X-ray image...</p>
+                )}
+                {xrayErrors[i] && (
+                  <p className="text-xs text-red-500">Failed to load X-ray: {xrayErrors[i]}</p>
+                )}
+                {xrayImages[i] && (
+                  <img
+                    src={xrayImages[i]!}
+                    alt={img.orderName}
+                    className="mt-2 max-w-full rounded border bg-black"
+                  />
+                )}
+              </div>
             )}
           </div>
         ))}
@@ -1015,9 +1069,10 @@ export default function ScrapeResultsPage() {
                           </span>
                           <span className="text-muted-foreground">{safeText(msg.sentDate)}</span>
                         </div>
-                        <div
+                        <SafeHtml
+                          html={msg.messageBody}
+                          token={token}
                           className="text-xs whitespace-pre-wrap"
-                          dangerouslySetInnerHTML={{ __html: msg.messageBody }}
                         />
                       </div>
                     ))}
