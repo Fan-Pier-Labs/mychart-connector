@@ -1,7 +1,7 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
 // Hardcoded infrastructure config for AWS Fargate mode
-const RDS_HOST = 'ryans-side-project.csoofaracapo.us-east-2.rds.amazonaws.com';
+const RDS_HOST = 'openrecord-prod.csoofaracapo.us-east-2.rds.amazonaws.com';
 const RDS_PORT = 5432;
 const RDS_USER = 'postgres';
 const RDS_DATABASE = 'mychartscrapers';
