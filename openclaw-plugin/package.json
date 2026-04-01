@@ -29,15 +29,15 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "fetch-cookie": "^3.1.0",
-    "cheerio": "^1.0.0",
-    "totp-generator": "^1.0.0"
+    "fetch-cookie": "^3.2.0",
+    "cheerio": "^1.2.0",
+    "totp-generator": "^2.0.1"
   },
   "optionalDependencies": {
-    "sqlite3": "^5.0.0"
+    "sqlite3": "^6.0.1"
   },
   "devDependencies": {
-    "tsup": "^8.0.0",
-    "typescript": "^5"
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2"
   }
 }
