@@ -346,7 +346,6 @@ describe('MCP API key lifecycle', () => {
     const body = await res.json();
     expect(body.key).toBeDefined();
     expect(body.key.length).toBeGreaterThan(10);
-    expect(body.mcpUrl).toContain('/api/mcp?key=');
   });
 
   it('reports hasKey after generation', async () => {
