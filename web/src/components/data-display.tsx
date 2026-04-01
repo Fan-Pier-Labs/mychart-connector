@@ -21,7 +21,10 @@ import type {
 export function safeText(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+  const str = String(value);
+  // Strip HTML tags that MyChart embeds in some fields (e.g. billing procedure descriptions)
+  if (str.includes('<')) return str.replace(/<[^>]+>/g, '');
+  return str;
 }
 
 export function DataRow({ label, value }: { label: string; value: unknown }) {

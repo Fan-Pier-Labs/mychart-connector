@@ -203,9 +203,15 @@ describe('trimBilling', () => {
     expect(trimmed[0].payments).toHaveLength(0);
     expect(trimmed[0].statements).toHaveLength(1);
     expect(trimmed[0].statements[0].amount).toBe('$50.00');
+    expect(trimmed[0].statements[0].isExplanationOfBenefits).toBe(false);
 
-    // No ProcedureList, Payment sub-objects, Banner, etc.
-    expect(JSON.stringify(trimmed)).not.toContain('ProcedureList');
+    // Procedures are included in trimmed output
+    expect(trimmed[0].visits[0].procedures).toHaveLength(1);
+    expect(trimmed[0].visits[0].procedures![0].description).toBe('CPT 99213');
+    expect(trimmed[0].visits[0].procedures![0].amount).toBe('$250.00');
+    expect(trimmed[0].visits[0].procedures![0].selfAmountDue).toBe('$50.00');
+
+    // No raw API fields like Payment sub-objects, Banner, enc tokens
     expect(JSON.stringify(trimmed)).not.toContain('enc-token');
     expect(JSON.stringify(trimmed)).not.toContain('Banner');
   });
@@ -263,6 +269,61 @@ describe('trimBilling', () => {
     expect(trimmed[0].payments[0].paymentMethod).toBe('Visa x1153');
     // No encrypted IDs
     expect(JSON.stringify(trimmed)).not.toContain('enc-pmt-id');
+  });
+
+  it('strips HTML tags from procedure descriptions', () => {
+    const raw = [{
+      guarantorNumber: '11111',
+      patientName: 'HTML Test',
+      amountDue: 0,
+      billingDetails: {
+        Success: true,
+        Data: {
+          UnifiedVisitList: [{
+            GroupType: 0, Index: 0, BillingSystem: 1, IsSBO: false, BillingSystemDisplay: '', AdjustmentsOnly: false,
+            DateRangeDisplay: null, StartDate: 0, StartDayOfMonth: 1, StartMonth: 1, StartYear: 2026,
+            StartDateDisplay: '01/01/2026', StartDateAccessibleText: null,
+            Description: 'Visit', Patient: null, Provider: null, ProviderId: null,
+            HospitalAccountDisplay: null, HospitalAccountId: null, SupressDayFromDate: false,
+            CanAddToPaymentPlan: false, PrimaryPayer: null, IsLTCSeries: false, ChargeAmount: null,
+            InsuranceAmountDue: null, InsuranceAmountDueRaw: 0, SelfAmountDue: null, SelfAmountDueRaw: 0,
+            IsPatientNotResponsible: false, PatientNotResponsibleYet: false,
+            InsurancePaymentAmount: null, InsuranceEstimatedPaymentAmount: null,
+            SelfPaymentAmount: null, SelfAdjustmentAmount: null, SelfDiscountAmount: null,
+            ContestedChargeAmount: null, ContestedPaymentAmount: null, ShowInsuranceHelp: false,
+            SelfPaymentPlanAmountDue: null, SelfPaymentPlanAmountDueRaw: 0,
+            IsExpanded: false, BlockExpanding: false,
+            ProcedureList: [{
+              BillingSystem: 1,
+              Description: "Office/Outpatient New High Mdm or 60 Min - <span class='subtlecolor'>99205 (CPT\u00AE)</span>",
+              Amount: '$1,085.00', PaymentList: null, InsuranceAmountDue: null,
+              SelfAmountDue: '$0.00', HasAmountDue: false, SelfBadDebtAmount: null,
+              HasBadDebtAmount: false, AdjustmentsOnly: false, IsContested: false,
+            }],
+            ProcedureGroupList: [], CoverageInfoList: null, ShowCoverageHelp: false,
+            VisitAutoPay: null, ShowVisitAutoPay: false, LevelOfDetailLoaded: 2,
+            SelfBadDebtAmount: null, SelfBadDebtAmountRaw: 0, IsClosedHospitalAccount: false,
+            IsBadDebtHAR: false, IsPaymentPlanEstimate: false, IsResolvedEstimatedPPAccount: false,
+            NotOnPlanAmount: null, NotOnPlanAmountRaw: 0, EmptyVisitEstimateID: null, EstimateInfo: null,
+            PatFriendlyAccountStatus: 0, VisitBadDebtScenario: 0,
+            PatFriendlyAccountStatusAccessibleText: '', VisitStatusesEqualToClosed: [], IsOnPaymentPlan: false, IsNotOnPaymentPlan: true,
+          }],
+          InformationalVisitList: [],
+          HasVisits: true, ShowingAll: true, HasUnconvertedPBVisits: false,
+          CanMakePayment: false, CanEditPaymentPlan: false,
+          URLMakePayment: null, URLEditPaymentPlan: null,
+          Filters: { FilterClass: '', Options: [] },
+          PartialPaymentPlanAlert: { Code: 0, Banner: { HeaderText: '', DetailText: '', AssistiveText: '', ButtonLabel: '', ButtonUrl: '', ButtonID: null, ButtonClass: null, ButtonData: null, TelephoneLink: null, ButtonLabelSecondary: null, ButtonUrlSecondary: null, ButtonIDSecondary: null, ButtonClassSecondary: null, ButtonAriaDescribedByContentSecondary: null, ButtonAriaDescribedByIdSecondary: null, ButtonDataSecondary: null, DisableDetailTextHtmlEncoding: false, BannerType: '', BannerTypeReact: '', IconOverride: '', IconAltTextOverride: null, FontSize: 0 } },
+          BillingSystem: 1,
+        },
+      },
+    }];
+
+    const trimmed = trimBilling(raw as unknown as BillingAccount[]);
+    expect(trimmed[0].visits[0].procedures).toHaveLength(1);
+    // HTML tags should be stripped, leaving just the text
+    expect(trimmed[0].visits[0].procedures![0].description).toBe('Office/Outpatient New High Mdm or 60 Min - 99205 (CPT\u00AE)');
+    expect(trimmed[0].visits[0].procedures![0].description).not.toContain('<span');
   });
 });
 
