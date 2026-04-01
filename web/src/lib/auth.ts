@@ -1,11 +1,11 @@
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
-import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoogleOAuth, getResendApiKey } from './mcp/config';
+import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoogleOAuth } from './mcp/config';
 import { nextCookies } from 'better-auth/next-js';
 import { twoFactor } from 'better-auth/plugins/two-factor';
 import { magicLink } from 'better-auth/plugins/magic-link';
 import { passkey } from '@better-auth/passkey';
-import { Resend } from 'resend';
+import { sendEmail } from './email';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let authInstance: any = null;
@@ -30,6 +30,7 @@ export async function getAuth(): Promise<any> {
     getBetterAuthSecret(),
     useGoogle ? getGoogleOAuthCredentials() : Promise.resolve(null),
   ]);
+  // RAILWAY_PUBLIC_DOMAIN is a reference variable (not auto-injected); use it when available.
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined;
   const baseURL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || railwayDomain || `http://localhost:${process.env.PORT || 3000}`;
   if (useGoogle && googleOAuth) {
@@ -38,8 +39,13 @@ export async function getAuth(): Promise<any> {
     console.log('[Auth] Secrets loaded. Google OAuth: disabled. baseURL:', baseURL);
   }
 
-  // Build trusted origins list, always including the base URL
-  const trustedOrigins = ['http://localhost:2343', 'http://localhost:3000', 'https://mychartscrapers-staging.fanpierlabs.com', 'https://openrecord.fanpierlabs.com', 'https://mychart.fanpierlabs.com'];
+  // Build trusted origins list. Wildcards supported by BetterAuth.
+  const trustedOrigins = [
+    'http://localhost:2343',
+    'http://localhost:3000',
+    // Trust all Railway-provided subdomains so any deployment works without extra config.
+    'https://*.up.railway.app',
+  ];
   if (baseURL && !trustedOrigins.includes(baseURL)) {
     trustedOrigins.push(baseURL);
   }
@@ -57,8 +63,31 @@ export async function getAuth(): Promise<any> {
     baseURL,
     trustedOrigins,
     secret,
+    rateLimit: process.env.DISABLE_RATE_LIMIT === 'true' ? { enabled: false } : undefined,
     emailAndPassword: {
       enabled: true,
+      async sendResetPassword({ user, url }) {
+        void sendEmail({
+          to: user.email,
+          subject: 'Reset your password',
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+              <h2 style="color: #1a1a24; font-size: 24px; font-weight: 600; margin-bottom: 16px;">Reset your password</h2>
+              <p style="color: #5a5a6a; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+                We received a request to reset the password for your OpenRecord account. Click the button below to choose a new password.
+              </p>
+              <a href="${url}" style="display: inline-block; background: #1a1a24; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-size: 14px; font-weight: 500;">
+                Reset Password
+              </a>
+              <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-top: 32px;">
+                If you didn't request this, you can safely ignore this email. This link will expire shortly.
+              </p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 16px;" />
+              <p style="color: #9ca3af; font-size: 12px;">OpenRecord</p>
+            </div>
+          `,
+        });
+      },
     },
     ...(useGoogle && googleOAuth
       ? {
@@ -77,12 +106,7 @@ export async function getAuth(): Promise<any> {
       }),
       magicLink({
         sendMagicLink: async ({ email, url }) => {
-          console.log('[Auth] Sending magic link to', email, 'url:', url);
-          const apiKey = await getResendApiKey();
-          console.log('[Auth] Got Resend API key:', apiKey.slice(0, 10) + '...');
-          const resend = new Resend(apiKey);
-          const { error } = await resend.emails.send({
-            from: 'MyChart MCP <noreply@emails.fanpierlabs.com>',
+          await sendEmail({
             to: email,
             subject: 'Sign in to MyChart Connector',
             html: `
@@ -94,11 +118,6 @@ export async function getAuth(): Promise<any> {
               </div>
             `,
           });
-          if (error) {
-            console.error('[Auth] Resend error:', error);
-            throw new Error(`Failed to send magic link email: ${error.message}`);
-          }
-          console.log('[Auth] Magic link email sent successfully');
         },
       }),
       passkey({

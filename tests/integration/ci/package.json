@@ -2,6 +2,8 @@
   "name": "ci-integration-tests",
   "private": true,
   "dependencies": {
-    "@better-auth/utils": "^0.4.0"
+    "@better-auth/utils": "^0.4.0",
+    "pg": "^8.16.0",
+    "playwright": "^1.58.2"
   }
 }

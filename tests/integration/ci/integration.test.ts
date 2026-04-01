@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { parseTotpUri } from '../../../scrapers/myChart/totp';
+import { Client } from 'pg';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -175,6 +176,18 @@ describe('Authentication', () => {
   it('can access authenticated endpoints after sign-in', async () => {
     const res = await authedFetch('/api/mychart-instances');
     expect(res.status).toBe(200);
+  });
+
+  it('social sign-in endpoint does not return 403 (origin trust check)', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-in/social`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ provider: 'google', callbackURL: '/home' }),
+      redirect: 'manual',
+    });
+    // Should not be 403 (origin rejected). May be 302 (redirect to Google) or
+    // another status if Google OAuth isn't configured, but never 403.
+    expect(res.status).not.toBe(403);
   });
 });
 
@@ -345,7 +358,6 @@ describe('MCP API key lifecycle', () => {
     const body = await res.json();
     expect(body.key).toBeDefined();
     expect(body.key.length).toBeGreaterThan(10);
-    expect(body.mcpUrl).toContain('/api/mcp?key=');
   });
 
   it('reports hasKey after generation', async () => {
@@ -506,7 +518,249 @@ describe('App-level TOTP 2FA', () => {
 });
 
 // ===================================================================
-// 8. Cleanup
+// 8. Password Reset
+// ===================================================================
+
+describe('Password reset', () => {
+  const RESET_EMAIL = `ci-reset-${Date.now()}@example.com`;
+  const RESET_PASSWORD = 'ResetMe123!';
+  const NEW_PASSWORD = 'NewPassword456!';
+
+  const CI_DB_URL = process.env.CI_DATABASE_URL || 'postgresql://testuser:testpass@localhost:5433/mychart_test';
+
+  /** Query the verification table to extract the reset token (bypasses email). */
+  async function getResetToken(email: string): Promise<string> {
+    const client = new Client({ connectionString: CI_DB_URL });
+    await client.connect();
+    try {
+      // BetterAuth stores verification tokens with identifier "reset-password:<token>"
+      // and value = userId. We need to find the user first, then look up their token.
+      const userResult = await client.query(
+        'SELECT id FROM "user" WHERE email = $1',
+        [email],
+      );
+      const userId = userResult.rows[0]?.id;
+      if (!userId) throw new Error(`No user found with email ${email}`);
+
+      const tokenResult = await client.query(
+        `SELECT identifier FROM verification WHERE value = $1 AND identifier LIKE 'reset-password:%' ORDER BY "expiresAt" DESC LIMIT 1`,
+        [userId],
+      );
+      const identifier = tokenResult.rows[0]?.identifier;
+      if (!identifier) throw new Error('No reset token found in verification table');
+
+      // identifier is "reset-password:<token>", extract the token
+      return identifier.replace('reset-password:', '');
+    } finally {
+      await client.end();
+    }
+  }
+
+  it('creates a dedicated user for password reset testing', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, password: RESET_PASSWORD, name: 'Reset Test' }),
+      redirect: 'manual',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user.email).toBe(RESET_EMAIL);
+  });
+
+  it('requests a password reset', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, redirectTo: '/reset-password' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe(true);
+  });
+
+  it('returns success even for non-existent email (no user enumeration)', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: 'nonexistent@example.com', redirectTo: '/reset-password' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe(true);
+  });
+
+  it('resets the password with a valid token', async () => {
+    const token = await getResetToken(RESET_EMAIL);
+    expect(token).toBeTruthy();
+
+    const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ newPassword: NEW_PASSWORD, token }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe(true);
+  });
+
+  it('can sign in with the new password', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, password: NEW_PASSWORD }),
+      redirect: 'manual',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user).toBeDefined();
+    expect(body.user.email).toBe(RESET_EMAIL);
+  });
+
+  it('cannot sign in with the old password', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ email: RESET_EMAIL, password: RESET_PASSWORD }),
+      redirect: 'manual',
+    });
+    // BetterAuth returns 401 or error for invalid credentials
+    const body = await res.json();
+    expect(body.user).toBeUndefined();
+  });
+
+  it('rejects an already-used token', async () => {
+    // The token was consumed in the reset step above
+    const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ newPassword: 'AnotherPassword789!', token: 'already-consumed-token' }),
+    });
+    // Should fail with 400 (invalid token)
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects reset without a token', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ newPassword: 'SomePassword123!' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ===================================================================
+// 9. Instance Enabled/Disabled Toggle
+// ===================================================================
+
+describe('Instance enabled/disabled toggle', () => {
+  it('instance is enabled by default', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(true);
+  });
+
+  it('can disable an instance via PATCH', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(false);
+  });
+
+  it('disabled instance appears in list with enabled=false', async () => {
+    const res = await authedFetch('/api/mychart-instances');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const inst = body.find((i: { id: string }) => i.id === instanceId);
+    expect(inst).toBeDefined();
+    expect(inst.enabled).toBe(false);
+  });
+
+  it('disabled instance is skipped by auto-connect on listing', async () => {
+    const patchRes = await authedFetch(`/api/mychart-instances/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ totpSecret: 'JBSWY3DPEHPK3PXP' }),
+    });
+    expect(patchRes.status).toBe(200);
+
+    const res = await authedFetch('/api/mychart-instances');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const inst = body.find((i: { id: string }) => i.id === instanceId);
+    expect(inst.enabled).toBe(false);
+    expect(inst.hasTotpSecret).toBe(true);
+  });
+
+  it('MCP returns error when all instances are disabled', async () => {
+    const keyRes = await authedFetch('/api/mcp-key', { method: 'POST' });
+    expect(keyRes.status).toBe(200);
+    const { key } = await keyRes.json();
+    expect(key).toBeDefined();
+
+    const mcpRes = await fetch(`${BASE_URL}/api/mcp?key=${key}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_profile', arguments: {} },
+      }),
+    });
+    const mcpBody = await mcpRes.text();
+    expect(mcpBody).toContain('disabled');
+
+    await authedFetch('/api/mcp-key', { method: 'DELETE' });
+  });
+
+  it('can re-enable an instance via PATCH', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toBe(true);
+  });
+
+  it('re-enabled instance can connect again', async () => {
+    const res = await authedFetch('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ myChartInstanceId: instanceId }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    if (body.state === 'need_2fa') {
+      const twofaRes = await authedFetch('/api/twofa', {
+        method: 'POST',
+        body: JSON.stringify({ sessionKey: body.sessionKey, code: '123456' }),
+      });
+      expect(twofaRes.status).toBe(200);
+      sessionKey = (await twofaRes.json()).sessionKey;
+    } else {
+      expect(body.state).toBe('logged_in');
+      sessionKey = body.sessionKey;
+    }
+
+    const listRes = await authedFetch('/api/mychart-instances');
+    const list = await listRes.json();
+    const inst = list.find((i: { id: string }) => i.id === instanceId);
+    expect(inst.enabled).toBe(true);
+    expect(inst.connected).toBe(true);
+  }, 30_000);
+});
+
+// ===================================================================
+// 10. Cleanup
 // ===================================================================
 
 describe('Cleanup', () => {

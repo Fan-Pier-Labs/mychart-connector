@@ -22,11 +22,9 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
     const key = await generateApiKey(user.id);
-
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${req.nextUrl.protocol}//${req.nextUrl.host}`;
-    const mcpUrl = `${baseUrl}/api/mcp?key=${key}`;
-
-    return NextResponse.json({ key, mcpUrl });
+    // Return only the key — the client builds the full MCP URL from window.location.origin
+    // so it always reflects the real public URL regardless of proxy setup.
+    return NextResponse.json({ key });
   } catch (err) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

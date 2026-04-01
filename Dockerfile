@@ -11,8 +11,7 @@ RUN cd scrapers && bun install
 COPY web/ ./web/
 COPY scrapers/ ./scrapers/
 COPY shared/ ./shared/
-# clo-to-jpg-converter is excluded via .dockerignore (large binary test files);
-# the notification imaging pipeline uses dynamic imports and gracefully degrades
+# clo-to-jpg-converter test files excluded via .dockerignore; source + wasm included
 
 # Stub shared/gmail (uses googleapis which has massive types that OOM the TS checker)
 RUN echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new Error("not available in web"); }' > shared/gmail/gmail.ts && \

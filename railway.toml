@@ -6,3 +6,8 @@ dockerfilePath = "Dockerfile"
 startCommand = "sh -c 'bun --bun next start -p ${PORT:-8080}'"
 healthcheckPath = "/"
 restartPolicyType = "on_failure"
+
+[variables]
+RAILWAY_PUBLIC_DOMAIN = "${{RAILWAY_PUBLIC_DOMAIN}}"
+# DB_SSL defaults to enabled; set to "false" only for local dev without SSL
+DB_SSL = "true"

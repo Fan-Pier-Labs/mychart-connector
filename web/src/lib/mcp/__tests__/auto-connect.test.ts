@@ -47,6 +47,7 @@ function makeInstance(overrides: Partial<MyChartInstance> = {}): MyChartInstance
     password: 'testpass',
     totpSecret: null,
     mychartEmail: null,
+    enabled: true,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
