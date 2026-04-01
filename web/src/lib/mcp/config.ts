@@ -115,13 +115,20 @@ export async function getDatabaseUrl(): Promise<string> {
 
 /**
  * Returns pool connection options with appropriate SSL config.
- * Railway Postgres doesn't need SSL; AWS RDS needs { rejectUnauthorized: false }.
+ * SSL is enabled by default in env-var mode (Railway / self-hosted).
+ * Set DB_SSL=false to disable SSL (e.g. local dev with a plain Postgres container).
+ * AWS RDS always uses SSL with { rejectUnauthorized: false } (self-signed cert).
  */
 export async function getPoolOptions(): Promise<{ connectionString: string; ssl: false | { rejectUnauthorized: false } }> {
   const connectionString = await getDatabaseUrl();
+  if (!isEnvVarMode()) {
+    // AWS RDS: always SSL, accept self-signed cert
+    return { connectionString, ssl: { rejectUnauthorized: false } };
+  }
+  const sslDisabled = process.env.DB_SSL === 'false';
   return {
     connectionString,
-    ssl: isEnvVarMode() ? false : { rejectUnauthorized: false },
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
   };
 }
 
