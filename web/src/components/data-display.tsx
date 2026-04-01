@@ -117,7 +117,13 @@ type Visit = {
 
 export function VisitsCard({ title, data, getVisits }: { title: string; data: DataWithError; getVisits: (d: NonNullable<DataWithError>) => Visit[] }) {
   if (!data || ('error' in data && data.error)) return null;
-  const visits = getVisits(data);
+  let visits: Visit[];
+  try {
+    const raw = getVisits(data);
+    visits = Array.isArray(raw) ? raw.filter(v => v && typeof v === 'object') : [];
+  } catch {
+    return null;
+  }
   if (!visits.length) return null;
   return (
     <Card>
@@ -134,27 +140,22 @@ export function VisitsCard({ title, data, getVisits }: { title: string; data: Da
 }
 
 export function VisitItem({ visit }: { visit: Visit }) {
-  // TODO: normalize all visit types in the backend scrapers so the frontend doesn't need these guards
   if (!visit || typeof visit !== 'object') return null;
-  // TODO: normalize all types in the backend in TypeScript so alternate formats are handled before reaching the UI
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const v = visit as any;
-  const isAlternate = 'Patient' in v || 'Physician' in v;
+  const provider = safeText(v.PrimaryProviderName || v.Physician || v.Provider || '');
+  const dept = safeText(v.PrimaryDepartment?.Name || v.Department || '');
+  const location = safeText(v.Location || '');
+  const visitType = safeText(v.VisitTypeName || v.VisitType || v.Type || '');
   return (
     <div className="bg-muted rounded-md p-3 text-sm">
       <div className="font-medium">
-        {safeText(visit.Date)} {safeText(visit.Time)} {visit.VisitTypeName ? `- ${safeText(visit.VisitTypeName)}` : ''}
+        {safeText(v.Date)} {safeText(v.Time)} {visitType ? `- ${visitType}` : ''}
       </div>
       <div className="text-xs text-muted-foreground mt-1">
-        {(visit.PrimaryProviderName || (isAlternate && v.Physician)) && (
-          <span>Provider: {safeText(visit.PrimaryProviderName || v.Physician)}</span>
-        )}
-        {(visit.PrimaryDepartment?.Name || (isAlternate && v.Department)) && (
-          <span className="ml-3">Dept: {safeText(visit.PrimaryDepartment?.Name || v.Department)}</span>
-        )}
-        {visit.Location && (
-          <span className="ml-3">Location: {safeText(visit.Location)}</span>
-        )}
+        {provider && <span>Provider: {provider}</span>}
+        {dept && <span className="ml-3">Dept: {dept}</span>}
+        {location && <span className="ml-3">Location: {location}</span>}
       </div>
     </div>
   );

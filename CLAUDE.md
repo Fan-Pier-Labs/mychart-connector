@@ -226,6 +226,7 @@ When reverse engineering health portal APIs (MyChart, etc.), the request headers
 - **NEVER modify or delete anything from the macOS Keychain or the browser keychain.** Read-only access is OK.
 - **NEVER use `git stash`.** If you're considering stashing changes, stop and ask the user first.
 - **NEVER upload PII to git or GitHub.** Before committing, review all staged changes to ensure no personally identifiable information (names, emails, phone numbers, addresses, dates of birth, medical record numbers, patient IDs, health data, credentials, API keys, or any other sensitive data) is included. If PII is found in code, test fixtures, logs, or output files, remove or redact it before committing.
+- **NEVER use `dangerouslySetInnerHTML`.** All HTML from external sources (MyChart API responses, scraped content) must be sanitized with DOMPurify before rendering. Use the `SafeHtml` component from `web/src/components/SafeHtml.tsx` which wraps the `sanitizeHtml()` utility. This is a health data app — XSS is unacceptable.
 - **Always update this CLAUDE.md when adding new features** — document new CLI flags, scrapers, configuration, or architectural changes so this file stays current.
 
 ## Workflow
