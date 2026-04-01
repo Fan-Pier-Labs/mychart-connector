@@ -10,19 +10,21 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { BillingVisits } from "@/components/data-display";
 import { ErrorBoundary, withRenderErrorBoundary } from "@/components/with-render-error-boundary";
-import type { BillingAccount } from "../../../../../scrapers/myChart/bills/bills";
+import type { BillingAccount } from "../../../../../../scrapers/myChart/bills/bills";
+import { useBilling } from "./use-billing";
 
 const SafeBillingVisits = withRenderErrorBoundary(BillingVisits, "BillingVisits", (p) => p.visits);
 
 interface BillingSectionProps {
   billing: BillingAccount[] | undefined;
   isDemo: boolean;
-  loadingStatements: Record<string, boolean>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fetchStatementPdf: (encBillingId: string, statement: any, action: 'view' | 'download') => Promise<void>;
+  token: string;
 }
 
-export function BillingSection({ billing, isDemo, loadingStatements, fetchStatementPdf }: BillingSectionProps) {
+export function BillingSection({ billing, isDemo, token }: BillingSectionProps) {
+  // Must call hooks before any early returns (Rules of Hooks)
+  const { loadingStatements, fetchStatementPdf } = useBilling(token);
+
   if (!billing || !Array.isArray(billing) || billing.length === 0) return null;
 
   return (

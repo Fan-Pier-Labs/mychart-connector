@@ -6,6 +6,7 @@ import { ArraySection } from "@/components/data-display";
 import { SafeHtml } from "@/components/SafeHtml";
 import { withRenderErrorBoundary } from "@/components/with-render-error-boundary";
 import type { LetterType } from "@/types/scrape-results";
+import { useLetters } from "./use-letters";
 
 const SafeArraySection = withRenderErrorBoundary(ArraySection, "ArraySection", (p) => p.data);
 
@@ -13,17 +14,11 @@ interface LettersSectionProps {
   letters: LetterType[] | undefined;
   isDemo: boolean;
   token: string;
-  letterHtml: Record<string, string>;
-  setLetterHtml: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  loadingLetters: Record<string, boolean>;
-  fetchLetterContent: (hnoId: string, csn: string) => Promise<void>;
-  downloadLetterPdf: (hnoId: string, csn: string, reason: string) => void;
 }
 
-export function LettersSection({
-  letters, isDemo, token, letterHtml, setLetterHtml,
-  loadingLetters, fetchLetterContent, downloadLetterPdf,
-}: LettersSectionProps) {
+export function LettersSection({ letters, isDemo, token }: LettersSectionProps) {
+  const { letterHtml, loadingLetters, toggleLetter, downloadLetterPdf } = useLetters(token);
+
   return (
     <SafeArraySection title="Letters" data={letters}>
       {Array.isArray(letters) && letters.map((l: LetterType, i: number) => {
@@ -46,17 +41,7 @@ export function LettersSection({
                       size="sm"
                       className="text-xs h-7"
                       disabled={isLoading}
-                      onClick={() => {
-                        if (hasContent) {
-                          setLetterHtml(prev => {
-                            const next = { ...prev };
-                            delete next[key];
-                            return next;
-                          });
-                        } else {
-                          fetchLetterContent(l.hnoId, l.csn);
-                        }
-                      }}
+                      onClick={() => toggleLetter(key, l.hnoId, l.csn)}
                     >
                       {isLoading ? 'Loading...' : hasContent ? 'Hide' : 'View Letter'}
                     </Button>

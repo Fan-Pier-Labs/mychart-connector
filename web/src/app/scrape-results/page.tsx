@@ -13,11 +13,10 @@ import { useAppContext } from "@/lib/app-context";
 import { CorrelatedTimeline } from "@/components/correlated-timeline";
 import { SectionErrorBoundary } from "@/components/SectionErrorBoundary";
 import { withRenderErrorBoundary } from "@/components/with-render-error-boundary";
-import { useScrapeActions } from "./hooks/use-scrape-actions";
-import { MessagingSection } from "./sections/messaging-section";
-import { BillingSection } from "./sections/billing-section";
-import { ImagingSection } from "./sections/imaging-section";
-import { LettersSection } from "./sections/letters-section";
+import { MessagingSection } from "./sections/messaging/messaging-section";
+import { BillingSection } from "./sections/billing/billing-section";
+import { ImagingSection } from "./sections/imaging/imaging-section";
+import { LettersSection } from "./sections/letters/letters-section";
 import {
   ProfileSection,
   HealthSummarySection,
@@ -52,7 +51,6 @@ export default function ScrapeResultsPage() {
   const router = useRouter();
   const { results, isDemo, resetAll, token } = useAppContext();
   const [showRawJson, setShowRawJson] = useState(false);
-  const actions = useScrapeActions(token);
 
   useEffect(() => {
     if (!results) {
@@ -135,16 +133,7 @@ export default function ScrapeResultsPage() {
       <GoalsSection goals={results.goals} />
 
       {/* Letters */}
-      <LettersSection
-        letters={results.letters}
-        isDemo={isDemo}
-        token={token}
-        letterHtml={actions.letterHtml}
-        setLetterHtml={actions.setLetterHtml}
-        loadingLetters={actions.loadingLetters}
-        fetchLetterContent={actions.fetchLetterContent}
-        downloadLetterPdf={actions.downloadLetterPdf}
-      />
+      <LettersSection letters={results.letters} isDemo={isDemo} token={token} />
 
       {/* Documents */}
       <DocumentsSection documents={results.documents} />
@@ -153,12 +142,7 @@ export default function ScrapeResultsPage() {
       <ActivityFeedSection activityFeed={results.activityFeed} />
 
       {/* Billing */}
-      <BillingSection
-        billing={results.billing}
-        isDemo={isDemo}
-        loadingStatements={actions.loadingStatements}
-        fetchStatementPdf={actions.fetchStatementPdf}
-      />
+      <BillingSection billing={results.billing} isDemo={isDemo} token={token} />
 
       {/* Upcoming Visits */}
       <UpcomingVisitsSection upcomingVisits={results.upcomingVisits} />
@@ -170,14 +154,7 @@ export default function ScrapeResultsPage() {
       <LabResultsSection labResults={results.labResults} />
 
       {/* Imaging Results */}
-      <ImagingSection
-        imagingResults={results.imagingResults}
-        isDemo={isDemo}
-        xrayImages={actions.xrayImages}
-        xrayLoading={actions.xrayLoading}
-        xrayErrors={actions.xrayErrors}
-        fetchXray={actions.fetchXray}
-      />
+      <ImagingSection imagingResults={results.imagingResults} isDemo={isDemo} token={token} />
 
       {/* Upcoming Orders */}
       <UpcomingOrdersSection upcomingOrders={results.upcomingOrders} />
@@ -198,12 +175,7 @@ export default function ScrapeResultsPage() {
       <LinkedAccountsSection linkedMyChartAccounts={results.linkedMyChartAccounts} />
 
       {/* Messages / Conversations */}
-      <MessagingSection
-        messages={results.messages}
-        isDemo={isDemo}
-        token={token}
-        actions={actions}
-      />
+      <MessagingSection messages={results.messages} isDemo={isDemo} token={token} />
 
       {/* Raw JSON */}
       <Card>

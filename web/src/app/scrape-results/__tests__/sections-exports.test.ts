@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-// Verify all section components are properly exported and importable.
+// Verify all section components and hooks are properly exported and importable.
 // This catches broken imports, missing dependencies, and module resolution issues.
 
 describe('section exports', () => {
@@ -50,38 +50,51 @@ describe('section exports', () => {
     });
   });
 
-  describe('messaging-section', () => {
+  describe('messaging', () => {
     it('exports MessagingSection', async () => {
-      const mod = await import('../sections/messaging-section');
+      const mod = await import('../sections/messaging/messaging-section');
       expect(typeof mod.MessagingSection).toBe('function');
     });
+
+    it('exports useMessaging hook', async () => {
+      const mod = await import('../sections/messaging/use-messaging');
+      expect(typeof mod.useMessaging).toBe('function');
+    });
   });
 
-  describe('billing-section', () => {
+  describe('billing', () => {
     it('exports BillingSection', async () => {
-      const mod = await import('../sections/billing-section');
+      const mod = await import('../sections/billing/billing-section');
       expect(typeof mod.BillingSection).toBe('function');
     });
+
+    it('exports useBilling hook', async () => {
+      const mod = await import('../sections/billing/use-billing');
+      expect(typeof mod.useBilling).toBe('function');
+    });
   });
 
-  describe('imaging-section', () => {
+  describe('imaging', () => {
     it('exports ImagingSection', async () => {
-      const mod = await import('../sections/imaging-section');
+      const mod = await import('../sections/imaging/imaging-section');
       expect(typeof mod.ImagingSection).toBe('function');
     });
-  });
 
-  describe('letters-section', () => {
-    it('exports LettersSection', async () => {
-      const mod = await import('../sections/letters-section');
-      expect(typeof mod.LettersSection).toBe('function');
+    it('exports useImaging hook', async () => {
+      const mod = await import('../sections/imaging/use-imaging');
+      expect(typeof mod.useImaging).toBe('function');
     });
   });
 
-  describe('use-scrape-actions hook', () => {
-    it('exports useScrapeActions', async () => {
-      const mod = await import('../hooks/use-scrape-actions');
-      expect(typeof mod.useScrapeActions).toBe('function');
+  describe('letters', () => {
+    it('exports LettersSection', async () => {
+      const mod = await import('../sections/letters/letters-section');
+      expect(typeof mod.LettersSection).toBe('function');
+    });
+
+    it('exports useLetters hook', async () => {
+      const mod = await import('../sections/letters/use-letters');
+      expect(typeof mod.useLetters).toBe('function');
     });
   });
 });

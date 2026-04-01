@@ -5,19 +5,19 @@ import { ArraySection } from "@/components/data-display";
 import { withRenderErrorBoundary } from "@/components/with-render-error-boundary";
 import { isAdvancedImaging } from "@/lib/imaging-utils";
 import type { ImagingResultType } from "@/types/scrape-results";
+import { useImaging } from "./use-imaging";
 
 const SafeArraySection = withRenderErrorBoundary(ArraySection, "ArraySection", (p) => p.data);
 
 interface ImagingSectionProps {
   imagingResults: ImagingResultType[] | undefined;
   isDemo: boolean;
-  xrayImages: Record<number, string | null>;
-  xrayLoading: Record<number, boolean>;
-  xrayErrors: Record<number, string | null>;
-  fetchXray: (index: number, fdiContext: { fdi: string; ord: string }) => Promise<void>;
+  token: string;
 }
 
-export function ImagingSection({ imagingResults, isDemo, xrayImages, xrayLoading, xrayErrors, fetchXray }: ImagingSectionProps) {
+export function ImagingSection({ imagingResults, isDemo, token }: ImagingSectionProps) {
+  const { xrayImages, xrayLoading, xrayErrors, fetchXray } = useImaging(token);
+
   return (
     <SafeArraySection title="Imaging Results" data={imagingResults}>
       {Array.isArray(imagingResults) && imagingResults.map((img: ImagingResultType, i: number) => (

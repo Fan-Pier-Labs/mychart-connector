@@ -12,29 +12,16 @@ import { SafeHtml } from "@/components/SafeHtml";
 import { ErrorBoundary } from "@/components/with-render-error-boundary";
 import { safeText } from "@/components/data-display";
 import type { ConversationType, ConversationMessageType } from "@/types/scrape-results";
-import type { useScrapeActions } from "../hooks/use-scrape-actions";
-
-type MessagingActions = Pick<
-  ReturnType<typeof useScrapeActions>,
-  | 'replyingTo' | 'setReplyingTo' | 'replyText' | 'setReplyText' | 'sendingReply'
-  | 'showComposeNew' | 'setShowComposeNew' | 'composeRecipients' | 'composeTopics'
-  | 'composeLoading' | 'selectedRecipient' | 'setSelectedRecipient' | 'selectedTopic'
-  | 'setSelectedTopic' | 'composeSubject' | 'setComposeSubject' | 'composeBody' | 'setComposeBody'
-  | 'sendingNew' | 'messageStatus' | 'replyTextareaRef'
-  | 'handleSendReply' | 'handleOpenCompose' | 'handleSendNew'
->;
+import { useMessaging } from "./use-messaging";
 
 interface MessagingSectionProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   messages: any;
   isDemo: boolean;
   token: string;
-  actions: MessagingActions;
 }
 
-export function MessagingSection({ messages, isDemo, token, actions }: MessagingSectionProps) {
-  if (!messages || messages?.error) return null;
-
+export function MessagingSection({ messages, isDemo, token }: MessagingSectionProps) {
   const {
     replyingTo, setReplyingTo, replyText, setReplyText, sendingReply,
     showComposeNew, setShowComposeNew, composeRecipients, composeTopics,
@@ -42,7 +29,9 @@ export function MessagingSection({ messages, isDemo, token, actions }: Messaging
     setSelectedTopic, composeSubject, setComposeSubject, composeBody, setComposeBody,
     sendingNew, messageStatus, replyTextareaRef,
     handleSendReply, handleOpenCompose, handleSendNew,
-  } = actions;
+  } = useMessaging(token);
+
+  if (!messages || messages?.error) return null;
 
   return (
     <ErrorBoundary name="Messages" data={messages}>
