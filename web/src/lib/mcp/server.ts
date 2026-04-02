@@ -68,6 +68,7 @@ async function resolveRequest(
   const allInstances = await getMyChartInstances(userId);
   const instances = allInstances.filter(i => i.enabled);
   console.log(`[mcp] resolveRequest: found ${allInstances.length} instance(s), ${instances.length} enabled: ${instances.map(i => `${i.hostname}(id=${i.id})`).join(', ')}`);
+
   if (instances.length === 0) {
     return { error: allInstances.length > 0
       ? 'All MyChart accounts are disabled. Enable one at the web app.'
