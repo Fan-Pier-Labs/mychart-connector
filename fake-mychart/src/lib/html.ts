@@ -220,6 +220,10 @@ export function loginPage(): string {
     .login-box button { width: 100%; padding: 12px; background: #1a5276; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .login-box button:hover { background: #1c6ea4; }
     .login-box .error { background: #fde8e8; color: #c0392b; padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; display: none; }
+    .demo-creds { background: #eaf6ff; border: 1px solid #b3d9f2; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: #1a5276; }
+    .demo-creds .demo-title { font-weight: 700; margin-bottom: 6px; font-size: 14px; }
+    .demo-creds code { background: #d4ecfc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+    .demo-creds .demo-note { margin-top: 8px; font-size: 12px; color: #666; }
     .noscript-meta { display: none; }
   </style>
   <noscript><meta class="noscript-meta" http-equiv="refresh" content="0;url=/${FIRST_PATH}/nojs.asp" /></noscript>
@@ -229,6 +233,12 @@ export function loginPage(): string {
   <div class="login-box">
     <div class="logo">My<span>Chart</span></div>
     <div class="subtitle">Springfield General Hospital</div>
+    <div class="demo-creds">
+      <div class="demo-title">Demo Credentials</div>
+      Username: <code>homer</code><br>
+      Password: <code>donuts123</code>
+      <div class="demo-note">This is a fake MyChart server with fictional Homer Simpson data for testing and development.</div>
+    </div>
     <div class="error" id="errorMsg">Invalid username or password.</div>
     <form autocomplete="off" method="post" action="#" id="loginForm">
       <label for="Login">Username</label>

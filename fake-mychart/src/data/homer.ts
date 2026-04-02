@@ -1345,6 +1345,64 @@ export const imagingLabResultDetails = {
   hideEncInfo: false,
 };
 
+// ─── Passkey Management ─────────────────────────────────────────────
+export const passkeyCreationOptions = {
+  rp: { id: '', name: 'Springfield General MyChart' },
+  attestation: 'none' as const,
+  authenticatorSelection: {
+    requireResidentKey: true,
+    residentKey: 'required',
+    userVerification: 'preferred',
+  },
+  // Challenge is generated dynamically per request
+  pubKeyCredParams: [
+    { type: 'public-key', alg: -7 },
+    { type: 'public-key', alg: -257 },
+  ],
+  timeout: 60000,
+  user: {
+    id: Buffer.from('homer-simpson-user-id').toString('base64'),
+    name: 'homer',
+    displayName: 'Homer Jay Simpson',
+  },
+};
+
+// ─── Available Appointments ─────────────────────────────────────────
+export const availableAppointments = [
+  {
+    provider: 'Dr. Julius Hibbert',
+    department: 'Internal Medicine',
+    location: 'Springfield General Hospital, Suite 200',
+    visitType: 'Office Visit',
+    slots: [
+      { date: '2026-04-10', time: '9:00 AM', slotId: 'slot-001' },
+      { date: '2026-04-10', time: '10:30 AM', slotId: 'slot-002' },
+      { date: '2026-04-11', time: '2:00 PM', slotId: 'slot-003' },
+    ],
+  },
+  {
+    provider: 'Dr. Nick Riviera',
+    department: 'General Surgery',
+    location: 'Dr. Nick\'s Walk-In Clinic, 123 Main St',
+    visitType: 'Follow-Up',
+    slots: [
+      { date: '2026-04-09', time: '8:00 AM', slotId: 'slot-004' },
+      { date: '2026-04-12', time: '11:00 AM', slotId: 'slot-005' },
+    ],
+  },
+  {
+    provider: 'Dr. Julius Hibbert',
+    department: 'Lab Services',
+    location: 'Springfield General Hospital, Lab Wing',
+    visitType: 'Lab Work',
+    slots: [
+      { date: '2026-04-08', time: '7:30 AM', slotId: 'slot-006' },
+      { date: '2026-04-09', time: '8:30 AM', slotId: 'slot-007' },
+      { date: '2026-04-10', time: '7:00 AM', slotId: 'slot-008' },
+    ],
+  },
+];
+
 // Report content HTML with data-fdi-context for image viewer access
 export const imagingReportContent = {
   reportContent: `<div class="report-content"><h3>XR Chest 2 Views</h3><p>FINDINGS: Heart size is at the upper limits of normal.</p><div data-fdi-context='${JSON.stringify({ fdi: 'FDI-XRAY-001', ord: 'ORD-XRAY-001' })}'><a href="#">View Images</a></div></div>`,

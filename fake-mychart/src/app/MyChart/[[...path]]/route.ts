@@ -12,6 +12,8 @@ import {
 } from '@/lib/html';
 import * as homer from '@/data/homer';
 
+import crypto from 'crypto';
+
 // ─── In-memory mutable state (seeded from homer.ts) ─────────────────
 // Deep-clone so mutations don't affect the seed module
 // eslint-disable-next-line prefer-const
@@ -19,6 +21,29 @@ let conversationsState = JSON.parse(JSON.stringify(homer.conversations));
 let emergencyContactsState = JSON.parse(JSON.stringify(homer.emergencyContacts));
 let ecIdCounter = 100;
 let composeIdCounter = 1000;
+
+// Passkey state
+let passkeyIdCounter = 0;
+let passkeysState: Array<{
+  rawId: string;
+  name: string;
+  createdOnDevice: string;
+  creationInstant: string;
+  lastUsedInstant: string | null;
+}> = [];
+
+// Booked appointments state
+const bookedAppointments: Array<{
+  confirmationNumber: string;
+  slotId: string;
+  provider: string;
+  department: string;
+  location: string;
+  visitType: string;
+  date: string;
+  time: string;
+  reason: string;
+}> = [];
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function json(data: unknown, status = 200) {
@@ -33,10 +58,22 @@ function joinPath(path: string[]): string {
   return path.join('/');
 }
 
+/**
+ * Build the public base URL from forwarded headers, so redirects
+ * use the external domain rather than the container's localhost.
+ */
+function publicBaseUrl(request: NextRequest): string {
+  const host = request.headers.get('host') || new URL(request.url).host;
+  const proto = request.headers.get('cloudfront-forwarded-proto')
+    || request.headers.get('x-forwarded-proto')
+    || (host.includes('localhost') || !host.includes('.') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
 function requireSession(request: NextRequest): NextResponse | null {
   const cookie = request.headers.get('cookie');
   if (!validateSession(cookie)) {
-    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', publicBaseUrl(request)), 302);
   }
   return null;
 }
@@ -53,14 +90,14 @@ function requireTermsRedirect(request: NextRequest): NextResponse | null {
   if (!requireTerms()) return null;
   const cookie = request.headers.get('cookie');
   if (hasAcceptedTerms(cookie)) return null;
-  return NextResponse.redirect(new URL('/MyChart/Authentication/TermsConditions', request.url), 302);
+  return NextResponse.redirect(new URL('/MyChart/Authentication/TermsConditions', publicBaseUrl(request)), 302);
 }
 
 // ─── Route handler ──────────────────────────────────────────────────
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const { path } = await params;
   if (!path || path.length === 0) {
-    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', publicBaseUrl(request)), 302);
   }
   const joined = joinPath(path);
   const lower = joined.toLowerCase();
@@ -96,7 +133,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (lower === 'home') {
     const cookie = request.headers.get('cookie');
     if (!validateSession(cookie)) {
-      return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+      return NextResponse.redirect(new URL('/MyChart/Authentication/Login', publicBaseUrl(request)), 302);
     }
     const termsRedirect = requireTermsRedirect(request);
     if (termsRedirect) return termsRedirect;
@@ -294,6 +331,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     try {
       const loginInfo = JSON.parse(loginInfoRaw);
+
+      // Handle passkey login (Type: "PasskeyLogin")
+      if (loginInfo.Type === 'PasskeyLogin') {
+        const creds = loginInfo.Credentials;
+        // Validate the passkey exists in our state
+        const matchedPasskey = passkeysState.find(pk => pk.rawId === creds.rawId);
+        if (matchedPasskey || acceptAny()) {
+          if (matchedPasskey) {
+            matchedPasskey.lastUsedInstant = new Date().toISOString();
+          }
+          const sessionId = createSession();
+          const response = requireTerms()
+            ? html(termsConditionsPage())
+            : html(doLoginSuccess());
+          response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
+          return response;
+        }
+        return html(doLoginFailed());
+      }
+
       const creds = loginInfo.Credentials;
       // Support both Username and LoginIdentifier
       const userB64 = creds.Username || creds.LoginIdentifier || '';
@@ -343,7 +400,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const cookie = request.headers.get('cookie');
     acceptTerms(cookie);
     // Redirect to home after accepting
-    return NextResponse.redirect(new URL('/MyChart/Home', request.url), 302);
+    return NextResponse.redirect(new URL('/MyChart/Home', publicBaseUrl(request)), 302);
   }
 
   // ── 2FA ────────────────────────────────────────────────────────
@@ -703,6 +760,118 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // ── Questionnaires ────────────────────────────────────────────
   if (lower === 'questionnaire/getquestionnairelist') {
     return json(homer.questionnaires);
+  }
+
+  // ── Passkey Login Challenge ───────────────────────────────────
+  if (lower.startsWith('authentication/login/getpasskeygetparams')) {
+    const challenge = crypto.randomBytes(32).toString('base64');
+    return json({
+      Success: true,
+      PasskeyGetParams: {
+        Attestation: 'none',
+        Challenge: challenge,
+        RpId: '',
+        Timeout: 60000,
+        UserVerification: 'preferred',
+        ExpirationInstantIso: `/Date(${Date.now() + 60000})/`,
+        AllowCredentials: passkeysState.map(pk => ({ id: pk.rawId, type: 'public-key' })),
+      },
+    });
+  }
+
+  // ── Passkey Management ────────────────────────────────────────
+  if (lower === 'api/passkey-management/loadpasskeyinfo') {
+    return json({
+      passkeys: passkeysState,
+      lastAuthentication: undefined,
+    });
+  }
+  if (lower === 'api/passkey-management/generatecreaterequest') {
+    const challenge = crypto.randomBytes(32).toString('base64');
+    return json({
+      success: true,
+      data: {
+        ...homer.passkeyCreationOptions,
+        challenge,
+        excludeCredentials: passkeysState.map(pk => ({ id: pk.rawId, type: 'public-key' })),
+      },
+    });
+  }
+  if (lower === 'api/passkey-management/createpasskey') {
+    try {
+      const body = await request.json();
+      passkeyIdCounter++;
+      const newPasskey = {
+        rawId: body.rawId || crypto.randomBytes(32).toString('base64'),
+        name: `Passkey ${passkeyIdCounter}`,
+        createdOnDevice: 'Software Authenticator',
+        creationInstant: new Date().toISOString(),
+        lastUsedInstant: null,
+      };
+      passkeysState.push(newPasskey);
+      return json({ success: true, data: newPasskey });
+    } catch {
+      return json({ success: false, errors: ['Invalid request'] }, 400);
+    }
+  }
+  if (lower === 'api/passkey-management/deletepasskey') {
+    try {
+      const body = await request.json();
+      passkeysState = passkeysState.filter(pk => pk.rawId !== body.rawId);
+      return json({ success: true });
+    } catch {
+      return json({ success: false }, 400);
+    }
+  }
+  if (lower === 'api/passkey-management/renamepasskey') {
+    try {
+      const body = await request.json();
+      const pk = passkeysState.find(p => p.rawId === body.rawId);
+      if (pk) pk.name = body.name || pk.name;
+      return json({ success: true });
+    } catch {
+      return json({ success: false }, 400);
+    }
+  }
+
+  // ── Appointment Booking ───────────────────────────────────────
+  if (lower === 'api/scheduling/getavailableappointments') {
+    return json({ appointments: homer.availableAppointments });
+  }
+  if (lower === 'api/scheduling/bookappointment') {
+    try {
+      const body = await request.json();
+      const slotId = body.slotId;
+      // Find the slot across all providers
+      let foundSlot: { date: string; time: string; slotId: string } | null = null;
+      let foundProvider: typeof homer.availableAppointments[0] | null = null;
+      for (const appt of homer.availableAppointments) {
+        const slot = appt.slots.find(s => s.slotId === slotId);
+        if (slot) { foundSlot = slot; foundProvider = appt; break; }
+      }
+      if (!foundSlot || !foundProvider) {
+        return json({ success: false, error: 'Slot not found' }, 400);
+      }
+      const confirmation = {
+        confirmationNumber: `SPRFLD-${Date.now().toString(36).toUpperCase()}`,
+        slotId,
+        provider: foundProvider.provider,
+        department: foundProvider.department,
+        location: foundProvider.location,
+        visitType: foundProvider.visitType,
+        date: foundSlot.date,
+        time: foundSlot.time,
+        reason: body.reason || 'Not specified',
+      };
+      bookedAppointments.push(confirmation);
+      return json({
+        success: true,
+        ...confirmation,
+        message: `Your appointment with ${foundProvider.provider} on ${foundSlot.date} at ${foundSlot.time} has been confirmed.`,
+      });
+    } catch {
+      return json({ success: false, error: 'Invalid request' }, 400);
+    }
   }
 
   // ── Fallback ──────────────────────────────────────────────────

@@ -7,5 +7,6 @@ RUN bun install
 COPY . .
 RUN bun run build
 
-EXPOSE 3000
-CMD ["sh", "-c", "bun run start -p ${PORT:-3000}"]
+ENV NODE_ENV=production
+EXPOSE 8080
+CMD ["sh", "-c", "bun run start -p ${PORT:-8080}"]

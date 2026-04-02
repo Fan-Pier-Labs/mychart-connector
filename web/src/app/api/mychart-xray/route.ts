@@ -43,18 +43,25 @@ export async function GET(req: NextRequest) {
       fdiContext,
       '',
       '',
-      { skipFileWrite: true, maxImages: 10 },
+      { skipFileWrite: true, maxImages: 50 },
     );
 
     if (downloadResult.errors.length > 0 && downloadResult.images.length === 0) {
       return NextResponse.json({ error: downloadResult.errors.join('; ') }, { status: 502 });
     }
 
-    // Find the first image with pixel data
-    const image = downloadResult.images.find(img => img.pixelData);
-    if (!image?.pixelData) {
+    // Find the largest image with pixel data, preferring real images over tiny scouts
+    const imagesWithData = downloadResult.images.filter(img => img.pixelData && img.pixelData.length > 10000);
+    // Fall back to any image if no large ones found
+    const candidates = imagesWithData.length > 0
+      ? imagesWithData
+      : downloadResult.images.filter(img => img.pixelData);
+    if (candidates.length === 0) {
       return NextResponse.json({ error: 'No image data available' }, { status: 404 });
     }
+    const image = candidates.reduce((best, img) =>
+      (img.pixelData!.length > (best.pixelData?.length ?? 0)) ? img : best
+    );
 
     const jpegBuffer = await convertCloToJpg(
       image.pixelData,

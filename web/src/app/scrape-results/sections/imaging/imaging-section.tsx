@@ -1,13 +1,14 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ArraySection } from "@/components/data-display";
 import { withRenderErrorBoundary } from "@/components/with-render-error-boundary";
-import { isAdvancedImaging } from "@/lib/imaging-utils";
 import type { ImagingResultType } from "@/types/scrape-results";
-import { useImaging } from "./use-imaging";
 
 const SafeArraySection = withRenderErrorBoundary(ArraySection, "ArraySection", (p) => p.data);
+
+type SeriesInfo = { seriesUID: string; description: string; instanceCount: number };
 
 interface ImagingSectionProps {
   imagingResults: ImagingResultType[] | undefined;
@@ -16,7 +17,29 @@ interface ImagingSectionProps {
 }
 
 export function ImagingSection({ imagingResults, isDemo, token }: ImagingSectionProps) {
-  const { xrayImages, xrayLoading, xrayErrors, fetchXray } = useImaging(token);
+  const [seriesData, setSeriesData] = useState<Record<number, SeriesInfo[]>>({});
+  const [seriesLoading, setSeriesLoading] = useState<Record<number, boolean>>({});
+  const [seriesErrors, setSeriesErrors] = useState<Record<number, string | null>>({});
+
+  const fetchSeries = useCallback(async (index: number, fdiContext: { fdi: string; ord: string }) => {
+    setSeriesLoading(prev => ({ ...prev, [index]: true }));
+    setSeriesErrors(prev => ({ ...prev, [index]: null }));
+    try {
+      const fdiParam = btoa(JSON.stringify(fdiContext));
+      const resp = await fetch(`/api/mychart-series?token=${encodeURIComponent(token)}&fdi=${encodeURIComponent(fdiParam)}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Failed to load series' }));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      setSeriesData(prev => ({ ...prev, [index]: data.series }));
+    } catch (err) {
+      const msg = (err as Error).message;
+      setSeriesErrors(prev => ({ ...prev, [index]: msg.length > 200 ? msg.slice(0, 200) + '…' : msg }));
+    } finally {
+      setSeriesLoading(prev => ({ ...prev, [index]: false }));
+    }
+  }, [token]);
 
   return (
     <SafeArraySection title="Imaging Results" data={imagingResults}>
@@ -43,37 +66,33 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
           )}
           {img.fdiContext && !isDemo && (
             <div className="mt-2">
-              {isAdvancedImaging(img.orderName, img.imageStudyCount + img.scanCount) ? (
-                <Button variant="outline" size="sm" className="text-xs h-7" disabled>
-                  View Image (coming soon)
+              {!seriesData[i] && !seriesLoading[i] && !seriesErrors[i] && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => fetchSeries(i, img.fdiContext!)}
+                >
+                  View Images
                 </Button>
-              ) : (
-                <>
-                  {!xrayImages[i] && !xrayLoading[i] && !xrayErrors[i] && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7"
-                      onClick={() => fetchXray(i, img.fdiContext!)}
-                    >
-                      View X-ray
-                    </Button>
-                  )}
-                  {xrayLoading[i] && (
-                    <p className="text-xs text-muted-foreground">Loading X-ray image...</p>
-                  )}
-                  {xrayErrors[i] && (
-                    <p className="text-xs text-red-500">Failed to load X-ray: {xrayErrors[i]}</p>
-                  )}
-                  {xrayImages[i] && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={xrayImages[i]!}
-                      alt={img.orderName}
-                      className="mt-2 max-w-full rounded border bg-black"
-                    />
-                  )}
-                </>
+              )}
+              {seriesLoading[i] && (
+                <p className="text-xs text-muted-foreground">Loading series info...</p>
+              )}
+              {seriesErrors[i] && (
+                <p className="text-xs text-red-500">Failed to load series: {seriesErrors[i]}</p>
+              )}
+              {seriesData[i] && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium">Series:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {seriesData[i].map((s, j) => (
+                      <Button key={j} variant="outline" size="sm" className="text-xs h-7" disabled>
+                        {s.description} ({s.instanceCount} images) — coming soon
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
