@@ -58,10 +58,22 @@ function joinPath(path: string[]): string {
   return path.join('/');
 }
 
+/**
+ * Build the public base URL from forwarded headers, so redirects
+ * use the external domain rather than the container's localhost.
+ */
+function publicBaseUrl(request: NextRequest): string {
+  const host = request.headers.get('host') || new URL(request.url).host;
+  const proto = request.headers.get('cloudfront-forwarded-proto')
+    || request.headers.get('x-forwarded-proto')
+    || (host.includes('localhost') || !host.includes('.') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
 function requireSession(request: NextRequest): NextResponse | null {
   const cookie = request.headers.get('cookie');
   if (!validateSession(cookie)) {
-    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', publicBaseUrl(request)), 302);
   }
   return null;
 }
@@ -78,14 +90,14 @@ function requireTermsRedirect(request: NextRequest): NextResponse | null {
   if (!requireTerms()) return null;
   const cookie = request.headers.get('cookie');
   if (hasAcceptedTerms(cookie)) return null;
-  return NextResponse.redirect(new URL('/MyChart/Authentication/TermsConditions', request.url), 302);
+  return NextResponse.redirect(new URL('/MyChart/Authentication/TermsConditions', publicBaseUrl(request)), 302);
 }
 
 // ─── Route handler ──────────────────────────────────────────────────
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const { path } = await params;
   if (!path || path.length === 0) {
-    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+    return NextResponse.redirect(new URL('/MyChart/Authentication/Login', publicBaseUrl(request)), 302);
   }
   const joined = joinPath(path);
   const lower = joined.toLowerCase();
@@ -121,7 +133,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (lower === 'home') {
     const cookie = request.headers.get('cookie');
     if (!validateSession(cookie)) {
-      return NextResponse.redirect(new URL('/MyChart/Authentication/Login', request.url), 302);
+      return NextResponse.redirect(new URL('/MyChart/Authentication/Login', publicBaseUrl(request)), 302);
     }
     const termsRedirect = requireTermsRedirect(request);
     if (termsRedirect) return termsRedirect;
@@ -388,7 +400,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const cookie = request.headers.get('cookie');
     acceptTerms(cookie);
     // Redirect to home after accepting
-    return NextResponse.redirect(new URL('/MyChart/Home', request.url), 302);
+    return NextResponse.redirect(new URL('/MyChart/Home', publicBaseUrl(request)), 302);
   }
 
   // ── 2FA ────────────────────────────────────────────────────────
