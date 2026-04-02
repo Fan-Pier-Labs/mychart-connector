@@ -45,6 +45,17 @@ export function useMyChartAccounts() {
         body: JSON.stringify({ sessionKey: ctx.activeSessionKey }),
       });
       const data = await res.json();
+      if (data.code === "session_expired") {
+        // Session expired — trigger re-connect
+        console.log("[fetchProfile] Session expired, triggering re-connect");
+        ctx.setActiveSessionKey("");
+        ctx.setProfile(null);
+        const inst = ctx.instances.find((i) => i.id === ctx.activeInstanceId);
+        if (inst) {
+          await connectInstance(inst);
+        }
+        return;
+      }
       if (!data.error) {
         ctx.setProfile(data);
       }

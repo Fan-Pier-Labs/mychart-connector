@@ -152,7 +152,25 @@ export function parseProfileHtml(body: string): ProfileData | null {
 }
 
 export async function getMyChartProfile(mychartRequest: MyChartRequest): Promise<ProfileData | null> {
-  const resp = await mychartRequest.makeRequest({path: '/Home'})
+  // Use followRedirects: false so we can detect a redirect to the Login page
+  // (which means the session has expired) instead of blindly parsing the login HTML.
+  const resp = await mychartRequest.makeRequest({path: '/Home', followRedirects: false})
+
+  if ([301, 302].includes(resp.status)) {
+    const location = resp.headers.get('Location') || '';
+    console.log(`[profile] /Home returned ${resp.status} → ${location}`);
+    if (location.toLowerCase().includes('login')) {
+      console.log('[profile] Session expired — redirected to login page');
+      return null;
+    }
+    // Non-login redirect: follow it and parse
+    const followResp = await mychartRequest.makeRequest({url: new URL(location, mychartRequest.protocol + '://' + mychartRequest.hostname).href});
+    const body = await followResp.text();
+    console.log(`[profile] Followed redirect to ${location}, response URL: ${followResp.url}, status: ${followResp.status}`);
+    return parseProfileHtml(body);
+  }
+
+  console.log(`[profile] /Home returned ${resp.status}, URL: ${resp.url}`);
   const body = await resp.text()
   return parseProfileHtml(body)
 }
