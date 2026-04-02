@@ -50,4 +50,11 @@ export function acceptTerms(cookieHeader: string | null): boolean {
   return true;
 }
 
+/** Delete all sessions. Used by integration tests to simulate session expiry. */
+export function deleteAllSessions(): number {
+  const count = sessions.size;
+  sessions.clear();
+  return count;
+}
+
 export { SESSION_COOKIE_NAME };

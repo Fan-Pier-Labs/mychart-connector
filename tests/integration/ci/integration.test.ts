@@ -760,7 +760,101 @@ describe('Instance enabled/disabled toggle', () => {
 });
 
 // ===================================================================
-// 10. Cleanup
+// 10. Session Expiry & Auto-Reconnect
+// ===================================================================
+
+describe('Session expiry and auto-reconnect', () => {
+  const FAKE_MYCHART_TEST_URL = process.env.CI_FAKE_MYCHART_URL || 'http://localhost:4000';
+
+  it('connects via /api/mychart-instances/:id/connect', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/connect`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    if (body.state === 'need_2fa') {
+      const twofaRes = await authedFetch('/api/twofa', {
+        method: 'POST',
+        body: JSON.stringify({ sessionKey: body.sessionKey, code: '123456' }),
+      });
+      expect(twofaRes.status).toBe(200);
+      const twofaBody = await twofaRes.json();
+      expect(twofaBody.state).toBe('logged_in');
+      sessionKey = twofaBody.sessionKey;
+    } else {
+      expect(body.state).toBe('logged_in');
+      sessionKey = body.sessionKey;
+    }
+  }, 30_000);
+
+  it('profile fetch works with a valid session', async () => {
+    const res = await authedFetch('/api/profile', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBeDefined();
+    expect(JSON.stringify(body)).toContain('Homer');
+  });
+
+  it('invalidates fake-mychart sessions', async () => {
+    const res = await fetch(`${FAKE_MYCHART_TEST_URL}/api/invalidate-sessions`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBeGreaterThan(0);
+  });
+
+  it('profile fetch returns session_expired after invalidation', async () => {
+    const res = await authedFetch('/api/profile', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    // Should return 401 with session_expired code
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.code).toBe('session_expired');
+  });
+
+  it('connect endpoint detects expired session and re-logs in', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/connect`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    if (body.state === 'need_2fa') {
+      const twofaRes = await authedFetch('/api/twofa', {
+        method: 'POST',
+        body: JSON.stringify({ sessionKey: body.sessionKey, code: '123456' }),
+      });
+      expect(twofaRes.status).toBe(200);
+      const twofaBody = await twofaRes.json();
+      expect(twofaBody.state).toBe('logged_in');
+      sessionKey = twofaBody.sessionKey;
+    } else {
+      expect(body.state).toBe('logged_in');
+      sessionKey = body.sessionKey;
+    }
+  }, 30_000);
+
+  it('profile works again after re-connect', async () => {
+    const res = await authedFetch('/api/profile', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBeDefined();
+    expect(JSON.stringify(body)).toContain('Homer');
+  });
+});
+
+// ===================================================================
+// 11. Cleanup
 // ===================================================================
 
 describe('Cleanup', () => {
