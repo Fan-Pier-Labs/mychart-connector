@@ -25,10 +25,13 @@ export interface SessionEntry {
   createdAt: Date;
 }
 
+const KEEPALIVE_MAX_ERRORS = 3;
+
 class SessionStore {
   private sessions = new Map<string, SessionEntry>();
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private keepAliveCounter = 0;
+  private keepAliveErrors = new Map<string, number>();
 
   /** Store a session. */
   set(token: string, request: MyChartRequest, opts?: { hostname?: string; status?: SessionEntry['status'] }) {
@@ -59,6 +62,7 @@ class SessionStore {
   /** Delete a session. */
   delete(token: string) {
     this.sessions.delete(token);
+    this.keepAliveErrors.delete(token);
   }
 
   /** Check if a session exists. */
@@ -106,7 +110,9 @@ class SessionStore {
   /** Run a single keepalive cycle. Pings /Home for each active session. */
   async runKeepalive() {
     const activeSessions = this.active();
-    console.log(`[keepalive] Checking ${activeSessions.length} active session(s)`);
+    const allSessions = Array.from(this.sessions.entries());
+    const statusSummary = allSessions.map(([, e]) => `${e.hostname}:${e.status}`).join(', ');
+    console.log(`[keepalive] Cycle start | total=${this.sessions.size} active=${activeSessions.length} | ${statusSummary || 'none'}`);
 
     for (const [token, entry] of activeSessions) {
       await this.pingSession(token, entry);
@@ -120,45 +126,80 @@ class SessionStore {
    */
   private async pingSession(token: string, entry: SessionEntry) {
     const label = token.length > 12 ? token.slice(0, 8) + '...' : token;
+    const host = entry.hostname;
     this.keepAliveCounter++;
+    const cnt = this.keepAliveCounter;
+    const sessionAge = Math.round((Date.now() - entry.createdAt.getTime()) / 1000);
     try {
       const infoBefore = entry.request.getCookieInfo();
-      console.log(`[keepalive] ${label}: pinging KeepAlive #${this.keepAliveCounter} (${infoBefore.count} cookies)`);
+      console.log(`[keepalive] ${label} (${host}): ping #${cnt} | age=${sessionAge}s cookies=${infoBefore.count} [${infoBefore.names.join(', ')}]`);
 
-      // Call both keepalive endpoints like MyChart's own JS does
+      const start = Date.now();
       const [dotNetResp, aspResp] = await Promise.all([
         entry.request.makeRequest({
-          path: `/Home/KeepAlive?cnt=${this.keepAliveCounter}`,
+          path: `/Home/KeepAlive?cnt=${cnt}`,
           followRedirects: false,
         }),
         entry.request.makeRequest({
-          path: `/keepalive.asp?cnt=${this.keepAliveCounter}`,
+          path: `/keepalive.asp?cnt=${cnt}`,
           followRedirects: false,
         }),
       ]);
+      const elapsed = Date.now() - start;
 
       const dotNetBody = await dotNetResp.text();
       const aspBody = await aspResp.text();
+      const dotNetStatus = dotNetResp.status;
+      const aspStatus = aspResp.status;
+      const dotNetLocation = dotNetResp.headers.get('Location') ?? '';
+      const aspLocation = aspResp.headers.get('Location') ?? '';
 
-      // "0" means session expired, anything else (usually "1") means alive
-      if (dotNetBody.trim() === '0' || aspBody.trim() === '0') {
-        console.log(`[keepalive] ${label}: expired (KeepAlive=${dotNetBody.trim()}, keepalive.asp=${aspBody.trim()})`);
+      console.log(
+        `[keepalive] ${label} (${host}): response in ${elapsed}ms | ` +
+        `KeepAlive: status=${dotNetStatus} body="${dotNetBody.trim().slice(0, 50)}" location="${dotNetLocation}" | ` +
+        `keepalive.asp: status=${aspStatus} body="${aspBody.trim().slice(0, 50)}" location="${aspLocation}"`
+      );
+
+      // "0" means session explicitly expired.
+      // Only trust /Home/KeepAlive — keepalive.asp returns "0" on many modern MyChart
+      // instances even when the session is alive (endpoint may not exist → 404/empty).
+      // If keepalive.asp also returns "0" we log it, but it doesn't drive expiry alone.
+      if (dotNetBody.trim() === '0') {
+        console.warn(`[keepalive] ${label} (${host}): EXPIRED — /Home/KeepAlive returned "0" (keepalive.asp=${aspBody.trim()})`);
         entry.status = 'expired';
         return;
       }
+      if (aspBody.trim() === '0') {
+        console.warn(`[keepalive] ${label} (${host}): keepalive.asp returned "0" but /Home/KeepAlive returned "${dotNetBody.trim()}" — treating as alive`);
+      }
 
-      if (dotNetResp.status === 200 || aspResp.status === 200) {
+      if (dotNetStatus === 200 || aspStatus === 200) {
+        this.keepAliveErrors.delete(token);
         const infoAfter = entry.request.getCookieInfo();
-        console.log(`[keepalive] ${label}: alive (cookies: ${infoBefore.count} -> ${infoAfter.count})`);
+        console.log(`[keepalive] ${label} (${host}): ALIVE | cookies: ${infoBefore.count} -> ${infoAfter.count}`);
         return;
       }
 
-      const location = dotNetResp.headers.get('Location') || aspResp.headers.get('Location') || '';
-      console.log(`[keepalive] ${label}: expired (status=${dotNetResp.status}/${aspResp.status}, Location: ${location})`);
+      // Neither endpoint returned 200 — likely a redirect to login page
+      console.warn(
+        `[keepalive] ${label} (${host}): EXPIRED — neither endpoint returned 200 | ` +
+        `KeepAlive: ${dotNetStatus} -> "${dotNetLocation}" | keepalive.asp: ${aspStatus} -> "${aspLocation}"`
+      );
       entry.status = 'expired';
     } catch (err) {
-      console.error(`[keepalive] ${label}: error -`, (err as Error).message);
-      entry.status = 'error';
+      const errorCount = (this.keepAliveErrors.get(token) ?? 0) + 1;
+      this.keepAliveErrors.set(token, errorCount);
+      const errMsg = (err as Error).message;
+      const errStack = (err as Error).stack ?? '';
+      console.error(
+        `[keepalive] ${label} (${host}): network error (${errorCount}/${KEEPALIVE_MAX_ERRORS}) — ${errMsg}\n` +
+        errStack.split('\n').slice(0, 3).join('\n')
+      );
+      if (errorCount >= KEEPALIVE_MAX_ERRORS) {
+        console.error(`[keepalive] ${label} (${host}): marking as ERROR after ${KEEPALIVE_MAX_ERRORS} consecutive failures`);
+        entry.status = 'error';
+        this.keepAliveErrors.delete(token);
+      }
     }
   }
 }

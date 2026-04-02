@@ -7,7 +7,8 @@ import { TOTP } from 'totp-generator';
 export async function generateTotpCode(secret: string, timestamp?: number): Promise<string> {
   // Clean up the secret: remove spaces, uppercase
   const cleanSecret = secret.replace(/\s+/g, '').toUpperCase();
-  const { otp } = await TOTP.generate(cleanSecret, { timestamp });
+  const options = timestamp !== undefined ? { timestamp } : {};
+  const { otp } = await TOTP.generate(cleanSecret, options);
   return otp;
 }
 

@@ -7,6 +7,7 @@ import { changeDirToPackageRoot } from "../../shared/util";
 import { sendTelemetryEvent } from "../../shared/telemetry";
 import { acceptTermsAndConditions } from "./termsAndConditions";
 import { isBlockedInstance } from "../../shared/blockedInstances";
+import { createAssertion, type PasskeyCredential } from "./softwareAuthenticator";
 
 
 // Just for testing / local development
@@ -536,6 +537,147 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
 
 }
 
+
+/**
+ * Login to MyChart using a passkey credential.
+ * This completely replaces username/password + 2FA with a single WebAuthn assertion.
+ *
+ * Flow:
+ * 1. Get login page + CSRF token (same as password login)
+ * 2. POST /Authentication/Login/GetPasskeyGetParams — get WebAuthn challenge
+ * 3. Software authenticator signs the challenge
+ * 4. POST /Authentication/Login/DoLogin with Type: "PasskeyLogin"
+ */
+export async function myChartPasskeyLogin({hostname, credential, protocol}: {
+  hostname: string,
+  credential: PasskeyCredential,
+  protocol?: string,
+}): Promise<LoginResult> {
+  sendTelemetryEvent('scraper_passkey_login_started', { hostname });
+
+  if (!hostname || !credential) {
+    throw new Error('Missing hostname or passkey credential');
+  }
+
+  if (isBlockedInstance(hostname)) {
+    throw new Error(`${hostname} is not supported.`);
+  }
+
+  const hostnameWithoutPort = hostname.split(':')[0];
+  const effectiveProtocol = protocol ?? (hostnameWithoutPort === 'localhost' || !hostnameWithoutPort.includes('.') ? 'http' : 'https');
+  const mychartRequest = new MyChartRequest(hostname, effectiveProtocol);
+
+  const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest);
+  if (!foundMyChartFirstPathPart) {
+    return { state: 'error', error: 'could not determine first path part', mychartRequest };
+  }
+
+  // Get login page + CSRF token
+  const loginPageResp = await mychartRequest.makeRequest({ path: '/Authentication/Login' });
+  const loginPageHtml = await loginPageResp.text();
+  const requestVerificationToken = getRequestVerificationTokenFromBody(loginPageHtml);
+
+  if (!requestVerificationToken) {
+    return { state: 'error', error: 'could not find request verification token', mychartRequest };
+  }
+
+  // Get passkey challenge
+  console.log('  Getting passkey challenge...');
+  const getParamsResp = await mychartRequest.makeRequest({
+    path: '/Authentication/Login/GetPasskeyGetParams?force=true&noCache=' + Math.random(),
+    method: 'POST',
+    headers: {
+      '__RequestVerificationToken': requestVerificationToken,
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+  });
+
+  if (getParamsResp.status !== 200) {
+    console.log('  GetPasskeyGetParams failed:', getParamsResp.status);
+    return { state: 'error', error: 'Failed to get passkey challenge', mychartRequest };
+  }
+
+  const getParamsResult = await getParamsResp.json();
+  if (!getParamsResult.Success || !getParamsResult.PasskeyGetParams) {
+    console.log('  GetPasskeyGetParams unsuccessful:', JSON.stringify(getParamsResult));
+    return { state: 'error', error: 'Passkey login not available on this instance', mychartRequest };
+  }
+
+  const passkeyParams = getParamsResult.PasskeyGetParams;
+  console.log('  Got passkey challenge. RpId:', passkeyParams.RpId || '(default)');
+
+  // Create assertion using software authenticator
+  const origin = `${effectiveProtocol}://${mychartRequest.hostname}`;
+  const assertion = createAssertion(credential, passkeyParams.Challenge, origin);
+
+  // Extract additional hidden fields from the login page
+  const $ = cheerio.load(loginPageHtml);
+  const navRequestMetrics = $('input[name="__NavigationRequestMetrics"]').attr('value') || '';
+  const navRedirectMetrics = $('input[name="__NavigationRedirectMetrics"]').attr('value') || '[]';
+  const redirectChainIncludesLogin = $('input[name="__RedirectChainIncludesLogin"]').attr('value') || '0';
+  const currentPageLoadDescriptor = $('input[name="__CurrentPageLoadDescriptor"]').attr('value') || '';
+  const rttCaptureEnabled = $('input[name="__RttCaptureEnabled"]').attr('value') || '1';
+
+  // Submit passkey login
+  const LoginInfo = encodeURIComponent(JSON.stringify({
+    Type: 'PasskeyLogin',
+    Credentials: assertion,
+  }));
+
+  const loginBody = '__RequestVerificationToken=' + requestVerificationToken
+    + '&DeviceId=&postLoginUrl=&LoginInfo=' + LoginInfo
+    + '&__NavigationRequestMetrics=' + encodeURIComponent(navRequestMetrics)
+    + '&__NavigationRedirectMetrics=' + encodeURIComponent(navRedirectMetrics)
+    + '&__RedirectChainIncludesLogin=' + redirectChainIncludesLogin
+    + '&__CurrentPageLoadDescriptor=' + encodeURIComponent(currentPageLoadDescriptor)
+    + '&__RttCaptureEnabled=' + rttCaptureEnabled;
+
+  console.log('  Submitting passkey login...');
+  const res = await mychartRequest.makeRequest({
+    path: '/Authentication/Login/DoLogin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: loginBody,
+    method: 'POST',
+  });
+
+  const responseBody = await res.text();
+  const responseUrl = res.url || '';
+  const bodyLower = responseBody.toLocaleLowerCase();
+  const urlLower = responseUrl.toLocaleLowerCase();
+
+  // Check for login failure
+  if (bodyLower.includes('login failed') || bodyLower.includes('login unsuccessful') || urlLower.includes('loginfailed')) {
+    console.log('  Passkey login failed');
+    return { state: 'invalid_login', error: 'Passkey authentication failed', mychartRequest };
+  }
+
+  // Success — logged in directly (passkey bypasses 2FA)
+  if (bodyLower.includes('md_home_index')) {
+    console.log('  Passkey login successful!');
+    return { state: 'logged_in', mychartRequest };
+  }
+
+  // Terms & Conditions
+  if (urlLower.includes('termsconditions') || (bodyLower.includes('terms and conditions') && !urlLower.includes('/home'))) {
+    console.log('  Landed on Terms & Conditions page, auto-accepting');
+    const accepted = await acceptTermsAndConditions(mychartRequest);
+    if (accepted) {
+      return { state: 'logged_in', mychartRequest };
+    }
+    return { state: 'error', error: 'Failed to accept Terms & Conditions', mychartRequest };
+  }
+
+  // Unexpected page — might still need 2FA (shouldn't happen with passkey, but handle gracefully)
+  if (responseBody.includes('secondaryvalidationcontroller') || urlLower.includes('secondaryvalidation')) {
+    console.log('  Passkey login still requires 2FA — unexpected');
+    return { state: 'need_2fa', mychartRequest };
+  }
+
+  console.log('  Passkey login ended on unexpected page');
+  console.log('  Response URL:', responseUrl);
+  console.log('  Page snippet:', responseBody.substring(0, 500));
+  return { state: 'error', error: 'Passkey login ended on unexpected page', mychartRequest };
+}
 
 export async function areCookiesValid(mychartRequest: MyChartRequest): Promise<boolean> {
   const res = await mychartRequest.makeRequest({path: '/Home', followRedirects: false})
