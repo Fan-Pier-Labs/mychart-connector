@@ -3,9 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { ArraySection } from "@/components/data-display";
 import { withRenderErrorBoundary } from "@/components/with-render-error-boundary";
-import { isAdvancedImaging } from "@/lib/imaging-utils";
 import type { ImagingResultType } from "@/types/scrape-results";
-import { useImaging } from "./use-imaging";
 
 const SafeArraySection = withRenderErrorBoundary(ArraySection, "ArraySection", (p) => p.data);
 
@@ -15,8 +13,7 @@ interface ImagingSectionProps {
   token: string;
 }
 
-export function ImagingSection({ imagingResults, isDemo, token }: ImagingSectionProps) {
-  const { xrayImages, xrayLoading, xrayErrors, fetchXray } = useImaging(token);
+export function ImagingSection({ imagingResults, isDemo }: ImagingSectionProps) {
 
   return (
     <SafeArraySection title="Imaging Results" data={imagingResults}>
@@ -41,52 +38,11 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
               <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{img.narrative}</p>
             </details>
           )}
-          {img.series && img.series.length > 0 && (
+          {img.fdiContext && !isDemo && (
             <div className="mt-2">
-              <span className="text-xs font-medium">Series:</span>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {img.series.map((s, j) => (
-                  <Button key={j} variant="outline" size="sm" className="text-xs h-7" disabled>
-                    {s.studyDescription || s.modality} ({s.numberOfImages} images) — coming soon
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {img.fdiContext && !isDemo && !img.series?.length && (
-            <div className="mt-2">
-              {isAdvancedImaging(img.orderName, img.imageStudyCount + img.scanCount) ? (
-                <Button variant="outline" size="sm" className="text-xs h-7" disabled>
-                  View Image (coming soon)
-                </Button>
-              ) : (
-                <>
-                  {!xrayImages[i] && !xrayLoading[i] && !xrayErrors[i] && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7"
-                      onClick={() => fetchXray(i, img.fdiContext!)}
-                    >
-                      View X-ray
-                    </Button>
-                  )}
-                  {xrayLoading[i] && (
-                    <p className="text-xs text-muted-foreground">Loading X-ray image...</p>
-                  )}
-                  {xrayErrors[i] && (
-                    <p className="text-xs text-red-500">Failed to load X-ray: {xrayErrors[i]}</p>
-                  )}
-                  {xrayImages[i] && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={xrayImages[i]!}
-                      alt={img.orderName}
-                      className="mt-2 max-w-full rounded border bg-black"
-                    />
-                  )}
-                </>
-              )}
+              <Button variant="outline" size="sm" className="text-xs h-7" disabled>
+                View Images (coming soon)
+              </Button>
             </div>
           )}
         </div>

@@ -248,23 +248,6 @@ export async function getImagingResults(mychartRequest: MyChartRequest, options?
             }
           }
 
-          // Extract series info from imageStudies for the frontend
-          const seriesInfo: ImagingResult['series'] = [];
-          for (const r of labResult.results ?? []) {
-            for (const study of r.imageStudies ?? []) {
-              if (study.studyDescription || study.modality) {
-                seriesInfo.push({
-                  studyDescription: study.studyDescription || '',
-                  modality: study.modality || '',
-                  numberOfImages: study.numberOfImages || 0,
-                });
-              }
-            }
-          }
-          if (seriesInfo.length > 0) {
-            imagingResult.series = seriesInfo;
-          }
-
           allResults.push(imagingResult);
         }
       }
