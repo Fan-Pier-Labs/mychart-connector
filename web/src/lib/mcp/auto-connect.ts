@@ -27,7 +27,13 @@ export async function autoConnectInstance(
     return { state: 'logged_in' };
   }
 
-  // Clear any stale/expired/need_2fa session before re-login
+  // If 2FA is pending, preserve the session — the user must call complete_2fa, not restart
+  if (existing?.status === 'need_2fa') {
+    console.log(`[auto-connect] ${instance.hostname}: pending 2FA — preserving session, not re-logging in`);
+    return { state: 'need_2fa' };
+  }
+
+  // Clear expired/error sessions before re-login
   if (existing) {
     console.log(`[auto-connect] ${instance.hostname}: clearing stale session (status=${existing.status})`);
     sessionStore.delete(sessionKey);
