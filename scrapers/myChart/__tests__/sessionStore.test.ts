@@ -97,7 +97,7 @@ describe('sessionStore keepalive', () => {
     expect(sessionStore.getEntry('keep-me')!.status).toBe('logged_in')
   })
 
-  it('runKeepalive marks error on throw', async () => {
+  it('runKeepalive marks error only after 3 consecutive throws', async () => {
     const req = {
       makeRequest: async () => { throw new Error('fail') },
       getCookieInfo: () => ({ count: 0, names: [] }),
@@ -105,7 +105,11 @@ describe('sessionStore keepalive', () => {
     } as unknown as MyChartRequest
     sessionStore.set('error-me', req)
     await sessionStore.runKeepalive()
-    expect(sessionStore.getEntry('error-me')!.status).toBe('error')
+    expect(sessionStore.getEntry('error-me')!.status).toBe('logged_in') // 1st failure — not yet
+    await sessionStore.runKeepalive()
+    expect(sessionStore.getEntry('error-me')!.status).toBe('logged_in') // 2nd failure — not yet
+    await sessionStore.runKeepalive()
+    expect(sessionStore.getEntry('error-me')!.status).toBe('error') // 3rd failure → marked error
   })
 
   it('runKeepalive calls both keepalive endpoints per session', async () => {

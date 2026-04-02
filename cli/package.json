@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1000.0",
-    "cheerio": "^1.0.0",
-    "resend": "^6.9.3"
+    "@aws-sdk/client-secrets-manager": "^3.1021.0",
+    "cheerio": "^1.2.0",
+    "resend": "^6.10.0"
   }
 }
