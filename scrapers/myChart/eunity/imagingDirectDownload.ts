@@ -650,18 +650,32 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   // for backward compatibility with the download loop
   const series: ParsedStudyInfo['series'] = [];
   let seriesIdx = 0;
-  for (const seriesUID of candidateSeriesUIDs) {
+  for (let si = 0; si < candidateSeriesUIDs.length; si++) {
+    const seriesUID = candidateSeriesUIDs[si];
     const instances = seriesInstances.get(seriesUID)!;
     const seriesPos = firstPosition.get(seriesUID) ?? 0;
+    // Search for descriptions between this series and the next one
+    const nextSeriesPos = si + 1 < candidateSeriesUIDs.length
+      ? (firstPosition.get(candidateSeriesUIDs[si + 1]) ?? text.length)
+      : text.length;
 
-    // Find series description
+    // Find series description: look for readable strings between this series and the next
     let bestDesc = `Series ${++seriesIdx}`;
-    let bestDist = Infinity;
+    let bestScore = 0;
     for (const rs of readableStrings) {
-      const dist = Math.abs(rs.pos - seriesPos);
-      if (dist < bestDist && dist < 500 && rs.text.length >= 3 && rs.text.length <= 80) {
-        bestDist = dist;
-        bestDesc = rs.text;
+      if (rs.pos < seriesPos || rs.pos > nextSeriesPos) continue;
+      // Prefer strings that look like series names (short, no UIDs, not too generic)
+      const s = rs.text;
+      if (s.length < 3 || s.length > 50) continue;
+      // Score: prefer shorter, more descriptive strings
+      let score = 10;
+      if (/^[A-Z]/.test(s)) score += 5; // Starts with uppercase
+      if (s.includes(' ')) score += 3; // Has spaces (human-readable)
+      if (/\d+x\d+|\d+mm/i.test(s)) score += 3; // Resolution-like
+      if (s.length < 20) score += 2;
+      if (score > bestScore) {
+        bestScore = score;
+        bestDesc = s;
       }
     }
 
