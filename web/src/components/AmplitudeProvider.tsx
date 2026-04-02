@@ -9,9 +9,9 @@ export function AmplitudeProvider() {
     if (initialized.current) return;
     initialized.current = true;
 
-    import("@amplitude/unified").then((amplitude) => {
-      amplitude.initAll("a7d8557f623f24012e62edc61bbc0fd6", {
-        analytics: { autocapture: true },
+    import("@amplitude/analytics-browser").then((amplitude) => {
+      amplitude.init("a7d8557f623f24012e62edc61bbc0fd6", {
+        autocapture: true,
       });
     }).catch(() => {
       // Silently ignore — analytics must never break the app
