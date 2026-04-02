@@ -56,11 +56,13 @@ function makeInstance(overrides: Partial<MyChartInstance> = {}): MyChartInstance
 
 describe('autoConnectInstance', () => {
   beforeEach(() => {
-    mockGetEntry.mockClear();
-    mockDelete.mockClear();
-    mockSetSession.mockClear();
-    mockLogin.mockClear();
-    mockComplete2fa.mockClear();
+    mockGetEntry.mockReset();
+    mockDelete.mockReset();
+    mockSetSession.mockReset();
+    mockLogin.mockReset();
+    mockComplete2fa.mockReset();
+    // Restore default implementations after reset
+    mockGetEntry.mockReturnValue(undefined);
   });
 
   it('returns logged_in if already connected with logged_in status', async () => {
@@ -70,13 +72,12 @@ describe('autoConnectInstance', () => {
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
-  it('re-logins if existing session is need_2fa', async () => {
+  it('preserves need_2fa session and returns need_2fa without re-logging in', async () => {
     mockGetEntry.mockReturnValueOnce({ status: 'need_2fa', request: {} });
-    mockLogin.mockResolvedValueOnce({ state: 'logged_in', mychartRequest: {} as never });
     const result = await autoConnectInstance('user-1', makeInstance());
-    expect(result.state).toBe('logged_in');
-    expect(mockDelete).toHaveBeenCalled();
-    expect(mockLogin).toHaveBeenCalled();
+    expect(result.state).toBe('need_2fa');
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockLogin).not.toHaveBeenCalled();
   });
 
   it('re-logins if existing session is expired', async () => {
