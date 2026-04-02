@@ -242,7 +242,7 @@ function buildAmfCall(
  *
  * Reverse-engineered from captured browser AMF traffic (748 bytes).
  */
-function buildGetStudyListMetaRequest(
+export function buildGetStudyListMetaRequest(
   accession: string,
   serviceInstance: string,
   patientId: string,
@@ -338,7 +338,7 @@ interface AmfResponse {
  * Parse the outer AmfServicesMessage response to extract code and response text.
  * Returns null if the response can't be parsed.
  */
-function parseAmfResponse(buf: Buffer): AmfResponse | null {
+export function parseAmfResponse(buf: Buffer): AmfResponse | null {
   // Look for the response pattern: AmfServicesResponse followed by code (integer) and response (string or null)
   const text = buf.toString('latin1');
   const codeIdx = text.indexOf('code');
@@ -424,7 +424,7 @@ export interface EunityStudyParams {
  * - Plain arg: <eunity-host>/e/viewer?CLOAccessKeyID=...&arg=accession%3D...
  * - Direct params: <eunity-host>/eUnity/viewer/?accession=...
  */
-function parseEunityStudyParams(viewerUrl: string, viewerBody?: string): EunityStudyParams | null {
+export function parseEunityStudyParams(viewerUrl: string, viewerBody?: string): EunityStudyParams | null {
   let accession = '';
   let serviceInstance = '';
   let patientId = '';
@@ -502,29 +502,221 @@ interface ParsedStudyInfo {
   }>;
 }
 
+
 /**
  * Parse the AMF getStudyListMeta response to extract study UID and series info.
+ *
+ * The AMF response contains a structured list where series UIDs appear as boundaries,
+ * followed by their instance UIDs. For multi-slice studies (CT scans), each series
+ * has many instance UIDs (one per slice).
  *
  * Strategy:
  * 1. Find all DICOM UIDs in the binary (pattern: 1.X.X.X.X...)
  * 2. Filter out DICOM standard SOP Class UIDs (1.2.840.10008.*)
- * 3. Identify the study UID (Epic OID root: 1.2.840.114350.*)
- * 4. Group remaining UIDs into (seriesUID, instanceUID) pairs by order of appearance
- * 5. Try to find series descriptions near each UID pair
- *
- * This is a heuristic parser — a full AMF3 response parser would be more robust
- * but isn't necessary since the UID pattern matching works reliably.
+ * 3. Identify the study UID
+ * 4. Detect series UIDs: UIDs that appear multiple times in the binary are typically
+ *    series UIDs (they appear in headers and as references). UIDs appearing exactly
+ *    once are typically instance UIDs.
+ * 5. Walk UIDs in position order, using series UIDs as group boundaries
+ * 6. Each series entry includes ALL its instance UIDs for complete multi-slice support
  */
-function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null {
+export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null {
   const text = amfBuf.toString('latin1');
 
-  // Find all DICOM UIDs (pattern: 1.X.X.X.X...)
+  // Find all DICOM UIDs with positions (including duplicates for frequency analysis)
+  const uidPattern = /1\.\d+\.\d+\.\d+(?:\.\d+){2,}/g;
+  const uidOccurrences: Array<{ uid: string; pos: number }> = [];
+  const uidFrequency = new Map<string, number>();
+  const firstPosition = new Map<string, number>();
+  let match;
+  while ((match = uidPattern.exec(text)) !== null) {
+    const uid = match[0];
+    // 1.2.840.10008.* = DICOM standard SOP Class UIDs (universal spec, not institution-specific)
+    // These are type identifiers like "CT Image Storage" that appear as metadata,
+    // not study/series/instance UIDs. Defined in the DICOM standard PS3.4.
+    if (uid.startsWith('1.2.840.10008.')) continue;
+    uidOccurrences.push({ uid, pos: match.index });
+    uidFrequency.set(uid, (uidFrequency.get(uid) || 0) + 1);
+    if (!firstPosition.has(uid)) firstPosition.set(uid, match.index);
+  }
+
+  if (uidOccurrences.length === 0) return null;
+
+  const uniqueUIDs = [...new Set(uidOccurrences.map(o => o.uid))];
+  console.log(`      [AMF-PARSE] ${uniqueUIDs.length} unique study-related UIDs from ${uidOccurrences.length} occurrences`);
+
+  // Study UID: the first UID in the response (AMF always starts with study-level data)
+  const studyUID = uniqueUIDs[0];
+
+  // Detect series vs instance UIDs using positional structure analysis.
+  //
+  // The AMF binary lists UIDs in order: series UID, then its instance UIDs.
+  // Within the UID stream, we can detect series boundaries by grouping
+  // consecutive UIDs by their "parent" (all segments except the last).
+  // Single-UID sub-groups are series UIDs; multi-UID runs are instances.
+  //
+  // For UIDs with very different roots (e.g., COR/SAG vs NONCONTRAST),
+  // we first split by major root boundary, then analyze within each root.
+
+  const orderedUIDs = [...firstPosition.entries()]
+    .filter(([uid]) => uid !== studyUID)
+    .sort((a, b) => a[1] - b[1])
+    .map(([uid]) => uid);
+
+  // Sub-group by "parent" (drop last segment)
+  const getParent = (uid: string) => uid.split('.').slice(0, -1).join('.');
+  const subGroups: Array<{ parent: string; uids: string[] }> = [];
+  let currentParent = '';
+  let currentGroup: string[] = [];
+
+  for (const uid of orderedUIDs) {
+    const parent = getParent(uid);
+    if (parent !== currentParent) {
+      if (currentGroup.length > 0) {
+        subGroups.push({ parent: currentParent, uids: currentGroup });
+      }
+      currentParent = parent;
+      currentGroup = [uid];
+    } else {
+      currentGroup.push(uid);
+    }
+  }
+  if (currentGroup.length > 0) {
+    subGroups.push({ parent: currentParent, uids: currentGroup });
+  }
+
+  // Walk sub-groups to identify series and instance relationships.
+  // Single-UID sub-groups are series UIDs; multi-UID sub-groups are their instances.
+  const candidateSeriesUIDs: string[] = [];
+  const seriesInstances = new Map<string, Set<string>>();
+  let currentSeriesUID = '';
+
+  for (const sg of subGroups) {
+    if (sg.uids.length === 1) {
+      // Single UID — likely a series UID (or a standalone instance like Scout)
+      const uid = sg.uids[0];
+      // If the previous "series" had no instances, it was actually an instance itself
+      // Add it to the current series
+      if (currentSeriesUID && seriesInstances.get(currentSeriesUID)!.size === 0) {
+        // Previous single was actually an instance, not a series
+        // Retroactively add it as an instance of the series before it
+        const prevSeries = candidateSeriesUIDs[candidateSeriesUIDs.length - 2];
+        if (prevSeries) {
+          const oldSeries = candidateSeriesUIDs.pop()!;
+          seriesInstances.get(prevSeries)!.add(oldSeries);
+          seriesInstances.delete(oldSeries);
+        }
+      }
+      currentSeriesUID = uid;
+      candidateSeriesUIDs.push(uid);
+      seriesInstances.set(uid, new Set());
+    } else {
+      // Multi-UID sub-group — these are instances of the current series
+      if (currentSeriesUID) {
+        for (const uid of sg.uids) {
+          seriesInstances.get(currentSeriesUID)!.add(uid);
+        }
+      }
+    }
+  }
+
+  // Check if the positional analysis produced useful results.
+  // For small studies (X-rays) where all UIDs have unique parents,
+  // every UID becomes a "series" with 0 instances — fall back to legacy parser.
+  const totalInstances = [...seriesInstances.values()].reduce((sum, s) => sum + s.size, 0);
+
+  if (candidateSeriesUIDs.length === 0 || totalInstances === 0) {
+    console.log(`      [AMF-PARSE] Positional analysis found ${candidateSeriesUIDs.length} series with ${totalInstances} instances, falling back to pair-based parsing`);
+    return parseStudySeriesFromAmfLegacy(amfBuf);
+  }
+
+  console.log(`      [AMF-PARSE] Detected ${candidateSeriesUIDs.length} series via positional analysis`);
+
+  // Extract series descriptions from nearby readable strings
+  const descriptionPattern = /[\x20-\x7e]{3,100}/g;
+  const readableStrings: Array<{ text: string; pos: number }> = [];
+  let strMatch;
+  while ((strMatch = descriptionPattern.exec(text)) !== null) {
+    const s = strMatch[0].trim();
+    if (/^\d+\.\d+\.\d+/.test(s)) continue;
+    if (s.includes('com.clientoutlook') || s.includes('flex.messaging')) continue;
+    if (s.includes('AmfServices') || s.includes('HTTPSimpleLoader')) continue;
+    if (s.includes('getStudyList') || s.includes('StudyService')) continue;
+    if (/^[\d.]+$/.test(s)) continue;
+    readableStrings.push({ text: s, pos: strMatch.index });
+  }
+
+  // Build the result — flatten each series' instances into individual entries
+  // for backward compatibility with the download loop
+  const series: ParsedStudyInfo['series'] = [];
+  let seriesIdx = 0;
+  for (let si = 0; si < candidateSeriesUIDs.length; si++) {
+    const seriesUID = candidateSeriesUIDs[si];
+    const instances = seriesInstances.get(seriesUID)!;
+    const seriesPos = firstPosition.get(seriesUID) ?? 0;
+    // Search for descriptions between this series and the next one
+    const nextSeriesPos = si + 1 < candidateSeriesUIDs.length
+      ? (firstPosition.get(candidateSeriesUIDs[si + 1]) ?? text.length)
+      : text.length;
+
+    // Find series description: look for readable strings between this series and the next
+    let bestDesc = `Series ${++seriesIdx}`;
+    let bestScore = 0;
+    for (const rs of readableStrings) {
+      if (rs.pos < seriesPos || rs.pos > nextSeriesPos) continue;
+      // Prefer strings that look like series names (short, no UIDs, not too generic)
+      const s = rs.text;
+      if (s.length < 3 || s.length > 50) continue;
+      // Score: prefer shorter, more descriptive strings
+      let score = 10;
+      if (/^[A-Z]/.test(s)) score += 5; // Starts with uppercase
+      if (s.includes(' ')) score += 3; // Has spaces (human-readable)
+      if (/\d+x\d+|\d+mm/i.test(s)) score += 3; // Resolution-like
+      if (s.length < 20) score += 2;
+      if (score > bestScore) {
+        bestScore = score;
+        bestDesc = s;
+      }
+    }
+
+    if (instances.size === 0) {
+      // Series with no detected instances — add a self-referencing entry
+      series.push({ seriesUID, instanceUID: seriesUID, seriesDescription: bestDesc });
+    } else {
+      // Add an entry for EACH instance UID — the download loop iterates these
+      const sortedInstances = [...instances].sort((a, b) => {
+        const aNum = parseInt(a.split('.').pop()!) || 0;
+        const bNum = parseInt(b.split('.').pop()!) || 0;
+        return aNum - bNum;
+      });
+
+      for (const instanceUID of sortedInstances) {
+        series.push({ seriesUID, instanceUID, seriesDescription: bestDesc });
+      }
+    }
+
+    console.log(`      [AMF-PARSE] ${bestDesc}: ${instances.size} instances`);
+  }
+
+  console.log(`      [AMF-PARSE] Total: ${series.length} (seriesUID, instanceUID) entries across ${candidateSeriesUIDs.length} series`);
+
+  return { studyUID, series };
+}
+
+/**
+ * Legacy pair-based parser for simple studies (X-rays with few series).
+ * Used as fallback when the frequency-based series detection doesn't find
+ * enough high-frequency UIDs.
+ */
+function parseStudySeriesFromAmfLegacy(amfBuf: Buffer): ParsedStudyInfo | null {
+  const text = amfBuf.toString('latin1');
+
   const uidPattern = /1\.\d+\.\d+\.\d+(?:\.\d+){2,}/g;
   const allUIDs: string[] = [];
   const uidPositions: Map<string, number> = new Map();
   let match;
   while ((match = uidPattern.exec(text)) !== null) {
-    if (!uidPositions.has(match[0])) {
+    if (!uidPositions.has(match[0]) && !match[0].startsWith('1.2.840.10008.')) {
       allUIDs.push(match[0]);
       uidPositions.set(match[0], match.index);
     }
@@ -532,84 +724,42 @@ function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null {
 
   if (allUIDs.length === 0) return null;
 
-  // Filter out DICOM standard SOP Class UIDs (1.2.840.10008.*).
-  // These are standard identifiers (e.g. 1.2.840.10008.5.1.4.1.1.1.2 = Digital X-Ray SOP Class),
-  // not study-specific UIDs. They appear in the AMF response as metadata but should not be
-  // confused with Study/Series/Instance UIDs.
-  const filteredUIDs = allUIDs.filter(uid => !uid.startsWith('1.2.840.10008.'));
-
-  if (filteredUIDs.length === 0) {
-    console.log(`      [AMF-PARSE] No UIDs remaining after filtering (${allUIDs.length} total, all were SOP Class UIDs)`);
-    return null;
-  }
-
-  // Log filtered UIDs for debugging
-  const removedUIDs = allUIDs.filter(uid => uid.startsWith('1.2.840.10008.'));
-  if (removedUIDs.length > 0) {
-    console.log(`      [AMF-PARSE] Filtered out ${removedUIDs.length} SOP Class UIDs: ${removedUIDs.slice(0, 3).join(', ')}${removedUIDs.length > 3 ? '...' : ''}`);
-  }
-  console.log(`      [AMF-PARSE] ${filteredUIDs.length} study-related UIDs: ${filteredUIDs.slice(0, 5).map(u => u.substring(0, 40)).join(', ')}${filteredUIDs.length > 5 ? '...' : ''}`);
-
-  // Study UID: prefer Epic OID root (1.2.840.114350.*), then any 1.2.840.*, then first UID
-  const studyUID = filteredUIDs.find(uid => uid.startsWith('1.2.840.114350.'))
-    || filteredUIDs.find(uid => uid.startsWith('1.2.840.'))
-    || filteredUIDs[0];
-  const otherUIDs = filteredUIDs.filter(uid => uid !== studyUID);
+  // Study UID: the first UID in the response (AMF always starts with study-level data)
+  const studyUID = allUIDs[0];
+  const otherUIDs = allUIDs.filter(uid => uid !== studyUID);
 
   if (otherUIDs.length === 0) return { studyUID, series: [] };
 
-  // Try to extract series descriptions from the binary.
-  // Descriptions are AMF3 strings near the UIDs.
-  // Look for readable ASCII strings (3-100 chars) that aren't UIDs.
   const descriptionPattern = /[\x20-\x7e]{3,100}/g;
   const readableStrings: Array<{ text: string; pos: number }> = [];
   let strMatch;
   while ((strMatch = descriptionPattern.exec(text)) !== null) {
     const s = strMatch[0].trim();
-    // Skip UIDs, URLs, class names, and common AMF strings
     if (/^\d+\.\d+\.\d+/.test(s)) continue;
-    if (s.includes('com.clientoutlook')) continue;
-    if (s.includes('flex.messaging')) continue;
-    if (s.includes('AmfServices')) continue;
-    if (s.includes('HTTPSimpleLoader')) continue;
-    if (s.includes('getStudyList')) continue;
-    if (s.includes('StudyService')) continue;
+    if (s.includes('com.clientoutlook') || s.includes('flex.messaging')) continue;
+    if (s.includes('AmfServices') || s.includes('HTTPSimpleLoader')) continue;
+    if (s.includes('getStudyList') || s.includes('StudyService')) continue;
     if (/^[\d.]+$/.test(s)) continue;
     readableStrings.push({ text: s, pos: strMatch.index });
   }
 
-  // Group UIDs into series (seriesUID, instanceUID) pairs
   const series: ParsedStudyInfo['series'] = [];
   for (let i = 0; i + 1 < otherUIDs.length; i += 2) {
     const seriesUID = otherUIDs[i];
     const instanceUID = otherUIDs[i + 1];
     const seriesPos = uidPositions.get(seriesUID) ?? 0;
 
-    // Find the nearest description string before or after the series UID
     let bestDesc = `Series ${Math.floor(i / 2) + 1}`;
     let bestDist = Infinity;
     for (const rs of readableStrings) {
       const dist = Math.abs(rs.pos - seriesPos);
-      if (dist < bestDist && dist < 500) {
-        // Prefer strings that look like descriptions (uppercase, multiple words)
-        if (rs.text.length >= 3 && rs.text.length <= 80) {
-          bestDist = dist;
-          bestDesc = rs.text;
-        }
+      if (dist < bestDist && dist < 500 && rs.text.length >= 3 && rs.text.length <= 80) {
+        bestDist = dist;
+        bestDesc = rs.text;
       }
     }
 
     series.push({ seriesUID, instanceUID, seriesDescription: bestDesc });
-  }
-
-  // Handle odd number of UIDs (last one is unpaired)
-  if (otherUIDs.length % 2 === 1) {
-    const lastUID = otherUIDs[otherUIDs.length - 1];
-    series.push({
-      seriesUID: lastUID,
-      instanceUID: lastUID, // use same UID as both series and instance
-      seriesDescription: `Series ${series.length + 1}`,
-    });
   }
 
   return { studyUID, series };
@@ -618,10 +768,63 @@ function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null {
 // ─── Session Initialization ───
 
 /**
+ * Extract the real serviceInstance from an AMF response buffer.
+ * The server may return a different serviceInstance than the one we sent
+ * (e.g., "MyChart" → "UCSFVNAEDGEBundle" for CT scans). The browser uses
+ * this real value for a second AMF init call and all CustomImageServlet requests.
+ */
+export function extractServiceInstanceFromAmf(amfBuf: Buffer, originalServiceInstance: string): string | null {
+  const text = amfBuf.toString('latin1');
+
+  // Strategy 1: Look for a serviceInstance value near the "serviceInstance" or
+  // "ServiceInstance" field name in the binary. The value typically follows
+  // within 50 bytes of the field name.
+  const fieldPositions: number[] = [];
+  let idx = 0;
+  while ((idx = text.indexOf('erviceInstance', idx)) !== -1) {
+    fieldPositions.push(idx);
+    idx++;
+  }
+
+  for (const pos of fieldPositions) {
+    // Look at readable strings within 50 bytes after the field name
+    const region = text.substring(pos, pos + 100);
+    // Match capitalized identifiers that look like serviceInstance values
+    // (not field names like "ServiceInstance", "ServiceInstanceParameter")
+    const valuePattern = /([A-Z][A-Za-z0-9]{5,}(?:Bundle|Strategy|strategy))/g;
+    let match;
+    while ((match = valuePattern.exec(region)) !== null) {
+      const val = match[1];
+      if (val !== originalServiceInstance && !val.startsWith('ServiceInstance')) {
+        return val;
+      }
+    }
+  }
+
+  // Strategy 2: Look for known serviceInstance patterns anywhere in the binary.
+  // These are institution-specific identifiers that end in "Bundle" or contain "strategy".
+  const globalPattern = /([A-Z][A-Za-z0-9]{4,}Bundle|[A-Z][A-Za-z0-9]{4,}[Ss]trategy)/g;
+  let match;
+  while ((match = globalPattern.exec(text)) !== null) {
+    const val = match[1];
+    if (val !== originalServiceInstance) {
+      return val;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Initialize an eUnity session by calling AmfServicesServlet with getStudyListMeta.
  * This is required before CustomImageServlet will serve images (otherwise 403).
  *
- * Returns the AMF response buffer on success, null on failure.
+ * Some studies (e.g., CT scans) use a different serviceInstance than the one in the
+ * viewer URL. The browser handles this by making two AMF calls:
+ * 1. First with the viewer's serviceInstance (e.g., "MyChart")
+ * 2. Second with the real serviceInstance from the response (e.g., "UCSFVNAEDGEBundle")
+ *
+ * Returns { amfBuf, effectiveServiceInstance } on success.
  */
 async function initializeAmfSession(
   cookieJar: tough.CookieJar,
@@ -629,7 +832,7 @@ async function initializeAmfSession(
   accession: string,
   serviceInstance: string,
   patientId: string,
-): Promise<Buffer | null> {
+): Promise<{ amfBuf: Buffer; effectiveServiceInstance: string } | null> {
   const amfReq = buildGetStudyListMetaRequest(accession, serviceInstance, patientId);
 
   const res = await fetchWithCookies(cookieJar, `${baseUrl}/e/AmfServicesServlet`, {
@@ -651,22 +854,61 @@ async function initializeAmfSession(
 
   if (parsed && parsed.code !== 0) {
     console.log(`      [AMF] Error code=${parsed.code}: ${parsed.response ?? '(null)'}`);
-    // Even on error, the session may still be partially initialized
   }
 
   if (parsed && parsed.code === 0) {
     console.log(`      [AMF] Session initialized successfully (${amfBuf.length} bytes)`);
   }
 
-  return amfBuf;
+  // Check if the response contains a different serviceInstance
+  const realSI = extractServiceInstanceFromAmf(amfBuf, serviceInstance);
+  let effectiveServiceInstance = serviceInstance;
+
+  if (realSI && realSI !== serviceInstance) {
+    console.log(`      [AMF] Server returned different serviceInstance: ${realSI} (was ${serviceInstance})`);
+    console.log(`      [AMF] Making second AMF call with real serviceInstance...`);
+
+    // Make a second AMF call with the real serviceInstance (like the browser does)
+    const amfReq2 = buildGetStudyListMetaRequest(accession, realSI, patientId);
+    const res2 = await fetchWithCookies(cookieJar, `${baseUrl}/e/AmfServicesServlet`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'User-Agent': UA,
+      },
+      body: amfReq2,
+    });
+
+    if (res2.ok) {
+      const amfBuf2 = Buffer.from(await res2.arrayBuffer());
+      const parsed2 = parseAmfResponse(amfBuf2);
+      if (parsed2?.code === 0) {
+        console.log(`      [AMF] Second session initialized successfully (${amfBuf2.length} bytes)`);
+        // Return the FIRST AMF response (has full study/series data) but with the real serviceInstance
+        return { amfBuf, effectiveServiceInstance: realSI };
+      }
+    }
+    // Even if second call fails, use the real serviceInstance
+    effectiveServiceInstance = realSI;
+  }
+
+  return { amfBuf, effectiveServiceInstance };
 }
 
 // ─── Image Download ───
+
+export interface SeriesInfo {
+  seriesUID: string;
+  description: string;
+  instanceCount: number;
+}
 
 export interface DirectDownloadResult {
   studyName: string;
   images: DirectDownloadedImage[];
   errors: string[];
+  /** Parsed series info from AMF response (available even with maxImages: 0) */
+  seriesList?: SeriesInfo[];
 }
 
 export interface DirectDownloadedImage {
@@ -734,7 +976,7 @@ async function downloadImage(
       break;
     case 'CLOWRAPPER':
       requestType = 'CLOWRAPPER';
-      contentType = 'image/CLWAVE;image/CLHAAR';
+      contentType = 'image/CLWAVE;image/CLHAAR;image/CLJPEG';
       haveImageData = 'partialnops';
       break;
   }
@@ -926,7 +1168,7 @@ export async function downloadImagingDirect(
 
     // Step 2: Initialize AMF session
     console.log('      Initializing AMF session...');
-    const amfResponse = await initializeAmfSession(
+    const amfResult = await initializeAmfSession(
       session.cookieJar,
       baseUrl,
       studyParams.accession,
@@ -934,9 +1176,14 @@ export async function downloadImagingDirect(
       studyParams.patientId,
     );
 
-    if (!amfResponse) {
+    if (!amfResult) {
       result.errors.push('AMF session initialization failed');
       return result;
+    }
+
+    const { amfBuf: amfResponse, effectiveServiceInstance } = amfResult;
+    if (effectiveServiceInstance !== studyParams.serviceInstance) {
+      studyParams.serviceInstance = effectiveServiceInstance;
     }
 
     // Parse UIDs from AMF response if available
@@ -1081,7 +1328,7 @@ export async function downloadImagingStudyDirect(
 
     // Step 4: Initialize AMF session (required before CustomImageServlet will serve images)
     console.log('      Initializing AMF session...');
-    const amfResponse = await initializeAmfSession(
+    const amfResult = await initializeAmfSession(
       session.cookieJar,
       baseUrl,
       studyParams.accession,
@@ -1089,9 +1336,15 @@ export async function downloadImagingStudyDirect(
       studyParams.patientId,
     );
 
-    if (!amfResponse) {
+    if (!amfResult) {
       result.errors.push('AMF session initialization failed');
       return result;
+    }
+
+    const { amfBuf: amfResponse, effectiveServiceInstance } = amfResult;
+    if (effectiveServiceInstance !== studyParams.serviceInstance) {
+      console.log(`      Using effective serviceInstance: ${effectiveServiceInstance}`);
+      studyParams.serviceInstance = effectiveServiceInstance;
     }
 
     // Step 5: Parse series info from AMF response
@@ -1101,6 +1354,22 @@ export async function downloadImagingStudyDirect(
       return result;
     }
     console.log(`      Found ${studyInfo.series.length} series, studyUID: ${studyInfo.studyUID.substring(0, 30)}...`);
+
+    // Build series list summary (available even with maxImages: 0)
+    const seriesMap = new Map<string, { description: string; count: number }>();
+    for (const s of studyInfo.series) {
+      const existing = seriesMap.get(s.seriesUID);
+      if (existing) {
+        existing.count++;
+      } else {
+        seriesMap.set(s.seriesUID, { description: s.seriesDescription, count: 1 });
+      }
+    }
+    result.seriesList = [...seriesMap.entries()].map(([seriesUID, { description, count }]) => ({
+      seriesUID,
+      description,
+      instanceCount: count,
+    }));
 
     // Step 6: Download images for each series
     const maxImages = options?.maxImages ?? Infinity;

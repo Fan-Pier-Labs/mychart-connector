@@ -129,6 +129,12 @@ export type ActivityFeedItemType = {
   isRead: boolean;
 };
 
+export type ImagingSeriesInfo = {
+  studyDescription: string;
+  modality: string;
+  numberOfImages: number;
+};
+
 export type ImagingResultType = {
   orderName: string;
   narrative: string;
@@ -138,6 +144,7 @@ export type ImagingResultType = {
   resultDate: string;
   orderProvider: string;
   fdiContext?: { fdi: string; ord: string } | null;
+  series?: ImagingSeriesInfo[];
 };
 
 export type UpcomingOrderType = {

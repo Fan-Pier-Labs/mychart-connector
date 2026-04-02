@@ -1485,11 +1485,11 @@ async function main() {
           }
 
           // Download images and convert to JPG if FDI context is available
-          // Skip MRI/CT studies for now — only X-ray CLO→JPG conversion is supported
+          // MRI uses a different viewer protocol we don't support yet
           const nameLower = result.orderName.toLowerCase();
-          const isUnsupportedModality = nameLower.includes('mri') || nameLower.includes('ct ') || nameLower.includes('ct,');
+          const isUnsupportedModality = nameLower.includes('mri');
           if (isUnsupportedModality && result.fdiContext) {
-            console.log(`        Image viewer: available (skipping download — ${nameLower.includes('mri') ? 'MRI' : 'CT'} not yet supported)`);
+            console.log(`        Image viewer: available (skipping download — MRI not yet supported)`);
           }
           if (result.fdiContext && !isUnsupportedModality) {
             console.log(`        Image viewer: available (has FDI context)`);
