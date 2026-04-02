@@ -46,6 +46,9 @@ import { sessionStore } from '../scrapers/myChart/sessionStore';
 import { generateTotpCode } from '../scrapers/myChart/totp';
 import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
+import { myChartPasskeyLogin } from '../scrapers/myChart/login';
+import { setupPasskey } from '../scrapers/myChart/setupPasskey';
+import { savePasskeyCredential, loadPasskeyCredential } from './passkeyStore';
 import { sendTelemetryEvent } from '../shared/telemetry';
 import { checkForUpdate } from '../shared/updateCheck';
 import { isBlockedInstance } from '../shared/blockedInstances';
@@ -104,9 +107,11 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--set-up-totp') parsed.setupTotp = true;
     else if (args[i] === '--use-saved-totp') parsed.useSavedTotp = true;
     else if (args[i] === '--disable-totp') parsed.disableTotp = true;
+    else if (args[i] === '--set-up-passkey') parsed.setupPasskey = true;
+    else if (args[i] === '--use-passkey') parsed.usePasskey = true;
     else if (args[i] === '--local') parsed.local = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; local?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; local?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -280,6 +285,32 @@ async function login(creds: { hostname: string; username: string; password: stri
   }
 
   try {
+    // Try passkey login first if --use-passkey or if a saved passkey exists
+    const savedPasskey = await loadPasskeyCredential(creds.hostname);
+    if (cliArgs.usePasskey || savedPasskey) {
+      if (!savedPasskey) {
+        console.log(`  No saved passkey found for ${creds.hostname}. Run with --set-up-passkey first.`);
+        if (cliArgs.usePasskey) return null; // Only fail if explicitly requested
+      } else {
+        console.log(`  Attempting passkey login for ${creds.hostname}...`);
+        const passkeyResult = await myChartPasskeyLogin({
+          hostname: creds.hostname,
+          credential: savedPasskey,
+          protocol: cliArgs.local ? 'http' : undefined,
+        });
+
+        if (passkeyResult.state === 'logged_in') {
+          console.log('  Passkey login successful!');
+          // Save updated credential (incremented sign counter)
+          await savePasskeyCredential(creds.hostname, savedPasskey);
+          await saveCachedSession(creds.hostname, passkeyResult.mychartRequest);
+          return passkeyResult.mychartRequest;
+        }
+
+        console.log(`  Passkey login failed (${passkeyResult.state}). Falling back to password login.`);
+      }
+    }
+
     // Check if we should use TOTP for 2FA
     const useTotpSecret = cliArgs.useSavedTotp ? await loadTotpSecret(creds.hostname) : null;
     if (cliArgs.useSavedTotp && !useTotpSecret) {
@@ -1335,6 +1366,22 @@ async function main() {
         console.log(`  Done! TOTP has been disabled.`);
       } else {
         console.log('  TOTP disable failed. See errors above.');
+      }
+    }
+    closeRL();
+    return;
+  }
+
+  // Handle --set-up-passkey: register a passkey on the MyChart account
+  if (cliArgs.setupPasskey) {
+    for (const session of sessions) {
+      header(`Setting up passkey for ${session.hostname}`);
+      const credential = await setupPasskey(session.request);
+      if (credential) {
+        await savePasskeyCredential(session.hostname, credential);
+        console.log(`  Done! You can now use --use-passkey to login without a password.`);
+      } else {
+        console.log('  Passkey setup failed. See errors above.');
       }
     }
     closeRL();

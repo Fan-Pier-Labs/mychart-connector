@@ -25,6 +25,7 @@ anthemlogin.json
 .claude/worktrees
 .cookie-cache
 .totp-secrets
+.passkey-credentials
 imaging-downloads/*
 !imaging-downloads/*.md
 imaging-output/

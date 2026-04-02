@@ -62,9 +62,12 @@ async function resolveRequest(
   instanceHostname?: string
 ): Promise<{ mychartRequest: MyChartRequest; instance: MyChartInstance } | { error: string }> {
   console.log(`[mcp] resolveRequest: userId=${userId}, instanceHostname=${instanceHostname || 'auto'}`);
+  // Dump entire session store to see what's actually in it
+  const allStoreEntries = Array.from(sessionStore.all().entries());
+  console.log(`[mcp] resolveRequest: store has ${allStoreEntries.length} entries: ${allStoreEntries.map(([k, e]) => `${k}=${e.status}`).join(', ') || 'none'}`);
   const allInstances = await getMyChartInstances(userId);
   const instances = allInstances.filter(i => i.enabled);
-  console.log(`[mcp] resolveRequest: found ${allInstances.length} instance(s), ${instances.length} enabled: ${instances.map(i => i.hostname).join(', ')}`);
+  console.log(`[mcp] resolveRequest: found ${allInstances.length} instance(s), ${instances.length} enabled: ${instances.map(i => `${i.hostname}(id=${i.id})`).join(', ')}`);
   if (instances.length === 0) {
     return { error: allInstances.length > 0
       ? 'All MyChart accounts are disabled. Enable one at the web app.'
@@ -89,17 +92,26 @@ async function resolveRequest(
   let connected = getConnected();
   console.log(`[mcp] resolveRequest: ${connected.length} connected instance(s)`);
 
-  // If none connected, try auto-connecting instances with TOTP secrets
+  // If a 2FA flow is in progress, don't auto-connect (which would wipe the pending session).
+  // The user must call complete_2fa first.
   if (connected.length === 0) {
-    const totpInstances = instances.filter(i => i.totpSecret);
-    if (totpInstances.length === 0) {
-      console.log(`[mcp] resolveRequest: no TOTP instances available for auto-connect`);
-      return { error: 'No MyChart accounts are connected. Use the connect_instance tool or log in at the web app.' };
+    const pending2fa = instances.find(inst => {
+      const entry = sessionStore.getEntry(`${userId}:${inst.id}`);
+      return entry?.status === 'need_2fa';
+    });
+    if (pending2fa) {
+      console.log(`[mcp] resolveRequest: ${pending2fa.hostname} has pending 2FA — skipping auto-connect`);
+      return { error: `MyChart is waiting for 2FA on ${pending2fa.hostname}. Use the complete_2fa tool to enter your code.` };
     }
+  }
 
-    console.log(`[mcp] resolveRequest: auto-connecting ${totpInstances.length} TOTP instance(s): ${totpInstances.map(i => i.hostname).join(', ')}`);
+  // If none connected, try auto-connecting all instances.
+  // TOTP instances can be fully auto-completed; non-TOTP instances may succeed if the
+  // site doesn't require 2FA, or will return need_2fa prompting the user to complete it.
+  if (connected.length === 0) {
+    console.log(`[mcp] resolveRequest: auto-connecting ${instances.length} instance(s): ${instances.map(i => i.hostname).join(', ')}`);
     const autoConnectResults: { hostname: string; result: string }[] = [];
-    for (const inst of totpInstances) {
+    for (const inst of instances) {
       const result = await autoConnectInstance(userId, inst);
       autoConnectResults.push({ hostname: inst.hostname, result: result.state });
       console.log(`[mcp] resolveRequest: auto-connect ${inst.hostname} => ${result.state}`);
@@ -108,6 +120,10 @@ async function resolveRequest(
     connected = getConnected();
     if (connected.length === 0) {
       const details = autoConnectResults.map(r => `${r.hostname}=${r.result}`).join(', ');
+      const needs2fa = autoConnectResults.some(r => r.result === 'need_2fa');
+      if (needs2fa) {
+        return { error: `MyChart requires 2FA. Use the complete_2fa tool to enter your code, or log in at the web app. (${details})` };
+      }
       return { error: `Auto-connect failed for all instances (${details}). Try using connect_instance or log in at the web app.` };
     }
   }
@@ -296,7 +312,10 @@ export function createMcpServer(userId: string): McpServer {
         }
 
         const sessionKey = `${userId}:${inst.id}`;
+        console.log(`[mcp] complete_2fa: sessionKey=${sessionKey}`);
         const entry = sessionStore.getEntry(sessionKey);
+        const storeKeys = Array.from(sessionStore.all().entries()).map(([k, e]) => `${k}=${e.status}`).join(', ');
+        console.log(`[mcp] complete_2fa: store state BEFORE: [${storeKeys || 'empty'}]`);
         if (!entry) {
           return errorResult('No pending 2FA session for this instance. Try connect_instance first.');
         }
@@ -308,6 +327,8 @@ export function createMcpServer(userId: string): McpServer {
         if (result.state === 'logged_in') {
           const { setSession } = await import('../sessions');
           setSession(sessionKey, result.mychartRequest, { hostname: inst.hostname });
+          const storeKeysAfter = Array.from(sessionStore.all().entries()).map(([k, e]) => `${k}=${e.status}`).join(', ');
+          console.log(`[mcp] complete_2fa: store state AFTER setSession: [${storeKeysAfter}]`);
           return jsonResult({ status: 'logged_in', message: '2FA completed successfully' });
         }
         return errorResult(`2FA failed: ${result.state}`);
