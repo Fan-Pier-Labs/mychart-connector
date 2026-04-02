@@ -46,3 +46,4 @@ scrapers/myChart/clo-to-jpg-converter/input_study_one/amf_metadata.bin
 
 # Downloaded MyChart logos (large, stored in S3)
 scrapers/list-all-mycharts/logos/
+.next/

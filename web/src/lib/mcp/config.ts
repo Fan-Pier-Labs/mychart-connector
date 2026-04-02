@@ -1,4 +1,5 @@
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { RDS_CA_BUNDLE } from '../rds-ca-bundle';
 
 const RDS_PORT = 5432;
 const RDS_CONNECTION_INFO_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:RDS_CONNECTION_INFO-vSoq60';
@@ -122,17 +123,21 @@ export async function getDatabaseUrl(): Promise<string> {
   return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${RDS_PORT}/${database}`;
 }
 
+function getRdsCaBundle(): string {
+  return RDS_CA_BUNDLE;
+}
+
 /**
  * Returns pool connection options with appropriate SSL config.
- * SSL is enabled by default in env-var mode (Railway / self-hosted).
- * Set DB_SSL=false to disable SSL (e.g. local dev with a plain Postgres container).
- * AWS RDS always uses SSL with { rejectUnauthorized: false } (self-signed cert).
+ * - AWS RDS: SSL with full certificate verification using the committed CA bundle.
+ * - Railway / self-hosted: SSL with rejectUnauthorized: false (self-signed certs).
+ * - Set DB_SSL=false to disable SSL entirely (e.g. local dev with a plain Postgres container).
  */
-export async function getPoolOptions(): Promise<{ connectionString: string; ssl: false | { rejectUnauthorized: false } }> {
+export async function getPoolOptions(): Promise<{ connectionString: string; ssl: false | { rejectUnauthorized: boolean; ca?: string } }> {
   const connectionString = await getDatabaseUrl();
   if (!isEnvVarMode()) {
-    // AWS RDS: always SSL, accept self-signed cert
-    return { connectionString, ssl: { rejectUnauthorized: false } };
+    // AWS RDS: full cert verification against the RDS CA bundle
+    return { connectionString, ssl: { rejectUnauthorized: true, ca: getRdsCaBundle() } };
   }
   const sslDisabled = process.env.DB_SSL === 'false';
   return {
