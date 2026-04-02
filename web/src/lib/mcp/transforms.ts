@@ -75,6 +75,12 @@ export function trimLabResults(raw: LabTestResultWithHistory[]): TrimmedLabResul
 // Billing
 // ---------------------------------------------------------------------------
 
+export interface TrimmedBillingProcedure {
+  description: string;
+  amount: string;
+  selfAmountDue: string;
+}
+
 export interface TrimmedBillingVisit {
   date: string;
   description: string | null;
@@ -84,6 +90,7 @@ export interface TrimmedBillingVisit {
   insurancePaid: string | null;
   selfAmountDue: string | null;
   status: string;
+  procedures?: TrimmedBillingProcedure[];
   coverageSummary?: {
     name: string;
     billed: string;
@@ -111,6 +118,7 @@ export interface TrimmedBillingAccount {
     date: string;
     description: string;
     amount: string;
+    isExplanationOfBenefits: boolean;
   }[];
 }
 
@@ -157,6 +165,15 @@ export function trimBilling(raw: BillingAccount[]): TrimmedBillingAccount[] {
         insurancePaid: v.InsurancePaymentAmount,
         selfAmountDue: v.SelfAmountDue,
         status: billingStatusLabel(v.PatFriendlyAccountStatus),
+        ...(v.ProcedureList && v.ProcedureList.length > 0
+          ? {
+              procedures: v.ProcedureList.map(p => ({
+                description: p.Description.replace(/<[^>]+>/g, '').trim(),
+                amount: p.Amount,
+                selfAmountDue: p.SelfAmountDue,
+              })),
+            }
+          : {}),
         ...(v.CoverageInfoList && v.CoverageInfoList.length > 0
           ? {
               coverageSummary: v.CoverageInfoList.map(c => ({
@@ -183,6 +200,7 @@ export function trimBilling(raw: BillingAccount[]): TrimmedBillingAccount[] {
         date: s.FormattedDateDisplay ?? s.DateDisplay,
         description: s.Description,
         amount: s.StatementAmountDisplay,
+        isExplanationOfBenefits: s.IsEB,
       })),
     };
   });
