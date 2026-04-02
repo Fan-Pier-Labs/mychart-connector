@@ -305,6 +305,10 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   const secondaryAuthPage = await res.text()
   const responseUrl = res.url || '';
 
+  console.log(`[login] DoLogin response: status=${res.status} url=${responseUrl}`);
+  console.log(`[login] Page checks: has_secondaryvalidationcontroller=${secondaryAuthPage.includes('secondaryvalidationcontroller')} has_md_home_index=${secondaryAuthPage.toLowerCase().includes('md_home_index')} has_termsconditions=${responseUrl.toLowerCase().includes('termsconditions')}`);
+  console.log(`[login] Page snippet (first 300 chars):`, secondaryAuthPage.substring(0, 300));
+
   // If the user is required to set up 2fa but hasn't set up 2fa yet, there may be a message stating that they have to set up 2fa.
 
   // Check for login failure first (can appear in URL or body)
@@ -335,6 +339,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
     // Detect which 2FA delivery methods are available on the page
     const deliveryMethods = parse2faDeliveryMethods(secondaryAuthPage);
     console.log('2FA delivery methods:', JSON.stringify(deliveryMethods));
+    console.log('[login] 2FA page body (first 2000 chars):', secondaryAuthPage.substring(0, 2000));
 
     let twoFaDelivery: TwoFaDeliveryInfo | undefined;
 
@@ -343,37 +348,77 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
       // I don't think we need to do this, but just in case
       await mychartRequest.makeRequest({path: '/Authentication/SecondaryValidation/GetSMSConsentStrings?noCache=' + Math.random()})
 
-      // Prefer email; fall back to SMS/phone if email isn't available
-      const useEmail = deliveryMethods.hasEmail || (!deliveryMethods.hasEmail && !deliveryMethods.hasSms);
+      // Determine delivery method:
+      // - Both detected → use email (deliveryMethodEmail=true)
+      // - Only one detected → use that one
+      // - Neither detected (JS-rendered page) → try all three param formats
+      //
+      // MyChart instances use different SendCode parameter names:
+      //   - deliveryMethodEmail=true  (send via email)
+      //   - deliveryMethodEmail=false (send via SMS on older instances)
+      //   - deliveryMethodSMS=true    (send via SMS on newer instances like bilh.org)
+      let sentMethod: 'email' | 'sms' | null = null;
 
-      const sendCodeResp = await mychartRequest.makeRequest({
-        path: "/Authentication/SecondaryValidation/SendCode?noCache=" + Math.random(),
-        "headers": {
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          '__RequestVerificationToken': requestVerificationToken,
-        },
-        "body": `deliveryMethodEmail=${useEmail}&resendCode=false&workflow=1`,
-        "method": "POST",
-      });
+      const sendCodeHeaders = {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        '__RequestVerificationToken': requestVerificationToken,
+      };
 
-      // Try to extract masked contact info from the SendCode response
-      const sendCodeBody = await sendCodeResp.text();
-      let contact: string | undefined;
-      if (useEmail) {
-        contact = deliveryMethods.emailContact;
-        // Also try parsing contact from the SendCode response
-        if (!contact) {
-          const emailMatch = sendCodeBody.match(/[\w*]+\*+[\w*]*@[\w.]+/);
-          if (emailMatch) contact = emailMatch[0];
+      async function trySendCode(body: string, label: string): Promise<boolean> {
+        const resp = await mychartRequest.makeRequest({
+          path: "/Authentication/SecondaryValidation/SendCode?noCache=" + Math.random(),
+          headers: sendCodeHeaders,
+          body,
+          method: "POST",
+        });
+        const respBody = await resp.text();
+        const success = respBody.includes('"Success":true');
+        console.log(`[login] SendCode ${label}: status=${resp.status} body=${respBody.substring(0, 200)} success=${success}`);
+        return success;
+      }
+
+      if (deliveryMethods.hasEmail && deliveryMethods.hasSms) {
+        console.log('[login] Both email and SMS detected, using email');
+        if (await trySendCode('deliveryMethodEmail=true&resendCode=false&workflow=1', 'email')) {
+          sentMethod = 'email';
         }
+      } else if (deliveryMethods.hasEmail) {
+        console.log('[login] Only email detected, using email');
+        if (await trySendCode('deliveryMethodEmail=true&resendCode=false&workflow=1', 'email')) {
+          sentMethod = 'email';
+        }
+      } else if (deliveryMethods.hasSms) {
+        console.log('[login] Only SMS detected, using SMS');
+        if (await trySendCode('deliveryMethodEmail=false&resendCode=false&workflow=1', 'sms-legacy')) {
+          sentMethod = 'sms';
+        }
+      }
+
+      // If nothing detected or detected method failed, try all formats
+      if (!sentMethod) {
+        console.log('[login] Trying all SendCode formats...');
+        // Try SMS formats first (more common for text-only instances)
+        if (await trySendCode('deliveryMethodSMS=true&resendCode=false&workflow=1', 'sms-new')) {
+          sentMethod = 'sms';
+        } else if (await trySendCode('deliveryMethodEmail=false&resendCode=false&workflow=1', 'sms-legacy')) {
+          sentMethod = 'sms';
+        } else if (await trySendCode('deliveryMethodEmail=true&resendCode=false&workflow=1', 'email')) {
+          sentMethod = 'email';
+        }
+      }
+
+      if (!sentMethod) {
+        console.log('[login] All SendCode attempts failed — could not send 2FA code');
+      }
+
+      // Try to extract masked contact info
+      let contact: string | undefined;
+      if (sentMethod === 'email') {
+        contact = deliveryMethods.emailContact;
         twoFaDelivery = { method: 'email', contact };
         console.log(`Asked for a 2FA code to be sent to email${contact ? ` (${contact})` : ''}, waiting for email to arrive`);
       } else {
         contact = deliveryMethods.smsContact;
-        if (!contact) {
-          const phoneMatch = sendCodeBody.match(/\*{2,}[\d*-]*\d{4}/);
-          if (phoneMatch) contact = phoneMatch[0];
-        }
         twoFaDelivery = { method: 'sms', contact };
         console.log(`Asked for a 2FA code to be sent via SMS${contact ? ` (${contact})` : ''}`);
       }
