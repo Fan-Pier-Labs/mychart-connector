@@ -177,6 +177,18 @@ describe('Authentication', () => {
     const res = await authedFetch('/api/mychart-instances');
     expect(res.status).toBe(200);
   });
+
+  it('social sign-in endpoint does not return 403 (origin trust check)', async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/sign-in/social`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: BASE_URL },
+      body: JSON.stringify({ provider: 'google', callbackURL: '/home' }),
+      redirect: 'manual',
+    });
+    // Should not be 403 (origin rejected). May be 302 (redirect to Google) or
+    // another status if Google OAuth isn't configured, but never 403.
+    expect(res.status).not.toBe(403);
+  });
 });
 
 // ===================================================================
