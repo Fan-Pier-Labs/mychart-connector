@@ -53,8 +53,10 @@ import { requestMedicationRefill } from '../../scrapers/myChart/medicationRefill
 let currentSession: MyChartRequest | null = null;
 let sessionExpired = false;
 let keepAliveCounter = 0;
+let keepAliveErrorCount = 0;
 let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 const KEEPALIVE_INTERVAL_MS = 30_000;
+const KEEPALIVE_MAX_ERRORS = 3;
 
 /** Clear the current session (used by reset command). */
 export function clearSession() {
@@ -64,6 +66,7 @@ export function clearSession() {
   }
   currentSession = null;
   sessionExpired = false;
+  keepAliveErrorCount = 0;
 }
 
 interface Credentials {
@@ -135,11 +138,22 @@ async function ensureSession(api: any): Promise<MyChartRequest> {
         ]);
         const aBody = await a.text();
         const bBody = await b.text();
-        if (aBody.trim() === '0' || bBody.trim() === '0' || (a.status !== 200 && b.status !== 200)) {
+        // Only trust /Home/KeepAlive — keepalive.asp returns "0" on many modern
+        // instances even when the session is alive (legacy/deprecated endpoint).
+        if (aBody.trim() === '0') {
           sessionExpired = true;
+        } else if (a.status !== 200 && b.status !== 200) {
+          // Neither endpoint returned 200 — likely a redirect to login
+          sessionExpired = true;
+        } else {
+          keepAliveErrorCount = 0; // success — reset error counter
         }
       } catch {
-        sessionExpired = true;
+        keepAliveErrorCount++;
+        if (keepAliveErrorCount >= KEEPALIVE_MAX_ERRORS) {
+          sessionExpired = true;
+          keepAliveErrorCount = 0;
+        }
       }
     }, KEEPALIVE_INTERVAL_MS);
   }
