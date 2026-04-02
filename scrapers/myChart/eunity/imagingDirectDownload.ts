@@ -424,7 +424,7 @@ export interface EunityStudyParams {
  * - Plain arg: <eunity-host>/e/viewer?CLOAccessKeyID=...&arg=accession%3D...
  * - Direct params: <eunity-host>/eUnity/viewer/?accession=...
  */
-function parseEunityStudyParams(viewerUrl: string, viewerBody?: string): EunityStudyParams | null {
+export function parseEunityStudyParams(viewerUrl: string, viewerBody?: string): EunityStudyParams | null {
   let accession = '';
   let serviceInstance = '';
   let patientId = '';
@@ -520,7 +520,7 @@ interface ParsedStudyInfo {
  * 5. Walk UIDs in position order, using series UIDs as group boundaries
  * 6. Each series entry includes ALL its instance UIDs for complete multi-slice support
  */
-function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null {
+export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null {
   const text = amfBuf.toString('latin1');
 
   // Find all DICOM UIDs with positions (including duplicates for frequency analysis)
@@ -757,7 +757,7 @@ function parseStudySeriesFromAmfLegacy(amfBuf: Buffer): ParsedStudyInfo | null {
  * (e.g., "MyChart" → "UCSFVNAEDGEBundle" for CT scans). The browser uses
  * this real value for a second AMF init call and all CustomImageServlet requests.
  */
-function extractServiceInstanceFromAmf(amfBuf: Buffer, originalServiceInstance: string): string | null {
+export function extractServiceInstanceFromAmf(amfBuf: Buffer, originalServiceInstance: string): string | null {
   const text = amfBuf.toString('latin1');
   // Look for serviceInstance values that differ from what we sent
   // Common patterns in AMF: the value appears as an AMF3 string near "serviceInstance" or "ServiceInstance"
