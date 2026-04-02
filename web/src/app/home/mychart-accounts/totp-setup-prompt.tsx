@@ -7,7 +7,7 @@ import {
 import type { useMyChartAccounts } from "./use-mychart-accounts";
 
 type Props = Pick<ReturnType<typeof useMyChartAccounts>,
-  "totpSetupLoading" | "totpWarning" | "handleTotpSetup" | "handleTotpSkip" | "handleTotpContinueAnyway" | "handleTotpRetry"
+  "totpSetupLoading" | "totpWarning" | "totpErrorMessage" | "handleTotpSetup" | "handleTotpSkip" | "handleTotpContinueAnyway" | "handleTotpRetry"
 >;
 
 export function TotpSetupPrompt(props: Props) {
@@ -35,6 +35,11 @@ export function TotpSetupPrompt(props: Props) {
             <CardTitle className="text-amber-700">2FA not configured</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {props.totpErrorMessage && (
+              <p className="text-sm text-red-600 font-medium">
+                {props.totpErrorMessage}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               Without automatic sign-in, your session will only last a few hours.
               Once it expires, you&apos;ll need to log in again with email verification.

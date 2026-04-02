@@ -75,6 +75,7 @@ export default function HomePage() {
       <TotpSetupPrompt
         totpSetupLoading={accounts.totpSetupLoading}
         totpWarning={accounts.totpWarning}
+        totpErrorMessage={accounts.totpErrorMessage}
         handleTotpSetup={accounts.handleTotpSetup}
         handleTotpSkip={accounts.handleTotpSkip}
         handleTotpContinueAnyway={accounts.handleTotpContinueAnyway}

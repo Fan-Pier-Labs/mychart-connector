@@ -25,6 +25,7 @@ export function useMyChartAccounts() {
   const [totpPromptInstanceId, setTotpPromptInstanceId] = useState("");
   const [totpSetupLoading, setTotpSetupLoading] = useState(false);
   const [totpWarning, setTotpWarning] = useState(false);
+  const [totpErrorMessage, setTotpErrorMessage] = useState("");
 
   // Connecting state
   const [connectingId, setConnectingId] = useState("");
@@ -188,14 +189,17 @@ export function useMyChartAccounts() {
       if (data.success) {
         setTotpPromptInstanceId("");
         setTotpWarning(false);
+        setTotpErrorMessage("");
         await ctx.refreshInstances();
       } else {
         setTotpSetupLoading(false);
         setTotpWarning(true);
+        setTotpErrorMessage(data.error || "");
       }
     } catch {
       setTotpSetupLoading(false);
       setTotpWarning(true);
+      setTotpErrorMessage("");
     } finally {
       setTotpSetupLoading(false);
     }
@@ -212,6 +216,7 @@ export function useMyChartAccounts() {
 
   function handleTotpRetry() {
     setTotpWarning(false);
+    setTotpErrorMessage("");
   }
 
   async function toggleInstance(id: string, enabled: boolean) {
@@ -275,6 +280,7 @@ export function useMyChartAccounts() {
     totpPromptInstanceId,
     totpSetupLoading,
     totpWarning,
+    totpErrorMessage,
     handleTotpSetup,
     handleTotpSkip,
     handleTotpContinueAnyway,

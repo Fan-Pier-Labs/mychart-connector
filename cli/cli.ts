@@ -397,12 +397,13 @@ async function login(creds: { hostname: string; username: string; password: stri
           const setupChoice = await ask('  Set up automatic sign-in? (y/n): ');
           if (setupChoice.trim().toLowerCase() === 'y') {
             console.log('  Setting up TOTP authenticator...');
-            const secret = await setupTotp(mychartRequest, creds.password);
-            if (secret) {
-              await saveTotpSecret(creds.hostname, secret);
+            const result = await setupTotp(mychartRequest, creds.password);
+            if (result.secret) {
+              await saveTotpSecret(creds.hostname, result.secret);
               console.log('  TOTP configured! Future logins will use --use-saved-totp automatically.');
             } else {
-              console.log('  TOTP setup failed. Your session is still active but will expire in a few hours.');
+              console.log(`  TOTP setup failed: ${result.error}`);
+              console.log('  Your session is still active but will expire in a few hours.');
               console.log('  Without TOTP, you\'ll need email 2FA again next time.');
             }
           } else {
@@ -1335,12 +1336,12 @@ async function main() {
         console.log('  Could not find credentials for this session.');
         continue;
       }
-      const secret = await setupTotp(session.request, creds.password);
-      if (secret) {
-        await saveTotpSecret(session.hostname, secret);
+      const result = await setupTotp(session.request, creds.password);
+      if (result.secret) {
+        await saveTotpSecret(session.hostname, result.secret);
         console.log(`  Done! You can now use --use-saved-totp to skip email 2FA.`);
       } else {
-        console.log('  TOTP setup failed. See errors above.');
+        console.log(`  TOTP setup failed: ${result.error}`);
       }
     }
     closeRL();

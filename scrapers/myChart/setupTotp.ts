@@ -2,6 +2,11 @@ import { MyChartRequest } from './myChartRequest';
 import { getRequestVerificationTokenFromBody } from './util';
 import { generateTotpCode } from './totp';
 
+export interface SetupTotpResult {
+  secret: string | null;
+  error?: string;
+}
+
 function logUnexpectedResponse(label: string, resp: Response) {
   console.log(`  ${label} unexpected status: ${resp.status}`);
   console.log(`  ${label} response headers:`, Object.fromEntries(resp.headers.entries()));
@@ -14,6 +19,7 @@ async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | nu
   const res = await mychartRequest.makeRequest({
     path: '/Home/CSRFToken?noCache=' + Math.random(),
   });
+  console.log('  CSRFToken response status:', res.status);
   const body = await res.text();
   // If we landed on the T&C page instead of getting a CSRF token, that's a problem
   if (body.toLowerCase().includes('termsconditions') || body.toLowerCase().includes('terms and conditions')) {
@@ -21,7 +27,14 @@ async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | nu
     return null;
   }
   const token = getRequestVerificationTokenFromBody(body);
+  if (!token) {
+    console.log('  Could not extract CSRF token from response body (length:', body.length, ')');
+  }
   return token || null;
+}
+
+function fail(error: string): SetupTotpResult {
+  return { secret: null, error };
 }
 
 /**
@@ -34,15 +47,15 @@ async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | nu
  * 4. POST /api/secondary-validation/VerifyCode — verify setup with generated code
  * 5. POST /api/secondary-validation/UpdateTwoFactorTotpOptInStatus — finalize opt-in
  *
- * Returns the TOTP secret if setup succeeds, or null if it fails.
+ * Returns the TOTP secret if setup succeeds, or null with an error message if it fails.
  */
-export async function setupTotp(mychartRequest: MyChartRequest, password: string): Promise<string | null> {
+export async function setupTotp(mychartRequest: MyChartRequest, password: string): Promise<SetupTotpResult> {
 
   // Get CSRF token for API requests
   const csrfToken = await getCSRFToken(mychartRequest);
   if (!csrfToken) {
     console.log('  Could not get CSRF token.');
-    return null;
+    return fail('Could not get CSRF token. The session may have expired.');
   }
 
   const apiHeaders: Record<string, string> = {
@@ -62,7 +75,10 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
     logUnexpectedResponse('GetTwoFactorInfo', twoFactorInfoResp);
     const body = await twoFactorInfoResp.text();
     console.log('  GetTwoFactorInfo unexpected response body:', body);
-    return null;
+    if (twoFactorInfoResp.status === 500) {
+      return fail('This MyChart instance does not support authenticator app setup. You can still use SMS/email 2FA codes.');
+    }
+    return fail(`Failed to check 2FA settings (HTTP ${twoFactorInfoResp.status}). The session may have expired.`);
   }
   const twoFactorInfo = await twoFactorInfoResp.json();
   console.log('  2FA info:', JSON.stringify(twoFactorInfo));
@@ -71,7 +87,7 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
   if (twoFactorInfo.IsTotpEnabled || twoFactorInfo.isTotpEnabled) {
     console.log('  TOTP authenticator app is already enabled on this account.');
     console.log('  To get the secret, you need to disable and re-enable TOTP in MyChart settings.');
-    return null;
+    return fail('TOTP is already enabled on this MyChart account. To re-configure, disable it in MyChart settings first.');
   }
 
   // Step 2: Verify password
@@ -86,13 +102,14 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
     logUnexpectedResponse('VerifyPasswordAndUpdateContact', verifyResp);
     const body = await verifyResp.text();
     console.log('  VerifyPasswordAndUpdateContact unexpected response body:', body);
-    return null;
+    return fail(`Password verification failed (HTTP ${verifyResp.status}).`);
   }
   const verifyResult = await verifyResp.json();
+  console.log('  VerifyPassword result:', JSON.stringify(verifyResult));
 
   if (verifyResult.IsPasswordValid === false || verifyResult.isPasswordValid === false) {
     console.log('  Password verification failed.');
-    return null;
+    return fail('Password verification failed. The saved password may be incorrect.');
   }
   console.log('  Password verified.');
 
@@ -108,16 +125,17 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
     logUnexpectedResponse('TotpQrCode', qrResp);
     const body = await qrResp.text();
     console.log('  TotpQrCode unexpected response body:', body);
-    return null;
+    return fail(`Failed to get TOTP QR code (HTTP ${qrResp.status}).`);
   }
   const qrResult = await qrResp.json();
+  console.log('  TotpQrCode response keys:', Object.keys(qrResult).join(', '));
 
   // The secret key may be in various fields depending on the MyChart version
   const secret = qrResult.encodedSecretKey || qrResult.EncodedSecretKey || qrResult.SecretKey || qrResult.secretKey || qrResult.Secret || qrResult.secret || qrResult.ManualEntryKey || qrResult.manualEntryKey;
 
   if (!secret) {
     console.log('  Could not extract TOTP secret from response:', JSON.stringify(qrResult));
-    return null;
+    return fail('Could not extract TOTP secret from server response.');
   }
 
   console.log('  Got TOTP secret (length:', secret.length, ')');
@@ -138,7 +156,7 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
 
   if (verifyTotpResp.status !== 200) {
     console.log('  TOTP code verification failed.');
-    return null;
+    return fail(`TOTP code verification failed (HTTP ${verifyTotpResp.status}).`);
   }
 
   // Step 5: Finalize the opt-in
@@ -151,8 +169,15 @@ export async function setupTotp(mychartRequest: MyChartRequest, password: string
   });
   console.log('  OptIn response status:', optInResp.status);
 
+  if (optInResp.status !== 200) {
+    logUnexpectedResponse('UpdateTwoFactorTotpOptInStatus', optInResp);
+    const body = await optInResp.text();
+    console.log('  UpdateTwoFactorTotpOptInStatus unexpected response body:', body);
+    return fail(`Failed to finalize TOTP opt-in (HTTP ${optInResp.status}).`);
+  }
+
   console.log('  TOTP setup complete! Authenticator app is now enabled.');
-  return secret;
+  return { secret };
 }
 
 /**
