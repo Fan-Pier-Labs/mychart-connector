@@ -43,19 +43,23 @@ export async function GET(req: NextRequest) {
       fdiContext,
       '',
       '',
-      { skipFileWrite: true, maxImages: 10 },
+      { skipFileWrite: true, maxImages: 50 },
     );
 
     if (downloadResult.errors.length > 0 && downloadResult.images.length === 0) {
       return NextResponse.json({ error: downloadResult.errors.join('; ') }, { status: 502 });
     }
 
-    // Find the largest image with pixel data (skip tiny scout/localizer images)
-    const imagesWithData = downloadResult.images.filter(img => img.pixelData);
-    if (imagesWithData.length === 0) {
+    // Find the largest image with pixel data, preferring real images over tiny scouts
+    const imagesWithData = downloadResult.images.filter(img => img.pixelData && img.pixelData.length > 10000);
+    // Fall back to any image if no large ones found
+    const candidates = imagesWithData.length > 0
+      ? imagesWithData
+      : downloadResult.images.filter(img => img.pixelData);
+    if (candidates.length === 0) {
       return NextResponse.json({ error: 'No image data available' }, { status: 404 });
     }
-    const image = imagesWithData.reduce((best, img) =>
+    const image = candidates.reduce((best, img) =>
       (img.pixelData!.length > (best.pixelData?.length ?? 0)) ? img : best
     );
 
