@@ -14,6 +14,10 @@ function logUnexpectedResponse(label: string, resp: Response) {
 
 /**
  * Get a CSRF token required for MyChart API endpoints.
+ * The /Home/CSRFToken endpoint may return:
+ *   - JSON: { "Token": "..." } or { "token": "..." }
+ *   - Plain string: just the token value
+ *   - HTML page with a hidden __RequestVerificationToken input (fallback)
  */
 async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | null> {
   const res = await mychartRequest.makeRequest({
@@ -26,6 +30,26 @@ async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | nu
     console.log('  CSRF token request landed on Terms & Conditions page');
     return null;
   }
+  // Try JSON format first: { "Token": "..." } or { "token": "..." }
+  const trimmed = body.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const token = parsed.Token ?? parsed.token ?? parsed.RequestVerificationToken ?? parsed.requestVerificationToken;
+      if (token) {
+        console.log('  Got CSRF token from JSON response');
+        return token;
+      }
+    } catch {
+      // not valid JSON, fall through
+    }
+  }
+  // Try plain string (the entire response body is the token)
+  if (trimmed && !trimmed.includes('<') && trimmed.length > 10) {
+    console.log('  Got CSRF token as plain string');
+    return trimmed;
+  }
+  // Fall back to parsing HTML for a hidden input
   const token = getRequestVerificationTokenFromBody(body);
   if (!token) {
     console.log('  Could not extract CSRF token from response body (length:', body.length, ')');
