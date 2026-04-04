@@ -137,7 +137,6 @@ async function ensureSession(api: any): Promise<MyChartRequest> {
           currentSession.makeRequest({ path: `/keepalive.asp?cnt=${keepAliveCounter}`, followRedirects: false }),
         ]);
         const aBody = await a.text();
-        const bBody = await b.text();
         // Only trust /Home/KeepAlive — keepalive.asp returns "0" on many modern
         // instances even when the session is alive (legacy/deprecated endpoint).
         if (aBody.trim() === '0') {
