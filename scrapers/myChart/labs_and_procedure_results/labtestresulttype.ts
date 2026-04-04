@@ -233,6 +233,12 @@ export interface LabTestResultWithHistory extends LabTestResult {
   historicalResults?: HistoricalResultsResponse
 }
 
+export interface ImagingSeriesInfo {
+  studyDescription: string;
+  modality: string;
+  numberOfImages: number;
+}
+
 export interface ImagingResult extends LabTestResult {
   /** FDI context extracted from report HTML (fdi + ord params for image viewer) */
   fdiContext?: { fdi: string; ord: string } | null;
@@ -242,4 +248,6 @@ export interface ImagingResult extends LabTestResult {
   viewerUrl?: string;
   /** Report text extracted from narrative + impression */
   reportText?: string;
+  /** Series info extracted from imageStudies (description, modality, image count) */
+  series?: ImagingSeriesInfo[];
 }

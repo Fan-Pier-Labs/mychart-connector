@@ -46,6 +46,9 @@ import { sessionStore } from '../scrapers/myChart/sessionStore';
 import { generateTotpCode } from '../scrapers/myChart/totp';
 import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
+import { myChartPasskeyLogin } from '../scrapers/myChart/login';
+import { setupPasskey } from '../scrapers/myChart/setupPasskey';
+import { savePasskeyCredential, loadPasskeyCredential } from './passkeyStore';
 import { sendTelemetryEvent } from '../shared/telemetry';
 import { checkForUpdate } from '../shared/updateCheck';
 import { isBlockedInstance } from '../shared/blockedInstances';
@@ -104,9 +107,11 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--set-up-totp') parsed.setupTotp = true;
     else if (args[i] === '--use-saved-totp') parsed.useSavedTotp = true;
     else if (args[i] === '--disable-totp') parsed.disableTotp = true;
+    else if (args[i] === '--set-up-passkey') parsed.setupPasskey = true;
+    else if (args[i] === '--use-passkey') parsed.usePasskey = true;
     else if (args[i] === '--local') parsed.local = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; local?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; local?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -280,6 +285,32 @@ async function login(creds: { hostname: string; username: string; password: stri
   }
 
   try {
+    // Try passkey login first if --use-passkey or if a saved passkey exists
+    const savedPasskey = await loadPasskeyCredential(creds.hostname);
+    if (cliArgs.usePasskey || savedPasskey) {
+      if (!savedPasskey) {
+        console.log(`  No saved passkey found for ${creds.hostname}. Run with --set-up-passkey first.`);
+        if (cliArgs.usePasskey) return null; // Only fail if explicitly requested
+      } else {
+        console.log(`  Attempting passkey login for ${creds.hostname}...`);
+        const passkeyResult = await myChartPasskeyLogin({
+          hostname: creds.hostname,
+          credential: savedPasskey,
+          protocol: cliArgs.local ? 'http' : undefined,
+        });
+
+        if (passkeyResult.state === 'logged_in') {
+          console.log('  Passkey login successful!');
+          // Save updated credential (incremented sign counter)
+          await savePasskeyCredential(creds.hostname, savedPasskey);
+          await saveCachedSession(creds.hostname, passkeyResult.mychartRequest);
+          return passkeyResult.mychartRequest;
+        }
+
+        console.log(`  Passkey login failed (${passkeyResult.state}). Falling back to password login.`);
+      }
+    }
+
     // Check if we should use TOTP for 2FA
     const useTotpSecret = cliArgs.useSavedTotp ? await loadTotpSecret(creds.hostname) : null;
     if (cliArgs.useSavedTotp && !useTotpSecret) {
@@ -366,12 +397,13 @@ async function login(creds: { hostname: string; username: string; password: stri
           const setupChoice = await ask('  Set up automatic sign-in? (y/n): ');
           if (setupChoice.trim().toLowerCase() === 'y') {
             console.log('  Setting up TOTP authenticator...');
-            const secret = await setupTotp(mychartRequest, creds.password);
-            if (secret) {
-              await saveTotpSecret(creds.hostname, secret);
+            const result = await setupTotp(mychartRequest, creds.password);
+            if (result.secret) {
+              await saveTotpSecret(creds.hostname, result.secret);
               console.log('  TOTP configured! Future logins will use --use-saved-totp automatically.');
             } else {
-              console.log('  TOTP setup failed. Your session is still active but will expire in a few hours.');
+              console.log(`  TOTP setup failed: ${result.error}`);
+              console.log('  Your session is still active but will expire in a few hours.');
               console.log('  Without TOTP, you\'ll need email 2FA again next time.');
             }
           } else {
@@ -1304,12 +1336,12 @@ async function main() {
         console.log('  Could not find credentials for this session.');
         continue;
       }
-      const secret = await setupTotp(session.request, creds.password);
-      if (secret) {
-        await saveTotpSecret(session.hostname, secret);
+      const result = await setupTotp(session.request, creds.password);
+      if (result.secret) {
+        await saveTotpSecret(session.hostname, result.secret);
         console.log(`  Done! You can now use --use-saved-totp to skip email 2FA.`);
       } else {
-        console.log('  TOTP setup failed. See errors above.');
+        console.log(`  TOTP setup failed: ${result.error}`);
       }
     }
     closeRL();
@@ -1335,6 +1367,22 @@ async function main() {
         console.log(`  Done! TOTP has been disabled.`);
       } else {
         console.log('  TOTP disable failed. See errors above.');
+      }
+    }
+    closeRL();
+    return;
+  }
+
+  // Handle --set-up-passkey: register a passkey on the MyChart account
+  if (cliArgs.setupPasskey) {
+    for (const session of sessions) {
+      header(`Setting up passkey for ${session.hostname}`);
+      const credential = await setupPasskey(session.request);
+      if (credential) {
+        await savePasskeyCredential(session.hostname, credential);
+        console.log(`  Done! You can now use --use-passkey to login without a password.`);
+      } else {
+        console.log('  Passkey setup failed. See errors above.');
       }
     }
     closeRL();
@@ -1438,11 +1486,11 @@ async function main() {
           }
 
           // Download images and convert to JPG if FDI context is available
-          // Skip MRI/CT studies for now — only X-ray CLO→JPG conversion is supported
+          // MRI uses a different viewer protocol we don't support yet
           const nameLower = result.orderName.toLowerCase();
-          const isUnsupportedModality = nameLower.includes('mri') || nameLower.includes('ct ') || nameLower.includes('ct,');
+          const isUnsupportedModality = nameLower.includes('mri');
           if (isUnsupportedModality && result.fdiContext) {
-            console.log(`        Image viewer: available (skipping download — ${nameLower.includes('mri') ? 'MRI' : 'CT'} not yet supported)`);
+            console.log(`        Image viewer: available (skipping download — MRI not yet supported)`);
           }
           if (result.fdiContext && !isUnsupportedModality) {
             console.log(`        Image viewer: available (has FDI context)`);

@@ -230,16 +230,16 @@ async function setupCommand(): Promise<void> {
 
       if (setupTotpChoice.trim().toLowerCase() === 'y') {
         console.log('\nSetting up TOTP authenticator...');
-        const secret = await setupTotp(twoFaResult.mychartRequest, password);
+        const result = await setupTotp(twoFaResult.mychartRequest, password);
 
-        if (secret) {
+        if (result.secret) {
           console.log('Verifying TOTP setup...');
-          const verifyCode = await generateTotpCode(secret);
+          const verifyCode = await generateTotpCode(result.secret);
           console.log(`Generated test code: ${verifyCode}`);
-          totpSecret = secret;
+          totpSecret = result.secret;
           console.log('TOTP authenticator set up successfully!\n');
         } else {
-          console.log('\nWarning: 2FA not configured.');
+          console.log(`\nTOTP setup failed: ${result.error}`);
           console.log('Without automatic sign-in, your session will only last a few hours.');
           console.log('Once it expires, you\'ll need to log in again with email verification.');
           console.log('The AI agent won\'t be able to reconnect to your MyChart account automatically.\n');
@@ -248,14 +248,14 @@ async function setupCommand(): Promise<void> {
           retryRl.close();
           if (retryChoice.trim().toLowerCase() === 'y') {
             console.log('\nRetrying TOTP setup...');
-            const retrySecret = await setupTotp(twoFaResult.mychartRequest, password);
-            if (retrySecret) {
+            const retryResult = await setupTotp(twoFaResult.mychartRequest, password);
+            if (retryResult.secret) {
               console.log('Verifying TOTP setup...');
-              await generateTotpCode(retrySecret);
-              totpSecret = retrySecret;
+              await generateTotpCode(retryResult.secret);
+              totpSecret = retryResult.secret;
               console.log('TOTP authenticator set up successfully!\n');
             } else {
-              console.log('TOTP setup failed again. Continuing without automatic sign-in.\n');
+              console.log(`TOTP setup failed again: ${retryResult.error}\nContinuing without automatic sign-in.\n`);
             }
           }
         }
@@ -269,14 +269,14 @@ async function setupCommand(): Promise<void> {
         retryRl.close();
         if (retryChoice.trim().toLowerCase() === 'y') {
           console.log('\nSetting up TOTP authenticator...');
-          const retrySecret = await setupTotp(twoFaResult.mychartRequest, password);
-          if (retrySecret) {
+          const retryResult = await setupTotp(twoFaResult.mychartRequest, password);
+          if (retryResult.secret) {
             console.log('Verifying TOTP setup...');
-            await generateTotpCode(retrySecret);
-            totpSecret = retrySecret;
+            await generateTotpCode(retryResult.secret);
+            totpSecret = retryResult.secret;
             console.log('TOTP authenticator set up successfully!\n');
           } else {
-            console.log('TOTP setup failed. Continuing without automatic sign-in.\n');
+            console.log(`TOTP setup failed: ${retryResult.error}\nContinuing without automatic sign-in.\n`);
           }
         }
       }

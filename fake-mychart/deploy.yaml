@@ -1,0 +1,21 @@
+platform: "fargate"
+app_name: "fake-mychart"
+dockerfile: "Dockerfile"
+aws:
+  profile: "fanpierlabs"
+  region: "us-east-2"
+public:
+  domain: "fake-mychart.fanpierlabs.com"
+
+task:
+  cpu: 512
+  memory: 1024
+  spot: true
+  replicas: 1
+  ephemeral_storage: 21
+  port: 8080
+
+env:
+  FAKE_MYCHART_ACCEPT_ANY: "false"
+
+allow_create: true

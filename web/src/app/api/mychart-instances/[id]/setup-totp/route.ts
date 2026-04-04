@@ -28,15 +28,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     console.log(`[setup-totp] Setting up TOTP for ${instance.hostname} (instance ${id})`);
-    const secret = await setupTotp(mychartRequest, instance.password);
+    const result = await setupTotp(mychartRequest, instance.password);
 
-    if (!secret) {
-      console.log(`[setup-totp] TOTP setup failed for ${instance.hostname}`);
-      return NextResponse.json({ success: false, error: 'TOTP setup failed. It may already be enabled on this MyChart account, or the session may have expired.' });
+    if (!result.secret) {
+      console.log(`[setup-totp] TOTP setup failed for ${instance.hostname}: ${result.error}`);
+      return NextResponse.json({ success: false, error: result.error || 'TOTP setup failed.' });
     }
 
     // Store the encrypted TOTP secret
-    await updateMyChartInstance(id, user.id, { totpSecret: secret });
+    await updateMyChartInstance(id, user.id, { totpSecret: result.secret });
     console.log(`[setup-totp] TOTP configured successfully for ${instance.hostname}`);
 
     return NextResponse.json({ success: true });

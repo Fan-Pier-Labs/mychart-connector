@@ -12,7 +12,7 @@
     "deploy": "python3 ./node_modules/deploy/main.py --config deploy.yaml"
   },
   "dependencies": {
-    "@amplitude/unified": "^1.0.14",
+    "@amplitude/analytics-browser": "^2.15.0",
     "@aws-sdk/client-s3": "^3.1021.0",
     "@aws-sdk/client-secrets-manager": "^3.1021.0",
     "@better-auth/passkey": "^1.5.6",

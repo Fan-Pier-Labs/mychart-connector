@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance } from '@/lib/db';
-import { getSession as getMyChartSession } from '@/lib/sessions';
+import { sessionStore } from '@/lib/sessions';
 import { autoConnectInstance } from '@/lib/mcp/auto-connect';
 import { sendTelemetryEvent } from '../../../../../../../shared/telemetry';
 
@@ -18,10 +18,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const sessionKey = `${user.id}:${instance.id}`;
 
-    // Check if already connected
-    const existing = getMyChartSession(sessionKey);
-    if (existing) {
+    // Check if already connected with a valid (logged_in) session
+    const existing = sessionStore.getEntry(sessionKey);
+    if (existing && existing.status === 'logged_in') {
+      console.log(`[connect] Reusing existing logged_in session for ${instance.hostname}`);
       return NextResponse.json({ state: 'logged_in', sessionKey });
+    }
+    if (existing) {
+      console.log(`[connect] Existing session for ${instance.hostname} has status=${existing.status}, clearing for fresh login`);
+      sessionStore.delete(sessionKey);
     }
 
     console.log(`[connect] Attempting auto-connect for ${instance.hostname} (user=${user.id}, hasTOTP=${!!instance.totpSecret})`);

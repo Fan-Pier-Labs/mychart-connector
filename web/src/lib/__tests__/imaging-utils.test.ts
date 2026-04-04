@@ -8,14 +8,14 @@ describe('isAdvancedImaging', () => {
     expect(isAdvancedImaging('Radiograph Left Knee', 1)).toBe(false);
   });
 
-  it('returns true for CT studies by name', () => {
-    expect(isAdvancedImaging('CT Brain without Contrast', 1)).toBe(true);
-    expect(isAdvancedImaging('CT Chest with Contrast', 0)).toBe(true);
-    expect(isAdvancedImaging('CT, Abdomen', 2)).toBe(true);
+  it('returns false for CT studies (now supported)', () => {
+    expect(isAdvancedImaging('CT Head without Contrast', 1)).toBe(false);
+    expect(isAdvancedImaging('CT Chest with Contrast', 0)).toBe(false);
+    expect(isAdvancedImaging('CT, Abdomen', 2)).toBe(false);
   });
 
   it('returns true for MRI studies', () => {
-    expect(isAdvancedImaging('MRI Brain', 1)).toBe(true);
+    expect(isAdvancedImaging('MRI Spine', 1)).toBe(true);
     expect(isAdvancedImaging('MRI Lumbar Spine', 0)).toBe(true);
   });
 
@@ -54,7 +54,7 @@ describe('isAdvancedImaging', () => {
   });
 
   it('is case-insensitive', () => {
-    expect(isAdvancedImaging('ct brain', 1)).toBe(true);
-    expect(isAdvancedImaging('MRI BRAIN', 1)).toBe(true);
+    expect(isAdvancedImaging('mri spine', 1)).toBe(true);
+    expect(isAdvancedImaging('MRI SPINE', 1)).toBe(true);
   });
 });
