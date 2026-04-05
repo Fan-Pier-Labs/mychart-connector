@@ -127,9 +127,9 @@ afterAll(async () => {
 describe('Toggle UI', () => {
   it('loads the home page with the instance visible', async () => {
     await page.goto(`${BASE_URL}/home`);
-    await page.waitForLoadState('networkidle');
 
-    // Wait for the instance hostname to appear
+    // Wait for the instance hostname to appear (no networkidle — it's unreliable
+    // and can hang indefinitely if the page has background requests)
     const hostnameLocator = page.getByText(FAKE_MYCHART_HOSTNAME);
     await hostnameLocator.waitFor({ state: 'visible', timeout: 10_000 });
     expect(await hostnameLocator.isVisible()).toBe(true);
