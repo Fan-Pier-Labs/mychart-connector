@@ -67,7 +67,9 @@ describe('softwareAuthenticator', () => {
       );
 
       expect(clientDataJSON.type).toBe('webauthn.create');
-      expect(clientDataJSON.challenge).toBe(options.challenge);
+      // Challenge in clientDataJSON must be base64url per WebAuthn spec
+      const expectedChallenge = Buffer.from(options.challenge, 'base64').toString('base64url');
+      expect(clientDataJSON.challenge).toBe(expectedChallenge);
       expect(clientDataJSON.origin).toBe(TEST_ORIGIN);
       expect(clientDataJSON.crossOrigin).toBe(false);
     });
@@ -182,7 +184,8 @@ describe('softwareAuthenticator', () => {
       );
 
       expect(clientDataJSON.type).toBe('webauthn.get');
-      expect(clientDataJSON.challenge).toBe(challenge);
+      const expectedChallenge = Buffer.from(challenge, 'base64').toString('base64url');
+      expect(clientDataJSON.challenge).toBe(expectedChallenge);
       expect(clientDataJSON.origin).toBe(TEST_ORIGIN);
     });
 

@@ -1575,6 +1575,18 @@ async function main() {
               }
               await fs.promises.writeFile(path.join(hostDir, txtName), text);
               console.log(`        Saved: ${txtName}`);
+            } else if (r.reportDetails?.reportContent?.reportContent) {
+              // Fallback: extract text from report HTML when narrative/impression fields are empty
+              const reportText = r.reportDetails.reportContent.reportContent
+                .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'")
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/\s+/g, ' ').trim();
+              if (reportText.length > 20) {
+                const txtName = `${safeName}_narrative.txt`;
+                await fs.promises.writeFile(path.join(hostDir, txtName), reportText);
+                console.log(`        Report: ${reportText.substring(0, 200)}...`);
+                console.log(`        Saved: ${txtName}`);
+              }
             }
 
             if (r.imageStudies?.length) {
