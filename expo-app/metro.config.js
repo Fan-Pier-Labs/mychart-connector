@@ -18,6 +18,7 @@ const nodeShims = {
   child_process: path.join(shimDir, "child_process.ts"),
   // tough-cookie → no-op jar; iOS handles cookies natively via NSHTTPCookieStorage
   "tough-cookie": path.join(shimDir, "tough-cookie.ts"),
+  mkdirp: path.join(shimDir, "mkdirp.ts"),
 };
 
 // Web-only shims for native Expo modules

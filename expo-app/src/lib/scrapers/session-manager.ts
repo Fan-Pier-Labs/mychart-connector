@@ -3,6 +3,9 @@
  *
  * Handles login, passkey auto-reconnect, session keepalive,
  * and exposes a tool executor for the AI client.
+ *
+ * On iOS, passes raw `fetch` to scrapers so iOS handles cookies natively
+ * via NSHTTPCookieStorage (no tough-cookie needed).
  */
 import { MyChartRequest } from "../../../../scrapers/myChart/myChartRequest";
 import {
@@ -11,6 +14,38 @@ import {
   complete2faFlow,
   type TwoFaDeliveryInfo,
 } from "../../../../scrapers/myChart/login";
+
+// Static imports for all scrapers (Metro doesn't support dynamic import with template literals)
+import { getMyChartProfile, getEmail } from "../../../../scrapers/myChart/profile";
+import { getHealthSummary } from "../../../../scrapers/myChart/healthSummary";
+import { getMedications } from "../../../../scrapers/myChart/medications";
+import { getAllergies } from "../../../../scrapers/myChart/allergies";
+import { getHealthIssues } from "../../../../scrapers/myChart/healthIssues";
+import { upcomingVisits, pastVisits } from "../../../../scrapers/myChart/visits/visits";
+import { listLabResults } from "../../../../scrapers/myChart/labs_and_procedure_results/labResults";
+import { listConversations } from "../../../../scrapers/myChart/messages/conversations";
+import { getBillingHistory } from "../../../../scrapers/myChart/bills/bills";
+import { getCareTeam } from "../../../../scrapers/myChart/careTeam";
+import { getInsurance } from "../../../../scrapers/myChart/insurance";
+import { getImmunizations } from "../../../../scrapers/myChart/immunizations";
+import { getPreventiveCare } from "../../../../scrapers/myChart/preventiveCare";
+import { getVitals } from "../../../../scrapers/myChart/vitals";
+import { getDocuments } from "../../../../scrapers/myChart/documents";
+import { getImagingResults } from "../../../../scrapers/myChart/labs_and_procedure_results/labResults";
+import { getLetters } from "../../../../scrapers/myChart/letters";
+import { getReferrals } from "../../../../scrapers/myChart/referrals";
+import { getMedicalHistory } from "../../../../scrapers/myChart/medicalHistory";
+import { getEmergencyContacts } from "../../../../scrapers/myChart/emergencyContacts";
+import { getActivityFeed } from "../../../../scrapers/myChart/activityFeed";
+import { getCareJourneys } from "../../../../scrapers/myChart/careJourneys";
+import { getGoals } from "../../../../scrapers/myChart/goals";
+import { getEducationMaterials } from "../../../../scrapers/myChart/educationMaterials";
+
+/**
+ * On React Native, use raw fetch — iOS handles cookies natively.
+ * This bypasses the tough-cookie layer entirely.
+ */
+const nativeFetch = (url: string, init: RequestInit) => fetch(url, init);
 import {
   getMyChartAccounts,
   updateMyChartAccount,
@@ -54,6 +89,7 @@ export async function connectAccount(account: StoredMyChartAccount): Promise<Con
       const result = await myChartPasskeyLogin({
         hostname: account.hostname,
         credential,
+        fetchFn: nativeFetch,
       });
 
       if (result.state === "logged_in") {
@@ -85,6 +121,7 @@ export async function connectAccount(account: StoredMyChartAccount): Promise<Con
       user: account.username,
       pass: account.password,
       skipSendCode: hasTotpSecret,
+      fetchFn: nativeFetch,
     });
     console.log(`[session] Login result: state=${result.state} error=${result.error || 'none'}`);
 
@@ -310,120 +347,70 @@ export async function executeScraperTool(
 
 /**
  * Run a specific scraper against a MyChartRequest.
- * Imports the scraper modules directly from the main repo.
+ * Uses static imports from the main repo's scraper modules.
  */
 async function runScraper(
   request: MyChartRequest,
   toolName: string,
   input: Record<string, unknown>,
 ): Promise<unknown> {
-  const S = "../../../../scrapers/myChart";
-
   switch (toolName) {
     case "get_profile": {
-      const { getMyChartProfile, getEmail } = await import(`${S}/profile`);
       const profile = await getMyChartProfile(request);
       const email = await getEmail(request);
       return { ...profile, email };
     }
-    case "get_health_summary": {
-      const { getHealthSummary } = await import(`${S}/healthSummary`);
+    case "get_health_summary":
       return getHealthSummary(request);
-    }
-    case "get_medications": {
-      const { getMedications } = await import(`${S}/medications`);
+    case "get_medications":
       return getMedications(request);
-    }
-    case "get_allergies": {
-      const { getAllergies } = await import(`${S}/allergies`);
+    case "get_allergies":
       return getAllergies(request);
-    }
-    case "get_health_issues": {
-      const { getHealthIssues } = await import(`${S}/healthIssues`);
+    case "get_health_issues":
       return getHealthIssues(request);
-    }
-    case "get_upcoming_visits": {
-      const { upcomingVisits } = await import(`${S}/visits/visits`);
+    case "get_upcoming_visits":
       return upcomingVisits(request);
-    }
     case "get_past_visits": {
-      const { pastVisits } = await import(`${S}/visits/visits`);
       const oldest = new Date();
       oldest.setFullYear(oldest.getFullYear() - ((input.years_back as number) ?? 2));
       return pastVisits(request, oldest);
     }
-    case "get_lab_results": {
-      const { listLabResults } = await import(`${S}/labs_and_procedure_results/labResults`);
+    case "get_lab_results":
       return listLabResults(request);
-    }
-    case "get_messages": {
-      const { listConversations } = await import(`${S}/messages/conversations`);
+    case "get_messages":
       return listConversations(request);
-    }
-    case "get_billing": {
-      const { getBillingHistory } = await import(`${S}/bills/bills`);
+    case "get_billing":
       return getBillingHistory(request);
-    }
-    case "get_care_team": {
-      const { getCareTeam } = await import(`${S}/careTeam`);
+    case "get_care_team":
       return getCareTeam(request);
-    }
-    case "get_insurance": {
-      const { getInsurance } = await import(`${S}/insurance`);
+    case "get_insurance":
       return getInsurance(request);
-    }
-    case "get_immunizations": {
-      const { getImmunizations } = await import(`${S}/immunizations`);
+    case "get_immunizations":
       return getImmunizations(request);
-    }
-    case "get_preventive_care": {
-      const { getPreventiveCare } = await import(`${S}/preventiveCare`);
+    case "get_preventive_care":
       return getPreventiveCare(request);
-    }
-    case "get_vitals": {
-      const { getVitals } = await import(`${S}/vitals`);
+    case "get_vitals":
       return getVitals(request);
-    }
-    case "get_documents": {
-      const { getDocuments } = await import(`${S}/documents`);
+    case "get_documents":
       return getDocuments(request);
-    }
-    case "get_imaging_results": {
-      const { getImagingResults } = await import(`${S}/labs_and_procedure_results/labResults`);
+    case "get_imaging_results":
       return getImagingResults(request);
-    }
-    case "get_letters": {
-      const { getLetters } = await import(`${S}/letters`);
+    case "get_letters":
       return getLetters(request);
-    }
-    case "get_referrals": {
-      const { getReferrals } = await import(`${S}/referrals`);
+    case "get_referrals":
       return getReferrals(request);
-    }
-    case "get_medical_history": {
-      const { getMedicalHistory } = await import(`${S}/medicalHistory`);
+    case "get_medical_history":
       return getMedicalHistory(request);
-    }
-    case "get_emergency_contacts": {
-      const { getEmergencyContacts } = await import(`${S}/emergencyContacts`);
+    case "get_emergency_contacts":
       return getEmergencyContacts(request);
-    }
-    case "get_activity_feed": {
-      const { getActivityFeed } = await import(`${S}/activityFeed`);
+    case "get_activity_feed":
       return getActivityFeed(request);
-    }
-    case "get_care_journeys": {
-      const { getCareJourneys } = await import(`${S}/careJourneys`);
+    case "get_care_journeys":
       return getCareJourneys(request);
-    }
-    case "get_goals": {
-      const { getGoals } = await import(`${S}/goals`);
+    case "get_goals":
       return getGoals(request);
-    }
-    case "get_education_materials": {
-      const { getEducationMaterials } = await import(`${S}/educationMaterials`);
+    case "get_education_materials":
       return getEducationMaterials(request);
-    }
     default:
       return { error: `Unknown tool: ${toolName}` };
   }

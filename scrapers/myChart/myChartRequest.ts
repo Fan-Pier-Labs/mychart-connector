@@ -3,15 +3,29 @@ import fs from 'fs';
 import {mockRequest} from './mock_data/index'
 import { RequestConfig } from './types';
 
+/**
+ * Options for creating a MyChartRequest.
+ * Pass a custom `fetchFn` to override how HTTP requests are made.
+ * For example, on iOS, pass raw `fetch` to let the OS handle cookies natively.
+ */
+export type MyChartRequestOptions = {
+  protocol?: string;
+  /** Custom fetch function. Defaults to tough-cookie-wrapped fetch for Node/Bun. */
+  fetchFn?: (url: string, init: RequestInit) => Promise<Response>;
+};
+
 // Class to keep track of variables used when making requests
 // to MyChart's Site.
 export class MyChartRequest {
 
   // Cookie jar to keep track of all the cookies received.
+  // On platforms that handle cookies natively (iOS), this jar stays empty
+  // and is only used for getCookieInfo() / serialize() compatibility.
   cookieJar: CookieJar;
 
   // Mockable fetch function. Tests can replace this to intercept requests.
   // Default implementation injects/extracts cookies via the CookieJar.
+  // On iOS, this is set to raw fetch (iOS handles cookies natively).
   fetchWithCookieJar: (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
   // The hostname of the MyChart site, eg. mychart.example.org
@@ -23,12 +37,24 @@ export class MyChartRequest {
   // the first part of the path. For some instances, it is /MyChart-PRD. For others, it is /MyChart.
   firstPathPart: string = '';
 
-  constructor(hostname: string, protocol?: string) {
+  constructor(hostname: string, options?: string | MyChartRequestOptions) {
+    // Support old signature: new MyChartRequest(hostname, protocol?)
+    const opts: MyChartRequestOptions = typeof options === 'string'
+      ? { protocol: options }
+      : (options ?? {});
+
     this.cookieJar = new CookieJar();
-    this.fetchWithCookieJar = (url, init) => this.fetchWithCookies(String(url), init ?? {});
+
+    if (opts.fetchFn) {
+      // Custom fetch function provided (e.g. raw fetch on iOS)
+      this.fetchWithCookieJar = (url, init) => opts.fetchFn!(String(url), init ?? {});
+    } else {
+      // Default: tough-cookie-wrapped fetch for Node/Bun
+      this.fetchWithCookieJar = (url, init) => this.fetchWithCookies(String(url), init ?? {});
+    }
 
     this.hostname = MyChartRequest.normalizeHostname(hostname);
-    this.protocol = protocol ?? 'https';
+    this.protocol = opts.protocol ?? 'https';
   }
 
   /**
@@ -65,11 +91,11 @@ export class MyChartRequest {
     })
   }
 
-  static async unserialize(serializedData: string): Promise<MyChartRequest | null> {
+  static async unserialize(serializedData: string, options?: MyChartRequestOptions): Promise<MyChartRequest | null> {
     try {
       const data = JSON.parse(serializedData);
       if (data && data.hostname && data.firstPathPart && data.cookies) {
-        const request = new MyChartRequest(data.hostname, data.protocol);
+        const request = new MyChartRequest(data.hostname, { ...options, protocol: data.protocol });
         request.firstPathPart = data.firstPathPart;
         if (Object.keys(data.cookies).length > 0) {
           request.cookieJar = CookieJar.deserializeSync(data.cookies);
@@ -117,6 +143,10 @@ export class MyChartRequest {
    * Fetch with manual cookie jar integration.
    * Injects cookies from the jar into the request headers, and stores
    * Set-Cookie headers from the response back into the jar.
+   *
+   * This is the default fetch strategy for Node/Bun environments.
+   * On platforms with native cookie handling (iOS), the constructor
+   * is given a custom fetchFn that bypasses this method entirely.
    */
   private async fetchWithCookies(url: string, init: RequestInit): Promise<Response> {
     // Get cookies for this URL and inject them
