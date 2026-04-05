@@ -1,6 +1,6 @@
 import { getSession } from '@/lib/sessions';
-import { downloadImagingStudyDirect } from '../../../../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../../../../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
+import { downloadImagingStudyDirect } from '../../../scrapers/myChart/eunity/imagingDirectDownload';
+import { convertCloToJpg } from '../../../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
 
 export interface CachedStudy {
   /** Series list with actual downloadable image counts */
