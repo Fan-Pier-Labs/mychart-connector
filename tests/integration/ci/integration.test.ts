@@ -854,7 +854,112 @@ describe('Session expiry and auto-reconnect', () => {
 });
 
 // ===================================================================
-// 11. Cleanup
+// 11. Passkey Setup & Auto-Login
+// ===================================================================
+
+describe('Passkey setup and auto-login', () => {
+  const FAKE_MYCHART_TEST_URL = process.env.CI_FAKE_MYCHART_URL || 'http://localhost:4000';
+
+  it('instance does not have passkey before setup', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.hasPasskeyCredential).toBe(false);
+  });
+
+  it('sets up passkey on the instance', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+  }, 30_000);
+
+  it('instance shows hasPasskeyCredential after setup', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.hasPasskeyCredential).toBe(true);
+  });
+
+  it('rejects duplicate passkey setup', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('already configured');
+  });
+
+  it('invalidates sessions to test passkey auto-login', async () => {
+    const res = await fetch(`${FAKE_MYCHART_TEST_URL}/api/invalidate-sessions`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('detects expired session via profile fetch', async () => {
+    // This triggers the web app to clear the stale in-memory session
+    const res = await authedFetch('/api/profile', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.code).toBe('session_expired');
+  });
+
+  it('auto-connects via passkey after session expiry', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/connect`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // With passkey, should be logged_in directly (no 2FA needed)
+    expect(body.state).toBe('logged_in');
+    sessionKey = body.sessionKey;
+  }, 30_000);
+
+  it('profile works after passkey auto-login', async () => {
+    const res = await authedFetch('/api/profile', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBeDefined();
+    expect(JSON.stringify(body)).toContain('Homer');
+  });
+
+  it('removes passkey from the instance', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+  });
+
+  it('instance shows hasPasskeyCredential false after removal', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.hasPasskeyCredential).toBe(false);
+  });
+
+  it('rejects removing passkey when none exists', async () => {
+    const res = await authedFetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('No passkey configured');
+  });
+});
+
+// ===================================================================
+// 12. Cleanup
 // ===================================================================
 
 describe('Cleanup', () => {

@@ -47,7 +47,8 @@ End-to-end tests in `tests/integration/ci/` that exercise the full user journey 
 6. Notification preference CRUD
 7. App-level TOTP 2FA enable/verify/sign-in/disable
 8. Password reset request, token validation, password change, old password rejection
-9. MyChart instance deletion and cleanup
+9. Passkey setup on MyChart instance and passkey auto-login
+10. MyChart instance deletion and cleanup
 
 **Protocol detection**: Hostnames without a dot (e.g. Docker service names like `fake-mychart:3000`) automatically use HTTP instead of HTTPS.
 

@@ -18,6 +18,7 @@ export interface MyChartInstance {
   username: string;
   password: string;
   totpSecret: string | null;
+  passkeyCredential: string | null;
   mychartEmail: string | null;
   enabled: boolean;
   createdAt: Date;
@@ -38,6 +39,7 @@ export interface UpdateMyChartInstanceInput {
   username?: string;
   password?: string;
   totpSecret?: string | null;
+  passkeyCredential?: string | null;
   mychartEmail?: string | null;
   enabled?: boolean;
 }
@@ -50,6 +52,7 @@ async function rowToInstance(row: Record<string, unknown>): Promise<MyChartInsta
     username: row.username as string,
     password: await decrypt(row.encrypted_password as string),
     totpSecret: row.encrypted_totp_secret ? await decrypt(row.encrypted_totp_secret as string) : null,
+    passkeyCredential: row.encrypted_passkey_credential ? await decrypt(row.encrypted_passkey_credential as string) : null,
     mychartEmail: row.mychart_email as string | null,
     enabled: row.enabled !== false,
     createdAt: row.created_at as Date,
@@ -115,6 +118,10 @@ export async function updateMyChartInstance(id: string, userId: string, updates:
     setClauses.push(`encrypted_totp_secret = $${paramIndex++}`);
     values.push(updates.totpSecret ? await encrypt(updates.totpSecret) : null);
   }
+  if (updates.passkeyCredential !== undefined) {
+    setClauses.push(`encrypted_passkey_credential = $${paramIndex++}`);
+    values.push(updates.passkeyCredential ? await encrypt(updates.passkeyCredential) : null);
+  }
   if (updates.mychartEmail !== undefined) {
     setClauses.push(`mychart_email = $${paramIndex++}`);
     values.push(updates.mychartEmail);
@@ -163,7 +170,7 @@ export async function getNotificationEnabledInstances(): Promise<NotificationEna
      FROM mychart_instances mi
      JOIN "user" u ON mi.user_id = u.id
      WHERE u.notifications_enabled = TRUE
-       AND mi.encrypted_totp_secret IS NOT NULL
+       AND (mi.encrypted_totp_secret IS NOT NULL OR mi.encrypted_passkey_credential IS NOT NULL)
        AND mi.enabled = TRUE
      ORDER BY mi.created_at ASC`
   );

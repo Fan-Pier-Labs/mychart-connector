@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
         username: inst.username,
         mychartEmail: inst.mychartEmail,
         hasTotpSecret: !!inst.totpSecret,
+        hasPasskeyCredential: !!inst.passkeyCredential,
         connected,
         createdAt: inst.createdAt,
         updatedAt: inst.updatedAt,

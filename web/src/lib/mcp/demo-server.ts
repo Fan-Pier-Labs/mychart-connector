@@ -64,6 +64,7 @@ export function createDemoMcpServer(): McpServer {
           username: 'homersimpson742',
           connected: true,
           hasTotpSecret: true,
+          hasPasskeyCredential: true,
         },
       ]);
     }

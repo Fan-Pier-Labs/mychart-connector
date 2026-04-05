@@ -214,6 +214,7 @@ export function createMcpServer(userId: string): McpServer {
             username: inst.username,
             connected: !!entry && entry.status === 'logged_in',
             hasTotpSecret: !!inst.totpSecret,
+            hasPasskeyCredential: !!inst.passkeyCredential,
             enabled: inst.enabled,
           };
         });
