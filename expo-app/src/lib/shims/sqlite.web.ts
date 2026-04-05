@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Web shim for expo-sqlite — uses in-memory storage backed by localStorage.
  * Implements just enough of the SQLiteDatabase API to support our usage.

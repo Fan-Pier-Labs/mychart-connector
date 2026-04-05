@@ -24,6 +24,7 @@ export async function deleteSecureValue(key: string): Promise<void> {
 // In production builds this will be an empty object (file won't exist).
 let devSecrets: { claude_api_key?: string } = {};
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   devSecrets = require("../../../secrets.local.json");
 } catch {
   // Not present — expected in production

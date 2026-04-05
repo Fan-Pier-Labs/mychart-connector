@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Web shim for expo-local-authentication — always succeeds.
  */

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Stub for Node's `child_process` module. Never used at runtime in the mobile app.
  */

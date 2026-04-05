@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Web shim for expo-secure-store — uses localStorage.
  * Only for development/testing. Not secure for production.
