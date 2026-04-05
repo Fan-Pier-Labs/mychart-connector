@@ -1371,27 +1371,44 @@ export async function downloadImagingStudyDirect(
       instanceCount: count,
     }));
 
-    // Step 6: Download images for each series
+    // Step 6: Download images for each series.
+    // Group by seriesUID — the eUnity server serves one CLOWRAPPER per series,
+    // then additional frames via frameNumber increments on the same objectUID.
     const maxImages = options?.maxImages ?? Infinity;
-    for (const series of studyInfo.series) {
+    const seriesByUID = new Map<string, typeof studyInfo.series>();
+    for (const s of studyInfo.series) {
+      const existing = seriesByUID.get(s.seriesUID) ?? [];
+      existing.push(s);
+      seriesByUID.set(s.seriesUID, existing);
+    }
+
+    for (const [, seriesEntries] of seriesByUID) {
       if (result.images.length >= maxImages) break;
-      console.log(`      Downloading ${series.seriesDescription}...`);
+      const series = seriesEntries[0]; // Use first instance for initial download
+      const totalFrames = seriesEntries.length;
+      console.log(`      Downloading ${series.seriesDescription} (${totalFrames} frames)...`);
       const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
       const safeDesc = series.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
 
+      for (let frame = 1; frame <= totalFrames; frame++) {
+        if (result.images.length >= maxImages) break;
+        // Use the instanceUID from the corresponding entry if available
+        const entryForFrame = seriesEntries[frame - 1] ?? series;
+
       try {
-        // Download CLOWRAPPER (metadata + low-res image data)
+        // Download CLOWRAPPER (metadata + image data)
         const { data } = await downloadImage(session.cookieJar, baseUrl, {
           studyUID: studyInfo.studyUID,
           seriesUID: series.seriesUID,
-          objectUID: series.instanceUID,
+          objectUID: entryForFrame.instanceUID,
+          frameNumber: frame,
           serviceInstance: studyParams.serviceInstance,
           format: 'CLOWRAPPER',
         });
 
         // Skip empty/error responses (< 256 bytes is too small for real image data)
         if (data.length < 256 || (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR')) {
-          console.log(`      Skipping ${series.seriesDescription}: empty or error response (${data.length} bytes)`);
+          console.log(`      Skipping ${series.seriesDescription} frame ${frame}: ${data.length} bytes`);
           continue;
         }
 
@@ -1404,9 +1421,10 @@ export async function downloadImagingStudyDirect(
           // Split into wrapper metadata and embedded pixel data for in-memory conversion.
           const CLOCLHAAR_MAGIC = Buffer.from('CLOCLHAAR');
           const haarIdx = data.indexOf(CLOCLHAAR_MAGIC);
-          if (haarIdx > 0) {
-            const wrapperMetadata = data.subarray(0, haarIdx);
+          if (haarIdx >= 0) {
+            const wrapperMetadata = haarIdx > 0 ? data.subarray(0, haarIdx) : undefined;
             const embeddedPixelData = data.subarray(haarIdx);
+            console.log(`      Buffer: ${series.seriesDescription} wrapper=${haarIdx > 0 ? haarIdx : 0}B pixel=${embeddedPixelData.length}B`);
             result.images.push({
               filePath: '',
               sizeBytes: embeddedPixelData.length,
@@ -1416,8 +1434,10 @@ export async function downloadImagingStudyDirect(
               accessionNumber: studyParams.accession,
               format: 'CLHAAR',
               pixelData: Buffer.from(embeddedPixelData),
-              wrapperData: Buffer.from(wrapperMetadata),
+              wrapperData: wrapperMetadata ? Buffer.from(wrapperMetadata) : undefined,
             });
+          } else {
+            console.log(`      Skipping ${series.seriesDescription}: no CLOCLHAAR magic in ${data.length}B response (starts with: ${data.toString('ascii', 0, 12)})`);
           }
         } else {
           await fs.promises.writeFile(filePath, data);
@@ -1465,9 +1485,10 @@ export async function downloadImagingStudyDirect(
           }
         }
       } catch (err) {
-        result.errors.push(`${series.seriesDescription}: ${(err as Error).message}`);
+        result.errors.push(`${series.seriesDescription} frame ${frame}: ${(err as Error).message}`);
       }
-    }
+      } // end frame loop
+    } // end series loop
   } catch (err) {
     result.errors.push(`Fatal: ${(err as Error).message}`);
   }
