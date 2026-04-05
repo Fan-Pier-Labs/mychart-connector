@@ -71,9 +71,7 @@ export async function getOrDownloadStudy(
       const images = new Map<string, Buffer>();
       const seriesCount = new Map<string, { description: string; count: number }>();
 
-      const candidates = downloadResult.images.filter(
-        img => img.pixelData && img.pixelData.length > 10000,
-      );
+      const candidates = downloadResult.images.filter(img => img.pixelData);
 
       for (const image of candidates) {
         const existing = seriesCount.get(image.seriesUID);
