@@ -252,7 +252,13 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
               <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{img.narrative}</p>
             </details>
           )}
-          {img.fdiContext && !isDemo && (
+          {img.fdiContext && !isDemo && (() => {
+            const name = img.orderName.toLowerCase();
+            const isXray = name.startsWith('xr ') || name.includes('x-ray') || name.includes('xray');
+            const isUnsupported = !isXray;
+            return isUnsupported ? (
+              <p className="text-xs text-muted-foreground mt-2">Image viewing coming soon for this modality</p>
+            ) : (
             <div className="mt-2">
               {!studyImages[i] && !studyLoading[i] && !studyErrors[i] && (
                 <Button
@@ -265,7 +271,10 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
                 </Button>
               )}
               {studyLoading[i] && (
-                <p className="text-xs text-muted-foreground">Loading images...</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                  <span className="text-xs text-muted-foreground">Loading images...</span>
+                </div>
               )}
               {studyErrors[i] && (
                 <div className="flex items-center gap-2">
@@ -304,7 +313,8 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
                 <p className="text-xs text-muted-foreground">No downloadable images found for this study.</p>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       ))}
     </SafeArraySection>
