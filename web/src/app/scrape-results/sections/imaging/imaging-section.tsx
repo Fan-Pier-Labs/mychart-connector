@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ArraySection } from "@/components/data-display";
 import { withRenderErrorBoundary } from "@/components/with-render-error-boundary";
@@ -9,7 +9,6 @@ import type { ImagingResultType } from "@/types/scrape-results";
 const SafeArraySection = withRenderErrorBoundary(ArraySection, "ArraySection", (p) => p.data);
 
 type ImageRef = { seriesUID: string; objectUID: string };
-type SeriesInfo = { seriesUID: string; description: string; imageCount: number; images: ImageRef[] };
 
 interface ImagingSectionProps {
   imagingResults: ImagingResultType[] | undefined;
@@ -17,23 +16,29 @@ interface ImagingSectionProps {
   token: string;
 }
 
-function ImageViewer({ token, fdiParam, images, description }: {
+/** Number of images to load immediately when opening the viewer */
+const INITIAL_LOAD = 10;
+/** Number of images to prefetch ahead of the current index */
+const PREFETCH_AHEAD = 5;
+
+function StudyViewer({ token, fdiParam, images, studyName }: {
   token: string;
   fdiParam: string;
   images: ImageRef[];
-  description: string;
+  studyName: string;
 }) {
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [blobUrls, setBlobUrls] = useState<Record<number, string>>({});
+  const loadingRef = useRef<Set<number>>(new Set());
 
   const total = images.length;
 
-  const loadImage = useCallback(async (idx: number) => {
-    setLoading(true);
-    setError(null);
+  const loadImage = useCallback(async (idx: number): Promise<string | null> => {
+    if (loadingRef.current.has(idx)) return null;
+    loadingRef.current.add(idx);
     const img = images[idx];
     const url = `/api/mychart-xray?token=${encodeURIComponent(token)}&fdi=${encodeURIComponent(fdiParam)}&seriesUID=${encodeURIComponent(img.seriesUID)}&objectUID=${encodeURIComponent(img.objectUID)}`;
     try {
@@ -45,27 +50,61 @@ function ImageViewer({ token, fdiParam, images, description }: {
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
       setBlobUrls(prev => ({ ...prev, [idx]: blobUrl }));
+      return blobUrl;
     } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
+      loadingRef.current.delete(idx);
+      throw err;
     }
   }, [token, fdiParam, images]);
 
+  // Load initial batch on mount
+  useEffect(() => {
+    const loadInitial = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Load first image, then prefetch remaining initial batch
+        await loadImage(0);
+        const batch = Math.min(INITIAL_LOAD, total);
+        for (let i = 1; i < batch; i++) {
+          loadImage(i).catch(() => {}); // fire-and-forget
+        }
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadInitial();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load current image if not cached, and prefetch ahead
   useEffect(() => {
     if (blobUrls[index]) {
       setLoading(false);
       setError(null);
-      return;
+    } else {
+      setLoading(true);
+      setError(null);
+      loadImage(index)
+        .then(() => setLoading(false))
+        .catch(err => { setError((err as Error).message); setLoading(false); });
     }
-    loadImage(index);
-  }, [index, blobUrls, loadImage]);
+    // Prefetch ahead
+    for (let i = index + 1; i <= Math.min(index + PREFETCH_AHEAD, total - 1); i++) {
+      if (!blobUrls[i]) {
+        loadImage(i).catch(() => {});
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
 
   const downloadZip = async () => {
     setDownloading(true);
     try {
       const imagesJson = encodeURIComponent(JSON.stringify(images));
-      const desc = encodeURIComponent(description);
+      const desc = encodeURIComponent(studyName);
       const resp = await fetch(
         `/api/mychart-xray-zip?token=${encodeURIComponent(token)}&fdi=${encodeURIComponent(fdiParam)}&images=${imagesJson}&description=${desc}`
       );
@@ -79,7 +118,7 @@ function ImageViewer({ token, fdiParam, images, description }: {
       a.href = url;
       const cd = resp.headers.get('Content-Disposition');
       const filenameMatch = cd?.match(/filename="?([^"]+)"?/);
-      a.download = filenameMatch?.[1] ?? `${description}.zip`;
+      a.download = filenameMatch?.[1] ?? `${studyName}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -94,32 +133,27 @@ function ImageViewer({ token, fdiParam, images, description }: {
   const currentUrl = blobUrls[index];
 
   return (
-    <div className="mt-2">
-      <div className="flex items-center gap-2 mb-1">
-        <p className="text-xs font-medium">{description}</p>
-        {total > 1 && (
-          <span className="text-xs text-muted-foreground">
-            {index + 1} / {total}
-          </span>
-        )}
-        {total > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-6 ml-auto"
-            disabled={downloading}
-            onClick={downloadZip}
-          >
-            {downloading ? 'Downloading...' : `Download All (${total})`}
-          </Button>
-        )}
+    <div className="mt-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-muted-foreground">
+          {index + 1} / {total} images
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs h-6 ml-auto"
+          disabled={downloading}
+          onClick={downloadZip}
+        >
+          {downloading ? 'Downloading...' : `Download All (${total})`}
+        </Button>
       </div>
       <div className="relative inline-block">
         {loading && (
           <div className="flex items-center justify-center bg-black/80 rounded-md border min-h-[200px] min-w-[200px] p-8">
             <div className="flex flex-col items-center gap-2">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-              <span className="text-xs text-muted-foreground">Loading image...</span>
+              <span className="text-xs text-muted-foreground">Loading image {index + 1}...</span>
             </div>
           </div>
         )}
@@ -129,12 +163,12 @@ function ImageViewer({ token, fdiParam, images, description }: {
         {!loading && currentUrl && (
           <img
             src={currentUrl}
-            alt={`${description} (${index + 1}/${total})`}
+            alt={`${studyName} (${index + 1}/${total})`}
             className="rounded-md border bg-black"
             style={{ maxHeight: 512 }}
           />
         )}
-        {total > 1 && !loading && currentUrl && (
+        {total > 1 && (
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
             <Button
               variant="secondary"
@@ -143,7 +177,7 @@ function ImageViewer({ token, fdiParam, images, description }: {
               disabled={index === 0}
               onClick={() => setIndex(i => i - 1)}
             >
-              Prev
+              &larr; Prev
             </Button>
             <Button
               variant="secondary"
@@ -152,7 +186,7 @@ function ImageViewer({ token, fdiParam, images, description }: {
               disabled={index >= total - 1}
               onClick={() => setIndex(i => i + 1)}
             >
-              Next
+              Next &rarr;
             </Button>
           </div>
         )}
@@ -162,30 +196,38 @@ function ImageViewer({ token, fdiParam, images, description }: {
 }
 
 export function ImagingSection({ imagingResults, isDemo, token }: ImagingSectionProps) {
-  const [seriesData, setSeriesData] = useState<Record<number, SeriesInfo[]>>({});
-  const [seriesLoading, setSeriesLoading] = useState<Record<number, boolean>>({});
-  const [seriesErrors, setSeriesErrors] = useState<Record<number, string | null>>({});
-  const [openViewers, setOpenViewers] = useState<Record<string, boolean>>({});
+  const [studyImages, setStudyImages] = useState<Record<number, ImageRef[]>>({});
+  const [studyLoading, setStudyLoading] = useState<Record<number, boolean>>({});
+  const [studyErrors, setStudyErrors] = useState<Record<number, string | null>>({});
+  const [viewerOpen, setViewerOpen] = useState<Record<number, boolean>>({});
   const [fdiParams, setFdiParams] = useState<Record<number, string>>({});
 
-  const fetchSeries = useCallback(async (index: number, fdiContext: { fdi: string; ord: string }) => {
-    setSeriesLoading(prev => ({ ...prev, [index]: true }));
-    setSeriesErrors(prev => ({ ...prev, [index]: null }));
+  const loadStudy = useCallback(async (index: number, fdiContext: { fdi: string; ord: string }) => {
+    setStudyLoading(prev => ({ ...prev, [index]: true }));
+    setStudyErrors(prev => ({ ...prev, [index]: null }));
     try {
       const fdiParam = btoa(JSON.stringify(fdiContext));
       setFdiParams(prev => ({ ...prev, [index]: fdiParam }));
       const resp = await fetch(`/api/mychart-series?token=${encodeURIComponent(token)}&fdi=${encodeURIComponent(fdiParam)}`);
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Failed to load series' }));
+        const err = await resp.json().catch(() => ({ error: 'Failed to load images' }));
         throw new Error(err.error || `HTTP ${resp.status}`);
       }
       const data = await resp.json();
-      setSeriesData(prev => ({ ...prev, [index]: data.series }));
+      // Flatten all series into one image list
+      const allImages: ImageRef[] = [];
+      for (const s of data.series) {
+        for (const img of s.images) {
+          allImages.push(img);
+        }
+      }
+      setStudyImages(prev => ({ ...prev, [index]: allImages }));
+      setViewerOpen(prev => ({ ...prev, [index]: true }));
     } catch (err) {
       const msg = (err as Error).message;
-      setSeriesErrors(prev => ({ ...prev, [index]: msg.length > 200 ? msg.slice(0, 200) + '...' : msg }));
+      setStudyErrors(prev => ({ ...prev, [index]: msg.length > 200 ? msg.slice(0, 200) + '...' : msg }));
     } finally {
-      setSeriesLoading(prev => ({ ...prev, [index]: false }));
+      setStudyLoading(prev => ({ ...prev, [index]: false }));
     }
   }, [token]);
 
@@ -197,13 +239,11 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
           <div className="flex gap-3 text-xs text-muted-foreground mt-1">
             {img.resultDate && <span>{img.resultDate}</span>}
             {img.orderProvider && <span>Provider: {img.orderProvider}</span>}
-            {img.imageStudyCount > 0 && <span>{img.imageStudyCount} studies</span>}
-            {img.scanCount > 0 && <span>{img.scanCount} scans</span>}
           </div>
           {img.impression && (
             <div className="mt-2">
               <span className="text-xs font-medium">Impression:</span>
-              <p className="text-xs text-muted-foreground">{img.impression}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{img.impression}</p>
             </div>
           )}
           {img.narrative && (
@@ -212,62 +252,69 @@ export function ImagingSection({ imagingResults, isDemo, token }: ImagingSection
               <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{img.narrative}</p>
             </details>
           )}
-          {img.fdiContext && !isDemo && (
+          {img.fdiContext && !isDemo && (() => {
+            const name = img.orderName.toLowerCase();
+            const isXray = name.startsWith('xr ') || name.includes('x-ray') || name.includes('xray');
+            const isUnsupported = !isXray;
+            return isUnsupported ? (
+              <p className="text-xs text-muted-foreground mt-2">Image viewing coming soon for this modality</p>
+            ) : (
             <div className="mt-2">
-              {!seriesData[i] && !seriesLoading[i] && !seriesErrors[i] && (
+              {!studyImages[i] && !studyLoading[i] && !studyErrors[i] && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="text-xs h-7"
-                  onClick={() => fetchSeries(i, img.fdiContext!)}
+                  onClick={() => loadStudy(i, img.fdiContext!)}
                 >
                   View Images
                 </Button>
               )}
-              {seriesLoading[i] && (
-                <p className="text-xs text-muted-foreground">Loading series info...</p>
-              )}
-              {seriesErrors[i] && (
-                <p className="text-xs text-red-500">Failed to load series: {seriesErrors[i]}</p>
-              )}
-              {seriesData[i] && (
-                <div className="space-y-3">
-                  <span className="text-xs font-medium">Series:</span>
-                  <div className="flex flex-wrap gap-2">
-                    {seriesData[i].map((s, j) => {
-                      const key = `${i}-${j}`;
-                      const isOpen = !!openViewers[key];
-                      return (
-                        <Button
-                          key={j}
-                          variant={isOpen ? "secondary" : "outline"}
-                          size="sm"
-                          className="text-xs h-7"
-                          disabled={s.imageCount === 0}
-                          onClick={() => s.imageCount > 0 && setOpenViewers(prev => ({ ...prev, [key]: !prev[key] }))}
-                        >
-                          {s.description} ({s.imageCount} images)
-                        </Button>
-                      );
-                    })}
-                  </div>
-                  {seriesData[i].map((s, j) => {
-                    const key = `${i}-${j}`;
-                    if (!openViewers[key] || s.imageCount === 0) return null;
-                    return (
-                      <ImageViewer
-                        key={`viewer-${key}`}
-                        token={token}
-                        fdiParam={fdiParams[i]}
-                        images={s.images}
-                        description={s.description}
-                      />
-                    );
-                  })}
+              {studyLoading[i] && (
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                  <span className="text-xs text-muted-foreground">Loading images...</span>
                 </div>
               )}
+              {studyErrors[i] && (
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-red-500">Failed to load images: {studyErrors[i]}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-6"
+                    onClick={() => loadStudy(i, img.fdiContext!)}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+              {studyImages[i] && studyImages[i].length > 0 && (
+                <div>
+                  <Button
+                    variant={viewerOpen[i] ? "secondary" : "outline"}
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => setViewerOpen(prev => ({ ...prev, [i]: !prev[i] }))}
+                  >
+                    {viewerOpen[i] ? "Hide Images" : "Show Images"} ({studyImages[i].length})
+                  </Button>
+                  {viewerOpen[i] && (
+                    <StudyViewer
+                      token={token}
+                      fdiParam={fdiParams[i]}
+                      images={studyImages[i]}
+                      studyName={img.orderName}
+                    />
+                  )}
+                </div>
+              )}
+              {studyImages[i] && studyImages[i].length === 0 && (
+                <p className="text-xs text-muted-foreground">No downloadable images found for this study.</p>
+              )}
             </div>
-          )}
+            );
+          })()}
         </div>
       ))}
     </SafeArraySection>
