@@ -47,7 +47,7 @@ import { generateTotpCode } from '../scrapers/myChart/totp';
 import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
 import { myChartPasskeyLogin } from '../scrapers/myChart/login';
-import { setupPasskey } from '../scrapers/myChart/setupPasskey';
+import { setupPasskey, listPasskeys, deletePasskey } from '../scrapers/myChart/setupPasskey';
 import { savePasskeyCredential, loadPasskeyCredential } from './passkeyStore';
 import type { PasskeyCredential } from '../scrapers/myChart/softwareAuthenticator';
 import { sendTelemetryEvent } from '../shared/telemetry';
@@ -91,7 +91,7 @@ async function saveCachedSession(hostname: string, mychartRequest: MyChartReques
 //   npx tsx src/cli.ts --host <hostname> --action send-message  (send a new message)
 //   npx tsx src/cli.ts --host <hostname> --action send-reply --conversation-id <id> --message <msg>
 
-function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean } {
+function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean } {
   const args = process.argv.slice(2);
   const parsed: Record<string, string | boolean> = {};
   for (let i = 0; i < args.length; i++) {
@@ -110,9 +110,11 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--disable-totp') parsed.disableTotp = true;
     else if (args[i] === '--set-up-passkey') parsed.setupPasskey = true;
     else if (args[i] === '--use-passkey') parsed.usePasskey = true;
+    else if (args[i] === '--list-passkeys') parsed.listPasskeys = true;
+    else if (args[i] === '--delete-passkey') parsed.deletePasskey = true;
     else if (args[i] === '--local') parsed.local = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; local?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -1406,6 +1408,49 @@ async function main() {
         console.log(`  Done! You can now use --use-passkey to login without a password.`);
       } else {
         console.log('  Passkey setup failed. See errors above.');
+      }
+    }
+    closeRL();
+    return;
+  }
+
+  // Handle --list-passkeys: list passkeys registered on the MyChart account
+  if (cliArgs.listPasskeys) {
+    for (const session of sessions) {
+      header(`Listing passkeys for ${session.hostname}`);
+      const passkeys = await listPasskeys(session.request);
+      if (passkeys) {
+        console.log(`  Found ${passkeys.length} passkey(s):`);
+        for (const pk of passkeys) {
+          const p = pk as { rawId?: string; name?: string; createdOnDevice?: string; creationInstant?: string };
+          console.log(`    - ${p.name || 'Unnamed'} (${p.rawId || 'no-id'}) created on ${p.createdOnDevice || 'unknown'} at ${p.creationInstant || 'unknown'}`);
+        }
+      } else {
+        console.log('  Failed to list passkeys. See errors above.');
+      }
+    }
+    closeRL();
+    return;
+  }
+
+  // Handle --delete-passkey: delete all passkeys from the MyChart account
+  if (cliArgs.deletePasskey) {
+    for (const session of sessions) {
+      header(`Deleting passkeys for ${session.hostname}`);
+      const passkeys = await listPasskeys(session.request);
+      if (!passkeys || passkeys.length === 0) {
+        console.log('  No passkeys found to delete.');
+        continue;
+      }
+      for (const pk of passkeys) {
+        const rawId = (pk as { rawId?: string }).rawId;
+        if (!rawId) continue;
+        const success = await deletePasskey(session.request, rawId);
+        if (success) {
+          console.log(`  Deleted passkey: ${rawId}`);
+        } else {
+          console.log(`  Failed to delete passkey: ${rawId}`);
+        }
       }
     }
     closeRL();
