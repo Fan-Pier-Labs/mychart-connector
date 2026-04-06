@@ -126,14 +126,13 @@ afterAll(async () => {
 
 describe('Toggle UI', () => {
   it('loads the home page with the instance visible', async () => {
-    await page.goto(`${BASE_URL}/home`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${BASE_URL}/home`, { waitUntil: 'domcontentloaded' });
 
-    // Wait for the instance hostname to appear
+    // Wait for the instance hostname to appear (skips unreliable networkidle)
     const hostnameLocator = page.getByText(FAKE_MYCHART_HOSTNAME);
-    await hostnameLocator.waitFor({ state: 'visible', timeout: 10_000 });
+    await hostnameLocator.waitFor({ state: 'visible', timeout: 30_000 });
     expect(await hostnameLocator.isVisible()).toBe(true);
-  }, 30_000);
+  }, 60_000);
 
   it('toggle switch is visible and enabled by default', async () => {
     const toggle = page.locator('button[role="switch"]').first();
@@ -151,16 +150,18 @@ describe('Toggle UI', () => {
     // Wait for the PATCH API call to complete
     await page.waitForResponse(
       resp => resp.url().includes('/api/mychart-instances/') && resp.request().method() === 'PATCH',
+      { timeout: 10_000 }
+    );
+
+    // Poll until React re-renders the updated state (replaces flaky waitForTimeout)
+    await page.waitForFunction(
+      () => document.querySelector('button[role="switch"]')?.getAttribute('aria-checked') === 'false',
       { timeout: 5_000 }
     );
 
-    // Small delay for React re-render
-    await page.waitForTimeout(500);
-
-    // Toggle should now be unchecked
     const checked = await toggle.getAttribute('aria-checked');
     expect(checked).toBe('false');
-  });
+  }, 30_000);
 
   it('disabled instance shows "Disabled" label', async () => {
     const disabledLabel = page.getByText('Disabled').first();
@@ -184,17 +185,26 @@ describe('Toggle UI', () => {
     // Wait for the PATCH API call
     await page.waitForResponse(
       resp => resp.url().includes('/api/mychart-instances/') && resp.request().method() === 'PATCH',
+      { timeout: 10_000 }
+    );
+
+    // Poll until React re-renders the updated state
+    await page.waitForFunction(
+      () => document.querySelector('button[role="switch"]')?.getAttribute('aria-checked') === 'true',
       { timeout: 5_000 }
     );
 
-    await page.waitForTimeout(500);
-
     const checked = await toggle.getAttribute('aria-checked');
     expect(checked).toBe('true');
-  });
+  }, 30_000);
 
   it('"Disabled" label disappears after re-enabling', async () => {
-    // Wait a moment for React re-render, then check no "Disabled" labels in instance cards
+    // Wait for React re-render, then check no "Disabled" labels in instance cards
+    await page.waitForFunction(
+      () => document.querySelectorAll('[class*="rounded-lg"]').length > 0 &&
+            !document.querySelector('[class*="rounded-lg"]')?.textContent?.includes('Disabled'),
+      { timeout: 5_000 }
+    );
     const disabledLabels = page.locator('[class*="rounded-lg"] >> text=Disabled');
     expect(await disabledLabels.count()).toBe(0);
   });
