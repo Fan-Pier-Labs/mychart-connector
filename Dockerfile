@@ -13,12 +13,6 @@ COPY scrapers/ ./scrapers/
 COPY shared/ ./shared/
 # clo-to-jpg-converter test files excluded via .dockerignore; source + wasm included
 
-# Stub shared/gmail (deleted from repo but dynamically imported by login.ts;
-# Next.js traces the import at build time so the file must exist)
-RUN mkdir -p shared/gmail && \
-    echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new Error("not available in web"); }' > shared/gmail/gmail.ts && \
-    echo 'export {}' > shared/gmail/util.ts
-
 # Build (NEXT_PUBLIC_* must be set at build time for Next.js inlining)
 ARG NEXT_PUBLIC_BASE_URL=https://openrecord.fanpierlabs.com
 ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
