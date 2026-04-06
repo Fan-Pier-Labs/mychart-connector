@@ -62,6 +62,8 @@ The CLI supports WebAuthn passkey authentication for passwordless login to MyCha
 
 - `--set-up-passkey` — Register a new passkey on the MyChart account (requires username/password for initial setup)
 - `--use-passkey` — Log in using a saved passkey (no password needed)
+- `--list-passkeys` — List all passkeys registered on the MyChart account
+- `--delete-passkey` — Delete all passkeys registered on the MyChart account
 - Auto-discovery: when `--host` is provided without credentials, the CLI checks for a saved passkey before falling back to browser password stores
 
 Passkey credentials are stored in `.passkey-credentials/<hostname>.json` (gitignored). Each file contains the credential ID, private key, RP ID, user handle, and sign count.
@@ -71,3 +73,13 @@ Passkey credentials are stored in `.passkey-credentials/<hostname>.json` (gitign
 The WebAuthn sign count is critical for passkey authentication. The server tracks how many times a passkey has been used and rejects assertions with a sign count lower than or equal to its stored value. If a passkey is used from multiple sessions without the credential file being updated (e.g., copied to a different machine), the server-side counter will be higher than the local file's `signCount`, causing login to fail.
 
 **If passkey login fails unexpectedly**, check the `signCount` in the credential file. If it's lower than the actual number of times the passkey has been used, manually increment it to a value higher than the server's counter (e.g., set it to 100). The CLI automatically increments and saves the updated sign count after each successful login.
+
+## TOTP Management
+
+- `--set-up-totp` — Enable TOTP authenticator app on the MyChart account. Saves secret to `.totp-secrets/<hostname>.txt`
+- `--use-saved-totp` — Use saved TOTP secret for login (no email 2FA needed)
+- `--disable-totp` — Disable TOTP authenticator app (requires saved TOTP secret + password)
+
+## Other Flags
+
+- `--local` — Use HTTP instead of HTTPS (for local development with fake-mychart)
