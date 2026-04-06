@@ -115,14 +115,25 @@ function writeAmfString(buf: number[], str: string) {
 }
 
 // ─── Real CLO Image Data ─────────────────────────────────────────────
-// Pre-generated using scrapers/myChart/clo-image-parser/generate_clo.ts (checkerboard pattern).
-// These are valid CLO files the scraper can decode into real images.
+// Pre-generated skull X-ray images with crayons stuck in Homer's brain.
+// Each series maps to a different image (AP vs lateral view).
 const CLO_DATA_DIR = join(process.cwd(), 'src/data/clo-images');
-const cloWrapper = Buffer.concat([
-  readFileSync(join(CLO_DATA_DIR, 'checkerboard_512x512_wrapper.clo')),
-  readFileSync(join(CLO_DATA_DIR, 'checkerboard_512x512_pixel.clo')),
-]);
-const cloPixel = readFileSync(join(CLO_DATA_DIR, 'checkerboard_512x512_pixel.clo'));
+
+// Per-series CLO data keyed by seriesUID
+const seriesCloData = new Map<string, { wrapper: Buffer; pixel: Buffer }>();
+for (const s of homer.imaging.series) {
+  const prefix = (s as { cloPrefix?: string }).cloPrefix ?? 'checkerboard_512x512';
+  const wrapperBuf = readFileSync(join(CLO_DATA_DIR, `${prefix}_wrapper.clo`));
+  const pixelBuf = readFileSync(join(CLO_DATA_DIR, `${prefix}_pixel.clo`));
+  seriesCloData.set(s.seriesUID, {
+    wrapper: Buffer.concat([wrapperBuf, pixelBuf]),
+    pixel: pixelBuf,
+  });
+}
+
+// Fallback to first series for unmatched requests
+const defaultSeries = homer.imaging.series[0];
+const defaultClo = seriesCloData.get(defaultSeries.seriesUID)!;
 
 // ─── Route handler ──────────────────────────────────────────────────
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
@@ -212,11 +223,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const body = await request.text();
     const formParams = new URLSearchParams(body);
     const requestType = formParams.get('requestType');
+    const seriesUID = formParams.get('seriesUID') ?? '';
+
+    // Look up per-series image data, fall back to default
+    const clo = seriesCloData.get(seriesUID) ?? defaultClo;
 
     if (requestType === 'CLOWRAPPER') {
-      return binary(cloWrapper);
+      return binary(clo.wrapper);
     } else if (requestType === 'CLOPIXEL') {
-      return binary(cloPixel);
+      return binary(clo.pixel);
     } else {
       return new NextResponse('CLOERROR: unsupported request type', { status: 400 });
     }

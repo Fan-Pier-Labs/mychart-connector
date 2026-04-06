@@ -1,71 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
-import { downloadImagingStudyDirect } from '../../../../../scrapers/myChart/eunity/imagingDirectDownload';
+import { getOrInitSession } from '@/lib/imaging-cache';
+import { downloadSingleImage } from '../../../../../scrapers/myChart/eunity/imagingDirectDownload';
 import { convertCloToJpg } from '../../../../../scrapers/myChart/clo-image-parser/clo_to_jpg';
 
 /**
- * Convert and serve X-ray images on-the-fly.
+ * Serve a single X-ray image as lossless JPEG.
  *
- * MyChart X-ray images are stored in a proprietary CLO format accessible
- * via the eUnity DICOM viewer. This endpoint:
- * 1. Downloads CLO image data using the authenticated MyChart session
- * 2. Converts CLO → JPEG using the clo-image-parser
- * 3. Returns the JPEG
+ * Query params:
+ *   - token: session token
+ *   - fdi: base64-encoded FdiContext
+ *   - seriesUID: DICOM series UID
+ *   - objectUID: DICOM instance UID
  *
- * No caching — fetches and converts fresh each time.
+ * Uses cached eUnity session cookies to download the image on the fly.
+ * No image caching — each request makes one CustomImageServlet call.
  */
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
   const fdiParam = req.nextUrl.searchParams.get('fdi');
+  const seriesUID = req.nextUrl.searchParams.get('seriesUID');
+  const objectUID = req.nextUrl.searchParams.get('objectUID');
 
-  if (!token || !fdiParam) {
-    return NextResponse.json({ error: 'Missing token or fdi' }, { status: 400 });
+  if (!token || !fdiParam || !seriesUID || !objectUID) {
+    return NextResponse.json({ error: 'Missing token, fdi, seriesUID, or objectUID' }, { status: 400 });
   }
 
-  const mychartRequest = getSession(token);
-  if (!mychartRequest) {
+  if (!getSession(token)) {
     return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
   }
 
-  let fdiContext: { fdi: string; ord: string };
   try {
-    fdiContext = JSON.parse(Buffer.from(fdiParam, 'base64').toString('utf-8'));
-    if (!fdiContext.fdi || !fdiContext.ord) {
-      throw new Error('Missing fdi or ord');
-    }
-  } catch {
-    return NextResponse.json({ error: 'Invalid fdi parameter' }, { status: 400 });
-  }
+    const eunitySession = await getOrInitSession(token, fdiParam);
 
-  try {
-    const downloadResult = await downloadImagingStudyDirect(
-      mychartRequest,
-      fdiContext,
-      '',
-      '',
-      { skipFileWrite: true, maxImages: 50 },
-    );
-
-    if (downloadResult.errors.length > 0 && downloadResult.images.length === 0) {
-      return NextResponse.json({ error: downloadResult.errors.join('; ') }, { status: 502 });
+    const cloData = await downloadSingleImage(eunitySession, seriesUID, objectUID);
+    if (!cloData) {
+      return NextResponse.json({ error: 'Image not available' }, { status: 404 });
     }
-
-    // Find the largest image with pixel data, preferring real images over tiny scouts
-    const imagesWithData = downloadResult.images.filter(img => img.pixelData && img.pixelData.length > 10000);
-    // Fall back to any image if no large ones found
-    const candidates = imagesWithData.length > 0
-      ? imagesWithData
-      : downloadResult.images.filter(img => img.pixelData);
-    if (candidates.length === 0) {
-      return NextResponse.json({ error: 'No image data available' }, { status: 404 });
-    }
-    const image = candidates.reduce((best, img) =>
-      (img.pixelData!.length > (best.pixelData?.length ?? 0)) ? img : best
-    );
 
     const jpegBuffer = await convertCloToJpg({
-      pixelData: image.pixelData,
-      wrapperData: image.wrapperData,
+      pixelData: cloData.pixelData,
+      wrapperData: cloData.wrapperData,
     });
 
     if (!Buffer.isBuffer(jpegBuffer)) {
@@ -75,7 +50,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(jpegBuffer, {
       headers: {
         'Content-Type': 'image/jpeg',
-        'Cache-Control': 'no-store',
+        'Cache-Control': 'private, max-age=600',
       },
     });
   } catch (err) {
