@@ -262,9 +262,12 @@ function buildClientDataJSON(
   challenge: string, // base64 from server
   origin: string,
 ): Buffer {
+  // WebAuthn spec: challenge in clientDataJSON must be base64url-encoded.
+  // The server sends it as standard base64, so convert: decode → re-encode as base64url.
+  const challengeBase64url = Buffer.from(challenge, 'base64').toString('base64url');
   const clientData = {
     type,
-    challenge,
+    challenge: challengeBase64url,
     origin,
     crossOrigin: false,
   };

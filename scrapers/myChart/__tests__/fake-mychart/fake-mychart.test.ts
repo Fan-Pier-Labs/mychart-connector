@@ -312,7 +312,7 @@ describe('fake-mychart integration', () => {
     // Should be an X-ray result
     const xray = result.find(r => r.orderName.includes('XR'))
     expect(xray).toBeDefined()
-    expect(xray!.reportText).toContain('Heart size')
+    expect(xray!.reportText).toContain('Calvarium')
     expect(xray!.fdiContext).toBeDefined()
     expect(xray!.fdiContext!.fdi).toBe('FDI-XRAY-001')
     expect(xray!.samlUrl).toBeDefined()

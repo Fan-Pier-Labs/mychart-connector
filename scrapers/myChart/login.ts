@@ -734,20 +734,10 @@ async function myChartRawLogin_TEST({hostname, user, pass}: {hostname: string, u
 
   const loginResult = await myChartUserPassLogin({hostname, user, pass})
 
-  let mychartRequest = loginResult.mychartRequest;
+  const mychartRequest = loginResult.mychartRequest;
 
   if (loginResult.state === 'need_2fa') {
-
-    // get the 2fa, just for testing (dynamic import to avoid Node 25 SlowBuffer crash)
-
-    const { get2FaCodeFromEmail } = await import("../../shared/gmail/gmail");
-    const codeArray = await get2FaCodeFromEmail(Date.now(), hostname)
-
-    if (!codeArray) {
-       throw new Error('Failed to get 2fa code') 
-    }
-
-    mychartRequest = (await complete2faFlow({mychartRequest, twofaCodeArray: codeArray})).mychartRequest
+    throw new Error('2FA required — gmail integration has been removed. Use the CLI or web app for 2FA.')
   }
 
   const cookiesValid = await areCookiesValid(mychartRequest)

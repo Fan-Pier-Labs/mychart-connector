@@ -50,6 +50,38 @@ For our scraper: only the server-side keepalive matters. The client-side timer i
 
 The globalThis singleton pattern is required for the sessionStore in Next.js — each API route is bundled separately, so module-level singletons create separate instances. See `scrapers/myChart/sessionStore.ts`.
 
+## Playwright Virtual Authenticator for Passkey Login
+
+Playwright can use CDP virtual authenticators to log in with saved software passkeys automatically — no 2FA needed:
+
+```typescript
+const cdpSession = await page.context().newCDPSession(page);
+await cdpSession.send('WebAuthn.enable');
+const { authenticatorId } = await cdpSession.send('WebAuthn.addVirtualAuthenticator', {
+  options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true }
+});
+// Add saved credential from .passkey-credentials/<hostname>.json
+await cdpSession.send('WebAuthn.addCredential', {
+  authenticatorId,
+  credential: { credentialId, rpId, privateKey, userHandle, signCount, isResidentCredential: true }
+});
+```
+
+Private key format: CDP expects raw PKCS8 bytes as base64, which is exactly what's stored in the credential file. Then click "Log in with passkey" and the virtual authenticator handles everything.
+
+## eUnity Image Download — Each Image Has Its Own SeriesUID (Discovered 2026-04-05)
+
+The AMF parser may report multiple instanceUIDs under the "same" seriesUID, but the real eUnity viewer treats each (seriesUID, objectUID) pair as a separate image request. Network capture shows:
+- 3 separate CLOWRAPPER requests with 3 **different** seriesUIDs, each with `frameNumber=1`
+- Requesting the same seriesUID with different objectUIDs returns 217-byte errors
+- `level` parameter varies per series (0, 3, 4) — not just per progressive refinement
+
+The scraper must use each entry's own seriesUID + instanceUID as-is from the AMF parse, not group by seriesUID.
+
+## Passkey Challenge Encoding (Fixed 2026-04-05)
+
+WebAuthn spec requires the `challenge` field in `clientDataJSON` to be **base64url** encoded, not standard base64. The MyChart server sends the challenge as standard base64. Must convert: `Buffer.from(challenge, 'base64').toString('base64url')` before building clientDataJSON.
+
 ## Project Patterns
 - Scrapers follow pattern: export async function that takes `MyChartRequest`, returns typed data
 - `MyChartRequest` handles cookies, headers, redirects via `makeRequest(config)`

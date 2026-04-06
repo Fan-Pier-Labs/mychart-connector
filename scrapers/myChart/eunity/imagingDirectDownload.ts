@@ -623,10 +623,28 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   // Check if the positional analysis produced useful results.
   // For small studies (X-rays) where all UIDs have unique parents,
   // every UID becomes a "series" with 0 instances — fall back to legacy parser.
+  //
+  // Also fall back when: the remaining UIDs (excluding study UID) form clean pairs
+  // but the positional analysis collapsed them into too few series. This happens when
+  // UIDs share a common parent prefix (e.g., 1.3.51.0.7.X) but are actually
+  // alternating series/instance pairs.
   const totalInstances = [...seriesInstances.values()].reduce((sum, s) => sum + s.size, 0);
+  const expectedPairCount = Math.floor(orderedUIDs.length / 2);
+  const actualSeriesWithImages = [...seriesInstances.values()].filter(s => s.size > 0).length;
 
   if (candidateSeriesUIDs.length === 0 || totalInstances === 0) {
     console.log(`      [AMF-PARSE] Positional analysis found ${candidateSeriesUIDs.length} series with ${totalInstances} instances, falling back to pair-based parsing`);
+    return parseStudySeriesFromAmfLegacy(amfBuf);
+  }
+
+  // If positional analysis collapsed many UIDs into one series with few instances,
+  // and pair-based parsing would produce more series, fall back to pairs.
+  // This catches X-ray studies (2-6 views) where UIDs share a parent prefix
+  // but are actually separate series+instance pairs.
+  // Don't fall back for CT/MRI with many instances per series (>10).
+  const maxInstancesPerSeries = Math.max(...[...seriesInstances.values()].map(s => s.size));
+  if (expectedPairCount >= 2 && actualSeriesWithImages <= 1 && maxInstancesPerSeries <= 10 && expectedPairCount > actualSeriesWithImages) {
+    console.log(`      [AMF-PARSE] Positional analysis found ${actualSeriesWithImages} series with images but ${expectedPairCount} pairs expected, falling back to pair-based parsing`);
     return parseStudySeriesFromAmfLegacy(amfBuf);
   }
 
@@ -893,6 +911,85 @@ async function initializeAmfSession(
   }
 
   return { amfBuf, effectiveServiceInstance };
+}
+
+// ─── eUnity Session ───
+
+export interface EunitySession {
+  cookieJar: tough.CookieJar;
+  baseUrl: string;
+  studyUID: string;
+  serviceInstance: string;
+  series: Array<{ seriesUID: string; instanceUID: string; seriesDescription: string }>;
+}
+
+/**
+ * Initialize an eUnity session: SAML chain + AMF init + parse series.
+ * Returns the authenticated session with cookies and parsed series list.
+ * The cookies can be reused for individual image downloads via downloadSingleImage().
+ */
+export async function initEunitySession(
+  mychartRequest: MyChartRequest,
+  fdiContext: FdiContext,
+): Promise<EunitySession | null> {
+  const viewerSession = await getImageViewerSamlUrl(mychartRequest, fdiContext);
+  if (!viewerSession?.samlUrl) return null;
+
+  const session = await followSamlChain(mychartRequest, viewerSession.samlUrl);
+  if (!session) return null;
+
+  const studyParams = parseEunityStudyParams(session.viewerUrl, session.viewerBody);
+  if (!studyParams) return null;
+
+  const baseUrl = new URL(session.viewerUrl).origin;
+  const amfResult = await initializeAmfSession(
+    session.cookieJar, baseUrl,
+    studyParams.accession, studyParams.serviceInstance, studyParams.patientId,
+  );
+  if (!amfResult) return null;
+
+  const { amfBuf, effectiveServiceInstance } = amfResult;
+  const studyInfo = parseStudySeriesFromAmf(amfBuf);
+  if (!studyInfo || studyInfo.series.length === 0) return null;
+
+  return {
+    cookieJar: session.cookieJar,
+    baseUrl,
+    studyUID: studyInfo.studyUID,
+    serviceInstance: effectiveServiceInstance,
+    series: studyInfo.series,
+  };
+}
+
+/**
+ * Download a single image from an initialized eUnity session.
+ * Returns the raw CLO pixel + wrapper data for conversion.
+ */
+export async function downloadSingleImage(
+  eunitySession: EunitySession,
+  seriesUID: string,
+  objectUID: string,
+): Promise<{ pixelData: Buffer; wrapperData?: Buffer } | null> {
+  const { data } = await downloadImage(eunitySession.cookieJar, eunitySession.baseUrl, {
+    studyUID: eunitySession.studyUID,
+    seriesUID,
+    objectUID,
+    serviceInstance: eunitySession.serviceInstance,
+    format: 'CLOWRAPPER',
+  });
+
+  if (data.length < 256 || (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR')) {
+    return null;
+  }
+
+  const CLOCLHAAR_MAGIC = Buffer.from('CLOCLHAAR');
+  const haarIdx = data.indexOf(CLOCLHAAR_MAGIC);
+  if (haarIdx < 0) return null;
+
+  return {
+    pixelData: Buffer.from(data.subarray(haarIdx)),
+    wrapperData: haarIdx > 0 ? Buffer.from(data.subarray(0, haarIdx)) : undefined,
+  };
 }
 
 // ─── Image Download ───
@@ -1371,16 +1468,17 @@ export async function downloadImagingStudyDirect(
       instanceCount: count,
     }));
 
-    // Step 6: Download images for each series
+    // Step 6: Download images — each (seriesUID, instanceUID) pair is a separate image.
+    // The eUnity viewer requests each with its own seriesUID + objectUID, frameNumber=1.
     const maxImages = options?.maxImages ?? Infinity;
     for (const series of studyInfo.series) {
       if (result.images.length >= maxImages) break;
-      console.log(`      Downloading ${series.seriesDescription}...`);
+      console.log(`      Downloading ${series.seriesDescription} (${series.seriesUID.substring(series.seriesUID.length - 12)})...`);
       const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
       const safeDesc = series.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
 
       try {
-        // Download CLOWRAPPER (metadata + low-res image data)
+        // Download CLOWRAPPER (metadata + image data)
         const { data } = await downloadImage(session.cookieJar, baseUrl, {
           studyUID: studyInfo.studyUID,
           seriesUID: series.seriesUID,
@@ -1391,9 +1489,10 @@ export async function downloadImagingStudyDirect(
 
         // Skip empty/error responses (< 256 bytes is too small for real image data)
         if (data.length < 256 || (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR')) {
-          console.log(`      Skipping ${series.seriesDescription}: empty or error response (${data.length} bytes)`);
+          console.log(`      Skipping ${series.seriesDescription}: ${data.length} bytes`);
           continue;
         }
+        console.log(`      Got ${series.seriesDescription} (${(data.length / 1024).toFixed(0)} KB)`);
 
         const ext = isCloFormat(data) ? '.clo' : '.bin';
         const fileName = `${safeName}_${safeDesc}_wrapper${ext}`;
@@ -1404,9 +1503,10 @@ export async function downloadImagingStudyDirect(
           // Split into wrapper metadata and embedded pixel data for in-memory conversion.
           const CLOCLHAAR_MAGIC = Buffer.from('CLOCLHAAR');
           const haarIdx = data.indexOf(CLOCLHAAR_MAGIC);
-          if (haarIdx > 0) {
-            const wrapperMetadata = data.subarray(0, haarIdx);
+          if (haarIdx >= 0) {
+            const wrapperMetadata = haarIdx > 0 ? data.subarray(0, haarIdx) : undefined;
             const embeddedPixelData = data.subarray(haarIdx);
+            console.log(`      Buffer: ${series.seriesDescription} wrapper=${haarIdx > 0 ? haarIdx : 0}B pixel=${embeddedPixelData.length}B`);
             result.images.push({
               filePath: '',
               sizeBytes: embeddedPixelData.length,
@@ -1416,8 +1516,10 @@ export async function downloadImagingStudyDirect(
               accessionNumber: studyParams.accession,
               format: 'CLHAAR',
               pixelData: Buffer.from(embeddedPixelData),
-              wrapperData: Buffer.from(wrapperMetadata),
+              wrapperData: wrapperMetadata ? Buffer.from(wrapperMetadata) : undefined,
             });
+          } else {
+            console.log(`      Skipping ${series.seriesDescription}: no CLOCLHAAR magic in ${data.length}B response (starts with: ${data.toString('ascii', 0, 12)})`);
           }
         } else {
           await fs.promises.writeFile(filePath, data);
