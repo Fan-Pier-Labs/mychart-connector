@@ -13,12 +13,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npx eslint
+      - run: npx eslint .
         env:
-          NODE_OPTIONS: '--max-old-space-size=8192'
-      - run: cd web && npx eslint
+          NODE_OPTIONS: '--max-old-space-size=4096'
+      - run: cd web && npx eslint .
         env:
-          NODE_OPTIONS: '--max-old-space-size=8192'
+          NODE_OPTIONS: '--max-old-space-size=4096'
       - run: bun run test
       - run: cd web && bun --bun next build
       - run: docker build .
