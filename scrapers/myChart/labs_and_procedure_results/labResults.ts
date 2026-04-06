@@ -206,16 +206,33 @@ export async function getImagingResults(mychartRequest: MyChartRequest, options?
 
           // Extract report text from narrative + impression
           const reportParts: string[] = [];
+          const narrativeParts: string[] = [];
+          const impressionParts: string[] = [];
           for (const r of labResult.results ?? []) {
             if (r.studyResult?.narrative?.hasContent) {
               reportParts.push(r.studyResult.narrative.contentAsString);
+              narrativeParts.push(r.studyResult.narrative.contentAsString);
             }
             if (r.studyResult?.impression?.hasContent) {
               reportParts.push('IMPRESSION: ' + r.studyResult.impression.contentAsString);
+              impressionParts.push(r.studyResult.impression.contentAsString);
             }
           }
           if (reportParts.length > 0) {
             imagingResult.reportText = reportParts.join('\n\n');
+          }
+          if (narrativeParts.length > 0) {
+            imagingResult.narrative = narrativeParts.join('\n\n');
+          }
+          if (impressionParts.length > 0) {
+            imagingResult.impression = impressionParts.join('\n\n');
+          }
+
+          // Extract provider and date from first result
+          const firstResult = labResult.results?.[0];
+          if (firstResult?.orderMetadata) {
+            imagingResult.resultDate = firstResult.orderMetadata.resultTimestampDisplay || '';
+            imagingResult.orderProvider = firstResult.orderMetadata.orderProviderName || '';
           }
 
           // Extract FDI context from report content HTML (for image viewer access)
