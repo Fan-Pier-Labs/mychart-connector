@@ -58,6 +58,8 @@ End-to-end tests in `tests/integration/ci/` that exercise the full user journey 
 
 - **[CLI reference](docs/cli.md)** — Cookie caching, credential resolution, 2FA, CLI actions
 - **[Imaging scraper](docs/imaging.md)** — eUnity protocol, AMF3, instance-specific notes
+- **[Scraping guide](docs/scraping.md)** — MyChart login, scraping tips, and tooling
+- **[OpenClaw plugin](docs/openclaw.md)** — Build, install, setup, and tool registration
 - **[Deployment details](docs/deployment.md)** — Additional infrastructure notes
 - **[MyChart features](MYCHART_FEATURES.md)** — Full inventory of MyChart features and scraper coverage
 - **[MyChart TOTP](docs/mychart-totp.md)** — TOTP authenticator app 2FA setup, API endpoints, CLI flags
@@ -104,17 +106,6 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET**: Google OAuth credentials (optional, Google sign-in disabled without them)
 - **SENTRY_AUTH_TOKEN**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:mychart-connector-sentry-auth-token-UputCa`
   - Sentry auth token for error monitoring and source map uploads
-
-## MyChart Login
-
-- Login field auto-detection: `LoginIdentifier` vs `Username` — detected from `loginpagecontroller.min.js`
-- `mychart.example.org` is the primary test target and often skips 2FA
-- Fetch passwords from the browser keystore
-- Do not ask the user for 2FA codes — retrieve them automatically via the Resend API (see [CLI docs](docs/cli.md#automatic-2fa-via-resend))
-- Session expiration: a 302 redirect to the Login page means cookies are dead
-- **Passkey auto-login**: The web app stores passkey credentials (encrypted) per MyChart instance. Auto-connect prefers passkey login (bypasses 2FA entirely), falling back to username/password/TOTP. Users set up passkeys via a "Setup Passkey" button on the instance card. If a passkey fails (e.g. revoked on the portal), it is auto-cleared from the DB.
-  - Key files: `web/src/lib/mcp/auto-connect.ts`, `web/src/app/api/mychart-instances/[id]/setup-passkey/route.ts`
-  - Scraper layer: `scrapers/myChart/setupPasskey.ts` (registration), `scrapers/myChart/login.ts` (`myChartPasskeyLogin`), `scrapers/myChart/softwareAuthenticator.ts` (software WebAuthn)
 
 ## App Authentication & 2FA
 
@@ -175,19 +166,6 @@ Key files:
 - `web/src/lib/notifications/templates.ts` — HTML email templates (summary + detailed)
 - `web/src/app/api/notifications/preferences/route.ts` — GET/PUT user preferences
 
-## OpenClaw Plugin
-
-Self-contained plugin in `openclaw-plugin/` that bundles all MyChart scraper code locally (no server needed).
-
-- **Build**: `cd openclaw-plugin && bun run build` (produces `dist/index.js` via tsup)
-- **Install**: `openclaw plugins install -l ./openclaw-plugin`
-- **Setup**: `openclaw mychart setup` — interactive credential config with optional browser password import and TOTP setup
-- **Status**: `openclaw mychart status` — show current config
-- **Reset**: `openclaw mychart reset` — clear saved credentials
-- Registers 35+ tools (`mychart_get_profile`, `mychart_get_medications`, `mychart_send_message`, etc.)
-- Auto-login via TOTP, session keepalive every 30s, automatic re-login on expiry
-- Key source files: `src/index.ts` (entry), `src/session.ts` (login/keepalive), `src/tools.ts` (tool registration), `src/setup.ts` (CLI), `src/config.ts` (credentials), `src/password-import.ts` (browser import)
-
 ## Memory
 
 You maintain persistent memory in markdown files at `claude-memory/` in the repo root. This replaces the built-in auto-memory feature (which is disabled for this project).
@@ -216,14 +194,6 @@ You maintain persistent memory in markdown files at `claude-memory/` in the repo
 - Update or remove memories that turn out to be wrong or outdated
 - Keep MEMORY.md concise — use separate files for detailed notes
 - Organize by topic, not chronologically
-
-## Scraping Tips
-
-When reverse engineering health portal APIs (MyChart, etc.), the request headers must **exactly match** what the browser sends — including header name casing (lowercase), `origin` header, `user-agent` string version, and `x-clientversion`. A missing `origin` header alone causes a 403 Forbidden. Use Playwright MCP to capture the exact request the browser makes, then replicate it exactly in the scraper code. 
-
-## Tools
-
-- **Playwright MCP** is the preferred tool for exploring websites, reverse engineering APIs, and understanding web app behavior. Always use the Playwright MCP tools (browser_navigate, browser_snapshot, browser_click, browser_network_requests, etc.) rather than writing one-off TypeScript scripts that import Playwright directly. The MCP gives you an interactive browser session that's far more efficient for investigation and debugging.
 
 ## Rules
 
