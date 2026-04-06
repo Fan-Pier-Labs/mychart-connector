@@ -39,7 +39,7 @@ import { getLinkedMyChartAccounts } from '../scrapers/myChart/other_mycharts/oth
 import { getConversationMessages } from '../scrapers/myChart/messages/messageThreads';
 import { getImagingResults } from '../scrapers/myChart/labs_and_procedure_results/labResults';
 import { downloadImagingStudyDirect } from '../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
+import { convertCloToJpg } from '../scrapers/myChart/clo-image-parser/clo_to_jpg';
 import { deleteMessage } from '../scrapers/myChart/messages/deleteMessage';
 import { requestMedicationRefill } from '../scrapers/myChart/medicationRefill';
 import { sessionStore } from '../scrapers/myChart/sessionStore';
@@ -47,8 +47,9 @@ import { generateTotpCode } from '../scrapers/myChart/totp';
 import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
 import { myChartPasskeyLogin } from '../scrapers/myChart/login';
-import { setupPasskey } from '../scrapers/myChart/setupPasskey';
+import { setupPasskey, listPasskeys, deletePasskey } from '../scrapers/myChart/setupPasskey';
 import { savePasskeyCredential, loadPasskeyCredential } from './passkeyStore';
+import type { PasskeyCredential } from '../scrapers/myChart/softwareAuthenticator';
 import { sendTelemetryEvent } from '../shared/telemetry';
 import { checkForUpdate } from '../shared/updateCheck';
 import { isBlockedInstance } from '../shared/blockedInstances';
@@ -90,7 +91,7 @@ async function saveCachedSession(hostname: string, mychartRequest: MyChartReques
 //   npx tsx src/cli.ts --host <hostname> --action send-message  (send a new message)
 //   npx tsx src/cli.ts --host <hostname> --action send-reply --conversation-id <id> --message <msg>
 
-function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean } {
+function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean } {
   const args = process.argv.slice(2);
   const parsed: Record<string, string | boolean> = {};
   for (let i = 0; i < args.length; i++) {
@@ -109,9 +110,11 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--disable-totp') parsed.disableTotp = true;
     else if (args[i] === '--set-up-passkey') parsed.setupPasskey = true;
     else if (args[i] === '--use-passkey') parsed.usePasskey = true;
+    else if (args[i] === '--list-passkeys') parsed.listPasskeys = true;
+    else if (args[i] === '--delete-passkey') parsed.deletePasskey = true;
     else if (args[i] === '--local') parsed.local = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; local?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -265,9 +268,15 @@ async function getManualCredentials(): Promise<{ hostname: string; username: str
   return { hostname, username, password };
 }
 
+// ─── Types ───
+
+type LoginCredentials =
+  | { hostname: string; passkey: PasskeyCredential }
+  | { hostname: string; username: string; password: string; totp?: string };
+
 // ─── Step 2: Login ───
 
-async function login(creds: { hostname: string; username: string; password: string }): Promise<MyChartRequest | null> {
+async function login(creds: LoginCredentials): Promise<MyChartRequest | null> {
   if (isBlockedInstance(creds.hostname)) {
     console.log(`\n  ✗ ${creds.hostname} is not supported. central.mychart.org is a portal aggregator and cannot be scraped directly. Please use the individual hospital MyChart instance instead.`);
     return null;
@@ -285,34 +294,29 @@ async function login(creds: { hostname: string; username: string; password: stri
   }
 
   try {
-    // Try passkey login first if --use-passkey or if a saved passkey exists
-    const savedPasskey = await loadPasskeyCredential(creds.hostname);
-    if (cliArgs.usePasskey || savedPasskey) {
-      if (!savedPasskey) {
-        console.log(`  No saved passkey found for ${creds.hostname}. Run with --set-up-passkey first.`);
-        if (cliArgs.usePasskey) return null; // Only fail if explicitly requested
-      } else {
-        console.log(`  Attempting passkey login for ${creds.hostname}...`);
-        const passkeyResult = await myChartPasskeyLogin({
-          hostname: creds.hostname,
-          credential: savedPasskey,
-          protocol: cliArgs.local ? 'http' : undefined,
-        });
+    // Passkey login
+    if ('passkey' in creds) {
+      console.log(`  Attempting passkey login for ${creds.hostname}...`);
+      const passkeyResult = await myChartPasskeyLogin({
+        hostname: creds.hostname,
+        credential: creds.passkey,
+        protocol: cliArgs.local ? 'http' : undefined,
+      });
 
-        if (passkeyResult.state === 'logged_in') {
-          console.log('  Passkey login successful!');
-          // Save updated credential (incremented sign counter)
-          await savePasskeyCredential(creds.hostname, savedPasskey);
-          await saveCachedSession(creds.hostname, passkeyResult.mychartRequest);
-          return passkeyResult.mychartRequest;
-        }
-
-        console.log(`  Passkey login failed (${passkeyResult.state}). Falling back to password login.`);
+      if (passkeyResult.state === 'logged_in') {
+        console.log('  Passkey login successful!');
+        // Save updated credential (incremented sign counter)
+        await savePasskeyCredential(creds.hostname, creds.passkey);
+        await saveCachedSession(creds.hostname, passkeyResult.mychartRequest);
+        return passkeyResult.mychartRequest;
       }
+
+      console.log(`  Passkey login failed (${passkeyResult.state}).`);
+      return null;
     }
 
-    // Check if we should use TOTP for 2FA
-    const useTotpSecret = cliArgs.useSavedTotp ? await loadTotpSecret(creds.hostname) : null;
+    // Password login
+    const useTotpSecret = creds.totp ?? (cliArgs.useSavedTotp ? await loadTotpSecret(creds.hostname) : null);
     if (cliArgs.useSavedTotp && !useTotpSecret) {
       console.log(`  No saved TOTP secret found for ${creds.hostname}. Run with --set-up-totp first.`);
       return null;
@@ -1272,29 +1276,42 @@ async function main() {
       console.log(`  Using ${cliArgs.host} (user: ${cliArgs.user})`);
     }
   } else if (cliArgs.host && !cliArgs.user && !cliArgs.pass) {
-    const resolved = await resolveCredsFromBrowsers(cliArgs.host);
-    if (resolved) {
-      cliArgs.user = resolved.user;
-      cliArgs.pass = resolved.pass;
+    // Check for saved passkey first — no username/password needed
+    const savedPasskey = await loadPasskeyCredential(cliArgs.host);
+    if (savedPasskey) {
+      console.log(`\n  Found saved passkey for ${cliArgs.host}. Logging in with passkey...`);
+      cliArgs.usePasskey = true;
     } else {
-      console.log(`\n  Could not find credentials for ${cliArgs.host}.`);
-      console.log(`  Provide them: npx tsx src/cli.ts --host ${cliArgs.host} --user X --pass Y\n`);
-      closeRL();
-      process.exit(1);
+      const resolved = await resolveCredsFromBrowsers(cliArgs.host);
+      if (resolved) {
+        cliArgs.user = resolved.user;
+        cliArgs.pass = resolved.pass;
+      } else {
+        console.log(`\n  Could not find credentials for ${cliArgs.host}.`);
+        console.log(`  Provide them: npx tsx src/cli.ts --host ${cliArgs.host} --user X --pass Y\n`);
+        closeRL();
+        process.exit(1);
+      }
     }
   }
-  nonInteractive = !!(cliArgs.host && cliArgs.user && cliArgs.pass);
+  nonInteractive = !!(cliArgs.host && (cliArgs.usePasskey || (cliArgs.user && cliArgs.pass)));
 
-  let credentialsList: { hostname: string; username: string; password: string }[];
+  let credentialsList: LoginCredentials[];
 
   if (nonInteractive) {
-    // Non-interactive mode: credentials from CLI args or Keychain
+    // Non-interactive mode: credentials from CLI args, Keychain, or passkey
     console.log(`\n  Non-interactive mode: --host ${cliArgs.host}`);
-    credentialsList = [{
-      hostname: cliArgs.host!,
-      username: cliArgs.user!,
-      password: cliArgs.pass!,
-    }];
+    if (cliArgs.usePasskey) {
+      const passkey = await loadPasskeyCredential(cliArgs.host!);
+      if (!passkey) {
+        console.log(`  No saved passkey found for ${cliArgs.host}. Run with --set-up-passkey first.`);
+        closeRL();
+        process.exit(1);
+      }
+      credentialsList = [{ hostname: cliArgs.host!, passkey }];
+    } else {
+      credentialsList = [{ hostname: cliArgs.host!, username: cliArgs.user!, password: cliArgs.pass! }];
+    }
   } else {
     console.log('\n  This tool logs into your MyChart account(s) and scrapes');
     console.log('  your medical data (profile, bills, visits, labs, messages).');
@@ -1336,6 +1353,10 @@ async function main() {
         console.log('  Could not find credentials for this session.');
         continue;
       }
+      if (!('username' in creds)) {
+        console.log('  Password required for TOTP setup (not available in passkey-only mode).');
+        continue;
+      }
       const result = await setupTotp(session.request, creds.password);
       if (result.secret) {
         await saveTotpSecret(session.hostname, result.secret);
@@ -1362,6 +1383,10 @@ async function main() {
         console.log(`  No saved TOTP secret found for ${session.hostname}. Cannot disable without a code.`);
         continue;
       }
+      if (!('username' in creds)) {
+        console.log('  Password required to disable TOTP (not available in passkey-only mode).');
+        continue;
+      }
       const success = await disableTotp(session.request, creds.password, totpSecret);
       if (success) {
         console.log(`  Done! TOTP has been disabled.`);
@@ -1383,6 +1408,49 @@ async function main() {
         console.log(`  Done! You can now use --use-passkey to login without a password.`);
       } else {
         console.log('  Passkey setup failed. See errors above.');
+      }
+    }
+    closeRL();
+    return;
+  }
+
+  // Handle --list-passkeys: list passkeys registered on the MyChart account
+  if (cliArgs.listPasskeys) {
+    for (const session of sessions) {
+      header(`Listing passkeys for ${session.hostname}`);
+      const passkeys = await listPasskeys(session.request);
+      if (passkeys) {
+        console.log(`  Found ${passkeys.length} passkey(s):`);
+        for (const pk of passkeys) {
+          const p = pk as { rawId?: string; name?: string; createdOnDevice?: string; creationInstant?: string };
+          console.log(`    - ${p.name || 'Unnamed'} (${p.rawId || 'no-id'}) created on ${p.createdOnDevice || 'unknown'} at ${p.creationInstant || 'unknown'}`);
+        }
+      } else {
+        console.log('  Failed to list passkeys. See errors above.');
+      }
+    }
+    closeRL();
+    return;
+  }
+
+  // Handle --delete-passkey: delete all passkeys from the MyChart account
+  if (cliArgs.deletePasskey) {
+    for (const session of sessions) {
+      header(`Deleting passkeys for ${session.hostname}`);
+      const passkeys = await listPasskeys(session.request);
+      if (!passkeys || passkeys.length === 0) {
+        console.log('  No passkeys found to delete.');
+        continue;
+      }
+      for (const pk of passkeys) {
+        const rawId = (pk as { rawId?: string }).rawId;
+        if (!rawId) continue;
+        const success = await deletePasskey(session.request, rawId);
+        if (success) {
+          console.log(`  Deleted passkey: ${rawId}`);
+        } else {
+          console.log(`  Failed to delete passkey: ${rawId}`);
+        }
       }
     }
     closeRL();
@@ -1507,20 +1575,45 @@ async function main() {
                 { skipFileWrite: true },
               );
 
-              // Convert each CLO buffer to JPG
+              // Convert each CLO buffer to JPG, organized by series
               let imgCount = 0;
+              // Group images by series for per-series subdirectories
+              const seriesGroups = new Map<string, typeof directResult.images>();
               for (const img of directResult.images) {
-                if (img.pixelData) {
-                  const safeDesc = img.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
-                  const jpgPath = path.join(studyDir, `${safeDesc}.jpg`);
+                if (!img.pixelData) continue;
+                const key = img.seriesUID;
+                if (!seriesGroups.has(key)) seriesGroups.set(key, []);
+                seriesGroups.get(key)!.push(img);
+              }
+
+              for (const [, seriesImages] of seriesGroups) {
+                const safeDesc = seriesImages[0].seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const multiSlice = seriesImages.length > 1;
+                // Create per-series subdirectory for multi-slice series (e.g. CT)
+                const seriesDir = multiSlice ? path.join(studyDir, safeDesc) : studyDir;
+                if (multiSlice) await fs.promises.mkdir(seriesDir, { recursive: true });
+
+                for (let i = 0; i < seriesImages.length; i++) {
+                  const img = seriesImages[i];
+                  const fileName = multiSlice
+                    ? `${String(i + 1).padStart(4, '0')}.jpg`
+                    : `${safeDesc}.jpg`;
+                  const jpgPath = path.join(seriesDir, fileName);
                   try {
-                    await convertCloToJpg(img.pixelData, jpgPath, img.wrapperData);
+                    await convertCloToJpg({ pixelData: img.pixelData!, outputPath: jpgPath, wrapperData: img.wrapperData });
                     const stat = await fs.promises.stat(jpgPath);
-                    console.log(`          Saved: ${safeDesc}.jpg (${(stat.size / 1024).toFixed(0)} KB) - ${img.seriesDescription}`);
+                    if (!multiSlice || i === 0 || i === seriesImages.length - 1) {
+                      console.log(`          Saved: ${multiSlice ? `${safeDesc}/${fileName}` : fileName} (${(stat.size / 1024).toFixed(0)} KB) - ${img.seriesDescription}`);
+                    } else if (i === 1) {
+                      console.log(`          ... converting ${seriesImages.length - 2} more slices ...`);
+                    }
                     imgCount++;
                   } catch (convErr) {
-                    console.log(`          CLO→JPG conversion failed for ${img.seriesDescription}: ${(convErr as Error).message}`);
+                    console.log(`          CLO→JPG conversion failed for ${img.seriesDescription} slice ${i + 1}: ${(convErr as Error).message}`);
                   }
+                }
+                if (multiSlice) {
+                  console.log(`          Series "${seriesImages[0].seriesDescription}": ${seriesImages.length} slices → ${seriesDir}`);
                 }
               }
 
@@ -1565,6 +1658,18 @@ async function main() {
               }
               await fs.promises.writeFile(path.join(hostDir, txtName), text);
               console.log(`        Saved: ${txtName}`);
+            } else if (r.reportDetails?.reportContent?.reportContent) {
+              // Fallback: extract text from report HTML when narrative/impression fields are empty
+              const reportText = r.reportDetails.reportContent.reportContent
+                .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'")
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/\s+/g, ' ').trim();
+              if (reportText.length > 20) {
+                const txtName = `${safeName}_narrative.txt`;
+                await fs.promises.writeFile(path.join(hostDir, txtName), reportText);
+                console.log(`        Report: ${reportText.substring(0, 200)}...`);
+                console.log(`        Saved: ${txtName}`);
+              }
             }
 
             if (r.imageStudies?.length) {

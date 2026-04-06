@@ -58,6 +58,11 @@ export async function runMigrations(): Promise<void> {
     ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE;
   `);
 
+  // 7. Add passkey credential column to mychart_instances
+  await pool.query(`
+    ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS encrypted_passkey_credential TEXT;
+  `);
+
   await pool.end();
   console.log('[migrate] Database migrations complete.');
 }

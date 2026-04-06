@@ -42,6 +42,13 @@ const mockGetInstances = mock(() => Promise.resolve([] as unknown[]));
 mock.module('@/lib/db', () => ({
   getMyChartInstances: mockGetInstances,
   createMyChartInstance: mock(() => Promise.resolve({})),
+  getMyChartInstance: mock(() => Promise.resolve(null)),
+  updateMyChartInstance: mock(() => Promise.resolve(null)),
+  deleteMyChartInstance: mock(() => Promise.resolve(false)),
+  getNotificationEnabledInstances: mock(() => Promise.resolve([])),
+  updateNotificationLastChecked: mock(() => Promise.resolve()),
+  getUserNotificationPreferences: mock(() => Promise.resolve({ enabled: false, includeContent: false })),
+  setUserNotificationPreferences: mock(() => Promise.resolve()),
 }));
 
 // Mock sessionStore (via @/lib/sessions which re-exports it)
@@ -56,7 +63,14 @@ mock.module('../../../../../scrapers/myChart/sessionStore', () => ({
   sessionStore: mockSessionStore,
 }));
 mock.module('@/lib/sessions', () => ({
+  getSession: mock(() => undefined),
+  setSession: mock(() => {}),
+  deleteSession: mock(() => {}),
+  getSessionMetadata: mock(() => undefined),
+  randomToken: mock(() => 'mock-token'),
   sessionStore: mockSessionStore,
+  SESSION_COOKIE_NAME: 'session_token',
+  SESSION_COOKIE_MAX_AGE: 86400,
 }));
 
 // Mock auto-connect

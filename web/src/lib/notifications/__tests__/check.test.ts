@@ -123,6 +123,17 @@ describe('checkAllUsers', () => {
     expect(result.sent).toBe(0);
   });
 
+  test('instance with passkey but no TOTP is included in notification checks', async () => {
+    // The SQL query now uses: (encrypted_totp_secret IS NOT NULL OR encrypted_passkey_credential IS NOT NULL)
+    // An instance with only a passkey credential should still be processed.
+    mockInstances.push(makeInstance({ totpSecret: null, passkeyCredential: '{"credentialId":"abc"}' }));
+
+    const result = await checkAllUsers();
+    // Should process (checked=1), not error, no email sent (no changes)
+    expect(result.checked).toBe(1);
+    expect(result.errors).toBe(0);
+  });
+
   test('disabled instances are excluded by getNotificationEnabledInstances SQL filter', async () => {
     // getNotificationEnabledInstances adds `AND mi.enabled = TRUE` to the query,
     // so disabled instances never appear in mockInstances at all.

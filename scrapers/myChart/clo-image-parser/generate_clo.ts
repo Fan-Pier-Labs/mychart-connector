@@ -6,7 +6,7 @@
  * CLOHEADERZ01 wrapper format, reversing the decode pipeline in clo_to_jpg.ts.
  *
  * Usage:
- *   bun scrapers/myChart/clo-to-jpg-converter/generate_clo.ts [--output-dir <dir>]
+ *   bun scrapers/myChart/clo-image-parser/generate_clo.ts [--output-dir <dir>]
  */
 
 import { writeFileSync, mkdirSync } from "fs";

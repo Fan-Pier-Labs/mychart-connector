@@ -22,7 +22,7 @@ export async function checkAllUsers(): Promise<{ checked: number; sent: number; 
 
   for (const instance of instances) {
     try {
-      // Auto-connect (requires TOTP)
+      // Auto-connect (requires TOTP or passkey)
       const connectResult = await autoConnectInstance(instance.userId, instance);
       if (connectResult !== 'logged_in') {
         console.warn(`[notifications] Could not connect to ${instance.hostname} for user ${instance.userId}: ${connectResult}`);

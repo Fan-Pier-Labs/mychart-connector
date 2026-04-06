@@ -5,7 +5,8 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "fix": "eslint --fix",
-    "lint": "eslint && cd web && eslint",
+    "lint": "eslint",
+    "lint:web": "cd web && eslint",
     "dev_mock": "MOCK_DATA=true bun run dev",
     "cli": "bun cli/entry.ts",
     "test": "bun test scrapers/myChart/__tests__/*.test.ts scrapers/myChart/eunity/__tests__/*.test.ts shared/__tests__/*.test.ts && cd web && bun test",

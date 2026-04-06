@@ -118,9 +118,31 @@ export function MyChartAccountsCard(props: Props) {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {inst.username}
                   {inst.hasTotpSecret && " (TOTP)"}
+                  {inst.hasPasskeyCredential && " (Passkey)"}
                 </p>
               </div>
               <div className="flex items-center gap-2 ml-4">
+                {inst.enabled && inst.connected && !inst.hasPasskeyCredential && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => props.setupPasskey(inst.id)}
+                    disabled={props.passkeySetupLoading === inst.id}
+                  >
+                    {props.passkeySetupLoading === inst.id ? "Setting up..." : "Setup Passkey"}
+                  </Button>
+                )}
+                {inst.enabled && inst.hasPasskeyCredential && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-amber-600 hover:text-amber-800 hover:bg-amber-50"
+                    onClick={() => props.removePasskey(inst.id)}
+                    disabled={props.passkeySetupLoading === inst.id}
+                  >
+                    {props.passkeySetupLoading === inst.id ? "Removing..." : "Remove Passkey"}
+                  </Button>
+                )}
                 <button
                   type="button"
                   role="switch"

@@ -224,11 +224,11 @@ describe("encode → decode round-trip", () => {
     });
 
     const outPath = `/tmp/test_generate_clo_${name}.png`;
-    await convertCloToJpg(
-      Buffer.from(pixelData),
-      outPath,
-      Buffer.from(wrapperData)
-    );
+    await convertCloToJpg({
+      pixelData: Buffer.from(pixelData),
+      outputPath: outPath,
+      wrapperData: Buffer.from(wrapperData),
+    });
 
     const { data, info } = await sharp(outPath)
       .grayscale()
@@ -331,11 +331,10 @@ describe("encode → decode round-trip", () => {
       windowWidth: 65536,
     });
 
-    const result = await convertCloToJpg(
-      Buffer.from(pixelData),
-      null,
-      Buffer.from(wrapperData)
-    );
+    const result = await convertCloToJpg({
+      pixelData: Buffer.from(pixelData),
+      wrapperData: Buffer.from(wrapperData),
+    });
     expect(Buffer.isBuffer(result)).toBe(true);
     const meta = await sharp(result as Buffer).metadata();
     expect(meta.format).toBe("jpeg");

@@ -43,7 +43,21 @@ const mockMychartRequest = {
 };
 
 const mockGetSession = mock((token: string) => token === 'valid' ? mockMychartRequest : undefined);
-mock.module('@/lib/sessions', () => ({ getSession: mockGetSession }));
+mock.module('@/lib/sessions', () => ({
+  getSession: mockGetSession,
+  setSession: mock(() => {}),
+  deleteSession: mock(() => {}),
+  getSessionMetadata: mock(() => undefined),
+  randomToken: mock(() => 'mock-token'),
+  sessionStore: {
+    getEntry: mock(() => undefined),
+    get: mock(() => undefined),
+    set: mock(() => {}),
+    delete: mock(() => {}),
+  },
+  SESSION_COOKIE_NAME: 'session_token',
+  SESSION_COOKIE_MAX_AGE: 86400,
+}));
 
 const { GET } = await import('../route');
 

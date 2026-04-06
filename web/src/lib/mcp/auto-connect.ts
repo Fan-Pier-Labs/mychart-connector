@@ -1,5 +1,7 @@
 import type { MyChartInstance } from '@/lib/db';
-import { myChartUserPassLogin, complete2faFlow, type TwoFaDeliveryInfo } from '@/lib/mychart/login';
+import { updateMyChartInstance } from '@/lib/db';
+import { myChartUserPassLogin, complete2faFlow, myChartPasskeyLogin, deserializeCredential, serializeCredential, type TwoFaDeliveryInfo } from '@/lib/mychart/login';
+import type { PasskeyCredential } from '@/lib/mychart/login';
 import { setSession } from '@/lib/sessions';
 import { sessionStore } from '../../../../scrapers/myChart/sessionStore';
 
@@ -9,10 +11,11 @@ export type AutoConnectResult = {
 };
 
 /**
- * Auto-connect a MyChart instance. Logs in with stored credentials and
- * auto-completes 2FA if a TOTP secret is available.
+ * Auto-connect a MyChart instance. Prefers passkey login when a credential
+ * is stored; falls back to username/password + optional TOTP 2FA.
  *
- * Returns the login state and optional 2FA delivery info.
+ * If passkey login fails, the stored credential is cleared from the DB
+ * so subsequent connects fall back directly to password login.
  */
 export async function autoConnectInstance(
   userId: string,
@@ -39,6 +42,52 @@ export async function autoConnectInstance(
     sessionStore.delete(sessionKey);
   }
 
+  // ── Try passkey login first ──
+  if (instance.passkeyCredential) {
+    console.log(`[auto-connect] ${instance.hostname}: attempting passkey login`);
+    let credential: PasskeyCredential;
+    try {
+      credential = deserializeCredential(instance.passkeyCredential);
+    } catch (err) {
+      console.error(`[auto-connect] ${instance.hostname}: failed to deserialize passkey credential`, err);
+      await updateMyChartInstance(instance.id, userId, { passkeyCredential: null });
+      // Fall through to password login
+      credential = null as unknown as PasskeyCredential;
+    }
+
+    if (credential) {
+      try {
+        const passkeyResult = await myChartPasskeyLogin({
+          hostname: instance.hostname,
+          credential,
+        });
+
+        if (passkeyResult.state === 'logged_in') {
+          console.log(`[auto-connect] ${instance.hostname}: passkey login successful`);
+          setSession(sessionKey, passkeyResult.mychartRequest, { hostname: instance.hostname });
+          // Persist updated signCount
+          try {
+            await updateMyChartInstance(instance.id, userId, {
+              passkeyCredential: serializeCredential(credential),
+            });
+          } catch (err) {
+            console.warn(`[auto-connect] ${instance.hostname}: failed to persist updated signCount`, err);
+          }
+          return { state: 'logged_in' };
+        }
+
+        // Passkey login failed — clear the credential and fall through
+        console.warn(`[auto-connect] ${instance.hostname}: passkey login failed (state=${passkeyResult.state}), clearing credential`);
+        await updateMyChartInstance(instance.id, userId, { passkeyCredential: null });
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[auto-connect] ${instance.hostname}: passkey login threw error - ${error.message}`, error.stack);
+        await updateMyChartInstance(instance.id, userId, { passkeyCredential: null });
+      }
+    }
+  }
+
+  // ── Fall back to username/password login ──
   console.log(`[auto-connect] ${instance.hostname}: logging in as ${instance.username}`);
   let loginResult;
   try {

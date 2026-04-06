@@ -13,8 +13,10 @@ import {
   zigzagDecode,
   to8bit,
   applyVoiLut,
-  convertCloToJpg,
-} from "./clo_to_jpg";
+  convertCloToBitmap,
+} from "./clo_to_bitmap";
+import { convertBitmapToJpg, convertBitmapToWebp, convertCloToJpg } from "./clo_to_jpg";
+import type { Bitmap } from "./clo_to_bitmap";
 
 const BASE = join(import.meta.dir);
 const INPUT = join(BASE, "input_study_one");
@@ -36,7 +38,6 @@ describe("AMF3Reader", () => {
   });
 
   it("reads u29 two bytes", () => {
-    // 0x80 | 0x01 = 129 for first byte (continuation), 0x00 for second
     const reader = new AMF3Reader(Buffer.from([0x81, 0x00]));
     expect(reader.readU29()).toBe(128);
   });
@@ -47,7 +48,6 @@ describe("AMF3Reader", () => {
   });
 
   it("reads AMF3 integer value", () => {
-    // marker 0x04 = integer, then u29 value 42
     const reader = new AMF3Reader(Buffer.from([0x04, 0x2a]));
     expect(reader.readValue()).toBe(42);
   });
@@ -65,7 +65,6 @@ describe("AMF3Reader", () => {
   });
 
   it("reads AMF3 double value", () => {
-    // marker 0x05 = double, then 8 bytes BE for 3.14
     const buf = Buffer.alloc(9);
     buf[0] = 0x05;
     buf.writeDoubleBE(3.14, 1);
@@ -74,7 +73,6 @@ describe("AMF3Reader", () => {
   });
 
   it("reads AMF3 inline string", () => {
-    // marker 0x06 = string, then u29 (length << 1 | 1), then UTF-8 bytes
     const str = "hello";
     const buf = Buffer.alloc(1 + 1 + str.length);
     buf[0] = 0x06;
@@ -85,7 +83,6 @@ describe("AMF3Reader", () => {
   });
 
   it("reads AMF3 string references", () => {
-    // Two strings: first inline "hi", second is a reference to it
     const buf = Buffer.from([
       0x06, 0x05, 0x68, 0x69, // string "hi" (len=2, inline)
       0x06, 0x00,             // string ref index 0
@@ -101,7 +98,6 @@ describe("AMF3Reader", () => {
   });
 
   it("reads AMF3 byte array", () => {
-    // marker 0x0C = byte array, then u29 (length << 1 | 1), then bytes
     const buf = Buffer.from([0x0c, 0x07, 0xaa, 0xbb, 0xcc]);
     const reader = new AMF3Reader(buf);
     const result = reader.readValue() as Buffer;
@@ -128,7 +124,7 @@ describe("parsePixelHeader", () => {
   it("rejects missing 35fa marker", () => {
     const buf = Buffer.alloc(100);
     buf.write("CLOCLHAAR###", 0);
-    buf[16] = 0x00; // wrong marker
+    buf[16] = 0x00;
     expect(() => parsePixelHeader(buf)).toThrow("Expected 35fa marker");
   });
 
@@ -137,7 +133,7 @@ describe("parsePixelHeader", () => {
     buf.write("CLOCLHAAR###", 0);
     buf[16] = 0x35;
     buf[17] = 0xfa;
-    buf.writeUInt32LE(0, 24); // width = 0
+    buf.writeUInt32LE(0, 24);
     buf.writeUInt32LE(100, 28);
     expect(() => parsePixelHeader(buf)).toThrow("Invalid dimensions");
   });
@@ -199,16 +195,15 @@ describe("computeWaveletLevels", () => {
   it("returns correct levels for R_INT (2337x2259)", () => {
     const levels = computeWaveletLevels(2337, 2259);
     expect(levels.length).toBe(4);
-    // Coarsest first: dimensions halved repeatedly
-    expect(levels[0]).toEqual([142, 147]); // ~2259/16, ~2337/16
-    expect(levels[3]).toEqual([1130, 1169]); // ~2259/2, ~2337/2
+    expect(levels[0]).toEqual([142, 147]);
+    expect(levels[3]).toEqual([1130, 1169]);
   });
 
   it("returns correct levels for R_GRID (1803x1345)", () => {
     const levels = computeWaveletLevels(1803, 1345);
     expect(levels.length).toBe(3);
-    expect(levels[0]).toEqual([169, 226]); // coarsest
-    expect(levels[2]).toEqual([673, 902]); // finest subband
+    expect(levels[0]).toEqual([169, 226]);
+    expect(levels[2]).toEqual([673, 902]);
   });
 
   it("returns empty for small image", () => {
@@ -223,18 +218,16 @@ describe("computeWaveletLevels", () => {
   });
 
   it("uses numDetailGroups when provided", () => {
-    // 1663x1802 with 4 detail groups (the encoder went one extra level)
     const levels = computeWaveletLevels(1663, 1802, 4);
     expect(levels.length).toBe(4);
-    expect(levels[0]).toEqual([113, 104]); // coarsest: 1802/16≈113, 1663/16≈104
-    expect(levels[3]).toEqual([901, 832]); // finest subband
+    expect(levels[0]).toEqual([113, 104]);
+    expect(levels[3]).toEqual([901, 832]);
   });
 
   it("falls back to dimension-based when numDetailGroups not provided", () => {
-    // Without numDetailGroups, 1663x1802 stops at 3 levels
     const levels = computeWaveletLevels(1663, 1802);
     expect(levels.length).toBe(3);
-    expect(levels[0]).toEqual([226, 208]); // stops here since both <= 256
+    expect(levels[0]).toEqual([226, 208]);
   });
 });
 
@@ -242,7 +235,6 @@ describe("computeWaveletLevels", () => {
 
 describe("zigzagDecode", () => {
   it("decodes known values", () => {
-    // 0→0, 1→-1, 2→1, 3→-2, 4→2, 5→-3
     const input = new Int32Array([0, 1, 2, 3, 4, 5]);
     const result = zigzagDecode(input);
     expect(Array.from(result)).toEqual([0, -1, 1, -2, 2, -3]);
@@ -251,8 +243,8 @@ describe("zigzagDecode", () => {
   it("handles large values", () => {
     const input = new Int32Array([100, 101, 65534, 65535]);
     const result = zigzagDecode(input);
-    expect(result[0]).toBe(50);   // even: n/2
-    expect(result[1]).toBe(-51);  // odd: -(n+1)/2
+    expect(result[0]).toBe(50);
+    expect(result[1]).toBe(-51);
     expect(result[2]).toBe(32767);
     expect(result[3]).toBe(-32768);
   });
@@ -269,7 +261,7 @@ describe("to8bit", () => {
     const input = new Uint16Array([0, 500, 1000]);
     const result = to8bit(input, false);
     expect(result[0]).toBe(0);
-    expect(result[1]).toBe(128); // 500/1000 * 255 = 127.5 → round to 128
+    expect(result[1]).toBe(128);
     expect(result[2]).toBe(255);
   });
 
@@ -277,7 +269,7 @@ describe("to8bit", () => {
     const input = new Uint16Array([0, 500, 1000]);
     const result = to8bit(input, true);
     expect(result[0]).toBe(255);
-    expect(result[1]).toBe(127); // 255 - 128
+    expect(result[1]).toBe(127);
     expect(result[2]).toBe(0);
   });
 
@@ -290,7 +282,7 @@ describe("to8bit", () => {
   it("handles single-value input", () => {
     const input = new Uint16Array([42]);
     const result = to8bit(input, false);
-    expect(result[0]).toBe(255); // 42 is max, so maps to 255
+    expect(result[0]).toBe(255);
   });
 });
 
@@ -310,20 +302,16 @@ describe("applyVoiLut", () => {
     const metadata = { voi_lut: lut, voi_lut_start: 10 };
     const img = new Uint16Array([5, 10, 12, 50]);
     const result = applyVoiLut(img, 1, 4, metadata);
-    expect(result[0]).toBe(100); // below start → lut[0]
-    expect(result[1]).toBe(100); // idx=0
-    expect(result[2]).toBe(300); // idx=2
-    expect(result[3]).toBe(300); // above end → lut[last]
+    expect(result[0]).toBe(100);
+    expect(result[1]).toBe(100);
+    expect(result[2]).toBe(300);
+    expect(result[3]).toBe(300);
   });
 
   it("applies window center/width fallback", () => {
     const metadata = { window_center: 100, window_width: 200 };
     const img = new Uint16Array([0, 100, 200]);
     const result = applyVoiLut(img, 1, 3, metadata);
-    // lower=0, upper=200
-    // 0: (0-0)/(200-0)*65535 = 0
-    // 100: (100-0)/200*65535 = 32768
-    // 200: (200-0)/200*65535 = 65535
     expect(result[0]).toBe(0);
     expect(result[1]).toBe(32768);
     expect(result[2]).toBe(65535);
@@ -332,7 +320,7 @@ describe("applyVoiLut", () => {
   it("returns input unchanged when no LUT or window", () => {
     const img = new Uint16Array([10, 20, 30]);
     const result = applyVoiLut(img, 1, 3, {});
-    expect(result).toBe(img); // same reference
+    expect(result).toBe(img);
   });
 });
 
@@ -372,7 +360,6 @@ describe("extractTiles", () => {
     const data = readFileSync(join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"));
     const tiles = extractTiles(data);
     expect(tiles.size).toBeGreaterThan(0);
-    // Must have LL block at group -1
     expect(tiles.has(tileKey(-1, 0, 0, 0))).toBe(true);
     expect(tiles.has(tileKey(-1, 0, 0, 65536))).toBe(true);
   });
@@ -381,12 +368,167 @@ describe("extractTiles", () => {
     const data = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
     const tiles = extractTiles(data);
     expect(tiles.size).toBeGreaterThan(0);
-    // Must have detail subbands at group 0 (LH low byte)
     expect(tiles.has(tileKey(0, 0, 0, 1))).toBe(true);
   });
 });
 
-// ==================== End-to-end conversion ====================
+// ==================== convertCloToBitmap ====================
+
+describe("convertCloToBitmap", () => {
+  it("returns correct dimensions for R_INT", () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"),
+      join(INPUT, "R_INT_ROTATION_TABLE_wrapper.clo"),
+    );
+    expect(bitmap.width).toBe(2337);
+    expect(bitmap.height).toBe(2259);
+    expect(bitmap.pixels.length).toBe(2337 * 2259);
+    expect(bitmap.pixels).toBeInstanceOf(Uint8Array);
+  }, 30000);
+
+  it("returns correct dimensions for R_GRID", () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    expect(bitmap.width).toBe(1803);
+    expect(bitmap.height).toBe(1345);
+    expect(bitmap.pixels.length).toBe(1803 * 1345);
+  }, 30000);
+
+  it("accepts Buffer inputs", () => {
+    const pixelData = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
+    const wrapperData = readFileSync(join(INPUT, "R_GRID_AXILLARY_wrapper.clo"));
+    const bitmap = convertCloToBitmap(pixelData, wrapperData);
+    expect(bitmap.width).toBe(1803);
+    expect(bitmap.height).toBe(1345);
+  }, 30000);
+
+  it("works without wrapper (defaults to MONOCHROME1)", () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+    );
+    expect(bitmap.width).toBe(1803);
+    expect(bitmap.height).toBe(1345);
+  }, 30000);
+
+  it("pixel values are in 0-255 range", () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    let min = 255, max = 0;
+    for (let i = 0; i < bitmap.pixels.length; i++) {
+      if (bitmap.pixels[i] < min) min = bitmap.pixels[i];
+      if (bitmap.pixels[i] > max) max = bitmap.pixels[i];
+    }
+    expect(min).toBeGreaterThanOrEqual(0);
+    expect(max).toBeLessThanOrEqual(255);
+    // Should use the full range
+    expect(max).toBe(255);
+  }, 30000);
+});
+
+// ==================== convertBitmapToJpg ====================
+
+describe("convertBitmapToJpg", () => {
+  it("produces valid JPEG buffer from bitmap", async () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    const jpgBuffer = await convertBitmapToJpg(bitmap);
+    expect(Buffer.isBuffer(jpgBuffer)).toBe(true);
+    const meta = await sharp(jpgBuffer).metadata();
+    expect(meta.format).toBe("jpeg");
+    expect(meta.width).toBe(1803);
+    expect(meta.height).toBe(1345);
+  }, 30000);
+
+  it("writes JPEG to disk when outputPath given", async () => {
+    const out = "/tmp/test_bitmap_to_jpg.jpg";
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    const buffer = await convertBitmapToJpg(bitmap, out);
+    expect(existsSync(out)).toBe(true);
+    const meta = await sharp(out).metadata();
+    expect(meta.format).toBe("jpeg");
+    expect(meta.width).toBe(1803);
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    unlinkSync(out);
+  }, 30000);
+
+  it("uses quality 100 (max JPEG quality)", async () => {
+    const bitmap: Bitmap = {
+      pixels: new Uint8Array(100 * 100).fill(128),
+      width: 100,
+      height: 100,
+    };
+    const buffer = await convertBitmapToJpg(bitmap);
+    // quality 100 should produce larger files than low quality
+    const meta = await sharp(buffer).metadata();
+    expect(meta.format).toBe("jpeg");
+  });
+});
+
+// ==================== convertBitmapToWebp ====================
+
+describe("convertBitmapToWebp", () => {
+  it("produces valid lossless WebP buffer from bitmap", async () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    const webpBuffer = await convertBitmapToWebp(bitmap);
+    expect(Buffer.isBuffer(webpBuffer)).toBe(true);
+    const meta = await sharp(webpBuffer).metadata();
+    expect(meta.format).toBe("webp");
+    expect(meta.width).toBe(1803);
+    expect(meta.height).toBe(1345);
+  }, 30000);
+
+  it("writes WebP to disk when outputPath given", async () => {
+    const out = "/tmp/test_bitmap_to_webp.webp";
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    await convertBitmapToWebp(bitmap, out);
+    expect(existsSync(out)).toBe(true);
+    const meta = await sharp(out).metadata();
+    expect(meta.format).toBe("webp");
+    unlinkSync(out);
+  }, 30000);
+
+  it("is truly lossless (round-trips perfectly)", async () => {
+    const bitmap = convertCloToBitmap(
+      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    );
+    const webpBuffer = await convertBitmapToWebp(bitmap);
+
+    // Decode the WebP back to raw pixels
+    const { data, info } = await sharp(webpBuffer)
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const decoded = new Uint8Array(data);
+
+    expect(info.width).toBe(bitmap.width);
+    expect(info.height).toBe(bitmap.height);
+
+    // Every pixel must match exactly (lossless)
+    let mismatches = 0;
+    for (let i = 0; i < bitmap.pixels.length; i++) {
+      if (decoded[i] !== bitmap.pixels[i]) mismatches++;
+    }
+    expect(mismatches).toBe(0);
+  }, 30000);
+});
+
+// ==================== convertCloToJpg (convenience wrapper) ====================
 
 describe("convertCloToJpg", () => {
   async function loadGrayscale(path: string): Promise<{ data: Uint8Array; width: number; height: number }> {
@@ -416,11 +558,11 @@ describe("convertCloToJpg", () => {
 
   it("converts R_INT and matches goal to >98% exact", async () => {
     const out = "/tmp/test_clo_r_int.png";
-    await convertCloToJpg(
-      join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"),
-      out,
-      join(INPUT, "R_INT_ROTATION_TABLE_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT, "R_INT_ROTATION_TABLE_wrapper.clo"),
+    });
     const output = await loadGrayscale(out);
     const goal = await loadGrayscale(join(GOALS, "image_1_png.png"));
     expect(output.width).toBe(goal.width);
@@ -434,11 +576,11 @@ describe("convertCloToJpg", () => {
 
   it("converts R_GRID and matches goal to >98% exact", async () => {
     const out = "/tmp/test_clo_r_grid.png";
-    await convertCloToJpg(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      out,
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    });
     const output = await loadGrayscale(out);
     const goal = await loadGrayscale(join(GOALS, "image_2_png.png"));
     expect(output.width).toBe(goal.width);
@@ -452,11 +594,11 @@ describe("convertCloToJpg", () => {
 
   it("converts R_EXT and matches goal to >98% exact", async () => {
     const out = "/tmp/test_clo_r_ext.png";
-    await convertCloToJpg(
-      join(INPUT, "R_EXT_ROTATION_TABLE_pixel.clo"),
-      out,
-      join(INPUT, "R_EXT_ROTATION_TABLE_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT, "R_EXT_ROTATION_TABLE_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT, "R_EXT_ROTATION_TABLE_wrapper.clo"),
+    });
     const output = await loadGrayscale(out);
     const goal = await loadGrayscale(join(GOALS, "image_3_png.png"));
     expect(output.width).toBe(goal.width);
@@ -470,11 +612,11 @@ describe("convertCloToJpg", () => {
 
   it("writes valid JPEG when .jpg extension", async () => {
     const out = "/tmp/test_clo_jpeg_out.jpg";
-    await convertCloToJpg(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      out,
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
+    });
     expect(existsSync(out)).toBe(true);
     const meta = await sharp(out).metadata();
     expect(meta.format).toBe("jpeg");
@@ -485,10 +627,10 @@ describe("convertCloToJpg", () => {
 
   it("defaults to MONOCHROME1 without wrapper", async () => {
     const out = "/tmp/test_clo_no_wrapper.png";
-    await convertCloToJpg(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      out,
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
+      outputPath: out,
+    });
     expect(existsSync(out)).toBe(true);
     const meta = await sharp(out).metadata();
     expect(meta.width).toBe(1803);
@@ -496,10 +638,10 @@ describe("convertCloToJpg", () => {
     unlinkSync(out);
   }, 30000);
 
-  it("accepts Buffer inputs and returns Buffer when outputPath is null", async () => {
+  it("accepts Buffer inputs and returns Buffer when no outputPath", async () => {
     const pixelData = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
     const wrapperData = readFileSync(join(INPUT, "R_GRID_AXILLARY_wrapper.clo"));
-    const result = await convertCloToJpg(pixelData, null, wrapperData);
+    const result = await convertCloToJpg({ pixelData, wrapperData });
     expect(Buffer.isBuffer(result)).toBe(true);
     const meta = await sharp(result as Buffer).metadata();
     expect(meta.format).toBe("jpeg");
@@ -568,7 +710,6 @@ describe("convertCloToJpg - study two", () => {
       const [g] = parseTileKey(key);
       groups.add(g);
     }
-    // Groups: -1 (LL), 0, 1, 2, 3 (extra detail level)
     expect(groups.size).toBe(5);
     expect(groups.has(-1)).toBe(true);
     expect(groups.has(3)).toBe(true);
@@ -576,16 +717,15 @@ describe("convertCloToJpg - study two", () => {
 
   it("converts series 0 and matches goal dimensions", async () => {
     const out = "/tmp/test_clo_s2_series0.png";
-    await convertCloToJpg(
-      join(INPUT_TWO, "series_0_pixel.clo"),
-      out,
-      join(INPUT_TWO, "series_0_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT_TWO, "series_0_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT_TWO, "series_0_wrapper.clo"),
+    });
     const output = await loadGrayscale(out);
     const goal = await loadGrayscale(join(GOALS_TWO, "image_1_png.png"));
     expect(output.width).toBe(goal.width);
     expect(output.height).toBe(goal.height);
-    // Goal images have different windowing from browser viewer, so use relaxed threshold
     const stats = computeStats(output.data, goal.data);
     expect(stats.within5Pct).toBeGreaterThan(85);
     expect(stats.rmse).toBeLessThan(15);
@@ -594,11 +734,11 @@ describe("convertCloToJpg - study two", () => {
 
   it("converts series 1 and matches goal dimensions", async () => {
     const out = "/tmp/test_clo_s2_series1.png";
-    await convertCloToJpg(
-      join(INPUT_TWO, "series_1_pixel.clo"),
-      out,
-      join(INPUT_TWO, "series_1_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT_TWO, "series_1_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT_TWO, "series_1_wrapper.clo"),
+    });
     const output = await loadGrayscale(out);
     const goal = await loadGrayscale(join(GOALS_TWO, "image_2_png.png"));
     expect(output.width).toBe(goal.width);
@@ -611,11 +751,11 @@ describe("convertCloToJpg - study two", () => {
 
   it("converts series 2 (extra wavelet level) and matches goal to >98% exact", async () => {
     const out = "/tmp/test_clo_s2_series2.png";
-    await convertCloToJpg(
-      join(INPUT_TWO, "series_2_pixel.clo"),
-      out,
-      join(INPUT_TWO, "series_2_wrapper.clo"),
-    );
+    await convertCloToJpg({
+      pixelData: join(INPUT_TWO, "series_2_pixel.clo"),
+      outputPath: out,
+      wrapperData: join(INPUT_TWO, "series_2_wrapper.clo"),
+    });
     const output = await loadGrayscale(out);
     const goal = await loadGrayscale(join(GOALS_TWO, "image_3_png.png"));
     expect(output.width).toBe(goal.width);

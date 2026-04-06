@@ -51,10 +51,23 @@ async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | nu
   }
   // Fall back to parsing HTML for a hidden input
   const token = getRequestVerificationTokenFromBody(body);
-  if (!token) {
-    console.log('  Could not extract CSRF token from response body (length:', body.length, ')');
+  if (token) return token;
+
+  // Fallback: extract token from /Home page HTML (works when the endpoint returns empty)
+  console.log('  CSRFToken endpoint returned no token (length:', body.length, '), trying /Home page fallback');
+  try {
+    const homeRes = await mychartRequest.makeRequest({ path: '/Home' });
+    const homeBody = await homeRes.text();
+    const homeToken = getRequestVerificationTokenFromBody(homeBody);
+    if (homeToken) {
+      console.log('  Got CSRF token from /Home page fallback');
+      return homeToken;
+    }
+    console.log('  Could not extract CSRF token from /Home page either');
+  } catch (err) {
+    console.log('  /Home page fallback failed:', err);
   }
-  return token || null;
+  return null;
 }
 
 function fail(error: string): SetupTotpResult {

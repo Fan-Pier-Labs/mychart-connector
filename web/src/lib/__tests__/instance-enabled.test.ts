@@ -16,13 +16,14 @@ interface Instance {
   username: string;
   enabled: boolean;
   totpSecret: string | null;
+  passkeyCredential: string | null;
   connected?: boolean;
 }
 
 /** Mirrors the auto-connect filter in GET /api/mychart-instances */
 function shouldAutoConnect(inst: Instance, isLoggedIn: boolean): boolean {
   if (!inst.enabled) return false;
-  if (!inst.totpSecret) return false;
+  if (!inst.totpSecret && !inst.passkeyCredential) return false;
   if (isLoggedIn) return false;
   return true;
 }
@@ -39,6 +40,7 @@ function toApiResponse(inst: Instance, isLoggedIn: boolean) {
     hostname: inst.hostname,
     username: inst.username,
     hasTotpSecret: !!inst.totpSecret,
+    hasPasskeyCredential: !!inst.passkeyCredential,
     enabled: inst.enabled,
     connected: isLoggedIn,
   };
@@ -51,6 +53,7 @@ function makeInstance(overrides: Partial<Instance> = {}): Instance {
     username: 'testuser',
     enabled: true,
     totpSecret: null,
+    passkeyCredential: null,
     ...overrides,
   };
 }
@@ -90,9 +93,19 @@ describe('Instance enabled/disabled', () => {
       expect(shouldAutoConnect(inst, false)).toBe(true);
     });
 
-    it('does not auto-connect enabled instances without TOTP', () => {
-      const inst = makeInstance({ totpSecret: null, enabled: true });
+    it('does not auto-connect enabled instances without TOTP or passkey', () => {
+      const inst = makeInstance({ totpSecret: null, passkeyCredential: null, enabled: true });
       expect(shouldAutoConnect(inst, false)).toBe(false);
+    });
+
+    it('auto-connects enabled instances with passkey credential', () => {
+      const inst = makeInstance({ passkeyCredential: '{"credentialId":"abc"}', enabled: true });
+      expect(shouldAutoConnect(inst, false)).toBe(true);
+    });
+
+    it('auto-connects enabled instances with both TOTP and passkey', () => {
+      const inst = makeInstance({ totpSecret: 'SECRET', passkeyCredential: '{"credentialId":"abc"}', enabled: true });
+      expect(shouldAutoConnect(inst, false)).toBe(true);
     });
 
     it('does not auto-connect already logged-in instances', () => {

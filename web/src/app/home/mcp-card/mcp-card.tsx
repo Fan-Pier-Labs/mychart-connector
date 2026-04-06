@@ -49,7 +49,7 @@ export function McpCard() {
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-green-600">HTTPS (for Claude Desktop)</Label>
                 <div className="flex gap-2">
-                  <Input readOnly value={ctx.mcpUrlSsl} className="font-mono text-xs" />
+                  <Input readOnly value={ctx.mcpUrlSsl} className="font-mono text-xs text-black" />
                   <Button variant="outline" size="sm" onClick={mcp.copyMcpSslUrl}>
                     {mcp.mcpSslCopied ? "Copied!" : "Copy"}
                   </Button>
@@ -59,7 +59,7 @@ export function McpCard() {
             <div className="space-y-1.5">
               {ctx.mcpUrlSsl && <Label className="text-xs font-medium text-muted-foreground">HTTP</Label>}
               <div className="flex gap-2">
-                <Input readOnly value={ctx.mcpUrl} className="font-mono text-xs" />
+                <Input readOnly value={ctx.mcpUrl} className="font-mono text-xs text-black" />
                 <Button variant="outline" size="sm" onClick={mcp.copyMcpUrl}>
                   {mcp.mcpCopied ? "Copied!" : "Copy"}
                 </Button>

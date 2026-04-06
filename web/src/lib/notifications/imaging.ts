@@ -1,7 +1,7 @@
 import type { MyChartRequest } from '@/lib/mychart/myChartRequest';
 import type { ImagingResult } from '@/lib/mychart/imagingResults';
 import { downloadImagingStudyDirect } from '../../../../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../../../../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
+import { convertCloToJpg } from '../../../../scrapers/myChart/clo-image-parser/clo_to_jpg';
 
 const MAX_IMAGES_PER_EMAIL = 5;
 
@@ -39,11 +39,10 @@ export async function getImagingAttachments(
         if (!image.pixelData) continue;
 
         try {
-          const jpegBuffer = await convertCloToJpg(
-            image.pixelData,
-            null,
-            image.wrapperData
-          );
+          const jpegBuffer = await convertCloToJpg({
+            pixelData: image.pixelData,
+            wrapperData: image.wrapperData,
+          });
 
           if (Buffer.isBuffer(jpegBuffer)) {
             const safeName = (image.seriesDescription || imaging.orderName)

@@ -114,8 +114,8 @@ export default function HomePage() {
         <div className="space-y-4">
           <MyChartAccountsCard {...accounts} />
           <ProfileCard />
-          <ScrapeCard onLoadingChange={(l, t) => { setLoading(l); setLoadingText(t); }} />
           <McpCard />
+          <ScrapeCard onLoadingChange={(l, t) => { setLoading(l); setLoadingText(t); }} />
           <NotificationsCard />
           <SecurityCard />
         </div>

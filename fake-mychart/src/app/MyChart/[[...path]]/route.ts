@@ -8,7 +8,7 @@ import {
   medicationsPage, allergiesPage, healthIssuesPage, immunizationsPage,
   vitalsPage, medicalHistoryPage, testResultsPage, messagesPage, visitsPage,
   lettersPage, goalsPage, referralsPage, careJourneysPage, documentsPage,
-  educationPage, emergencyContactsPage, profilePage,
+  educationPage, emergencyContactsPage, profilePage, settingsPage,
 } from '@/lib/html';
 import * as homer from '@/data/homer';
 
@@ -21,6 +21,9 @@ let conversationsState = JSON.parse(JSON.stringify(homer.conversations));
 let emergencyContactsState = JSON.parse(JSON.stringify(homer.emergencyContacts));
 let ecIdCounter = 100;
 let composeIdCounter = 1000;
+
+// TOTP state (mutable — tracks whether TOTP is enabled)
+let isTotpEnabled = false;
 
 // Passkey state
 let passkeyIdCounter = 0;
@@ -300,6 +303,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const redirect = requireSession(request);
     if (redirect) return redirect;
     return html(profilePage());
+  }
+
+  if (lower === 'settings') {
+    const redirect = requireSession(request);
+    if (redirect) return redirect;
+    return html(settingsPage(isTotpEnabled, passkeysState));
   }
 
   // ── Generic token pages (for scrapers that GET a page to extract CSRF) ──
@@ -588,6 +597,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (body.orderKey === 'GRP-XRAY') {
         return json(homer.imagingLabResultDetails);
       }
+      if (body.orderKey === 'GRP-CT') {
+        return json(homer.ctLabResultDetails);
+      }
     } catch { /* fall through */ }
     return json(homer.labResultsDetails);
   }
@@ -600,6 +612,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (body.reportID === 'RPT-XRAY-001') {
         return json(homer.imagingReportContent);
       }
+      if (body.reportID === 'RPT-CT-001') {
+        return json(homer.ctReportContent);
+      }
     } catch { /* fall through */ }
     return json({ reportContent: '' });
   }
@@ -608,8 +623,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower.startsWith('extensibility/redirection/fdidata')) {
     const url = new URL(request.url);
     const origin = url.origin;
+    // Determine which study based on the fdi parameter
+    const fdi = url.searchParams.get('fdi') ?? '';
+    const studyType = fdi.includes('CT') ? 'ct' : 'xray';
     return json({
-      url: `${origin}/e/saml-sts`,
+      url: `${origin}/e/saml-sts?study=${studyType}`,
       launchmode: 2,
       IsFdiPost: false,
     });
@@ -732,18 +750,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── TOTP / 2FA Setup ──────────────────────────────────────────
   if (lower === 'api/secondary-validation/gettwofactorinfo') {
-    return json(homer.totpInfo);
+    return json({ ...homer.totpInfo, IsTotpEnabled: isTotpEnabled });
   }
   if (lower === 'api/secondary-validation/verifypasswordandupdatecontact') {
-    return json({ IsPasswordValid: true });
+    try {
+      const body = await request.json();
+      const password = body.Password || body.password || '';
+      const valid = acceptAny() || password === homer.DEFAULT_PASSWORD;
+      return json({ IsPasswordValid: valid });
+    } catch {
+      return json({ IsPasswordValid: true });
+    }
   }
   if (lower === 'api/secondary-validation/totpqrcode') {
     return json(homer.totpQrCode);
   }
   if (lower === 'api/secondary-validation/verifycode') {
-    return json({ Success: true });
+    try {
+      const body = await request.json();
+      const code = body.Code || body.code || '';
+      // Accept any 6-digit code, or the fixed test code
+      if (acceptAny() || code === '123456' || /^\d{6}$/.test(code)) {
+        return json({ Success: true });
+      }
+      return json({ Success: false });
+    } catch {
+      return json({ Success: true });
+    }
   }
   if (lower === 'api/secondary-validation/updatetwofactortotpoptinstatus') {
+    // Toggle TOTP status
+    isTotpEnabled = !isTotpEnabled;
     return json({ Success: true });
   }
 

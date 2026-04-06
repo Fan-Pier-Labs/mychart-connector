@@ -27,6 +27,9 @@ export function useMyChartAccounts() {
   const [totpWarning, setTotpWarning] = useState(false);
   const [totpErrorMessage, setTotpErrorMessage] = useState("");
 
+  // Passkey setup state
+  const [passkeySetupLoading, setPasskeySetupLoading] = useState("");
+
   // Connecting state
   const [connectingId, setConnectingId] = useState("");
 
@@ -230,6 +233,46 @@ export function useMyChartAccounts() {
     setTotpErrorMessage("");
   }
 
+  async function setupPasskey(instanceId: string) {
+    setPasskeySetupLoading(instanceId);
+    try {
+      const res = await fetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Passkey configured! Future logins will use passkey authentication.");
+        await ctx.refreshInstances();
+      } else {
+        toast.error(data.error || "Passkey setup failed.");
+      }
+    } catch (err) {
+      toast.error("Network error: " + (err as Error).message);
+    } finally {
+      setPasskeySetupLoading("");
+    }
+  }
+
+  async function removePasskey(instanceId: string) {
+    setPasskeySetupLoading(instanceId);
+    try {
+      const res = await fetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Passkey removed.");
+        await ctx.refreshInstances();
+      } else {
+        toast.error(data.error || "Failed to remove passkey.");
+      }
+    } catch (err) {
+      toast.error("Network error: " + (err as Error).message);
+    } finally {
+      setPasskeySetupLoading("");
+    }
+  }
+
   async function toggleInstance(id: string, enabled: boolean) {
     try {
       const res = await fetch(`/api/mychart-instances/${id}`, {
@@ -300,6 +343,11 @@ export function useMyChartAccounts() {
     // Connection
     connectingId,
     connectInstance,
+
+    // Passkey setup
+    passkeySetupLoading,
+    setupPasskey,
+    removePasskey,
 
     // Instance management
     toggleInstance,
