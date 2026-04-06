@@ -13,8 +13,10 @@ COPY scrapers/ ./scrapers/
 COPY shared/ ./shared/
 # clo-to-jpg-converter test files excluded via .dockerignore; source + wasm included
 
-# Stub shared/gmail (uses googleapis which has massive types that OOM the TS checker)
-RUN echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new Error("not available in web"); }' > shared/gmail/gmail.ts && \
+# Stub shared/gmail (deleted from repo but dynamically imported by login.ts;
+# Next.js traces the import at build time so the file must exist)
+RUN mkdir -p shared/gmail && \
+    echo 'export function get2FaCodeFromEmail(...args: any[]): any { throw new Error("not available in web"); }' > shared/gmail/gmail.ts && \
     echo 'export {}' > shared/gmail/util.ts
 
 # Build (NEXT_PUBLIC_* must be set at build time for Next.js inlining)
