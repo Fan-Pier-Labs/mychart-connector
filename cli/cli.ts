@@ -1575,20 +1575,45 @@ async function main() {
                 { skipFileWrite: true },
               );
 
-              // Convert each CLO buffer to JPG
+              // Convert each CLO buffer to JPG, organized by series
               let imgCount = 0;
+              // Group images by series for per-series subdirectories
+              const seriesGroups = new Map<string, typeof directResult.images>();
               for (const img of directResult.images) {
-                if (img.pixelData) {
-                  const safeDesc = img.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
-                  const jpgPath = path.join(studyDir, `${safeDesc}.jpg`);
+                if (!img.pixelData) continue;
+                const key = img.seriesUID;
+                if (!seriesGroups.has(key)) seriesGroups.set(key, []);
+                seriesGroups.get(key)!.push(img);
+              }
+
+              for (const [, seriesImages] of seriesGroups) {
+                const safeDesc = seriesImages[0].seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const multiSlice = seriesImages.length > 1;
+                // Create per-series subdirectory for multi-slice series (e.g. CT)
+                const seriesDir = multiSlice ? path.join(studyDir, safeDesc) : studyDir;
+                if (multiSlice) await fs.promises.mkdir(seriesDir, { recursive: true });
+
+                for (let i = 0; i < seriesImages.length; i++) {
+                  const img = seriesImages[i];
+                  const fileName = multiSlice
+                    ? `${String(i + 1).padStart(4, '0')}.jpg`
+                    : `${safeDesc}.jpg`;
+                  const jpgPath = path.join(seriesDir, fileName);
                   try {
-                    await convertCloToJpg({ pixelData: img.pixelData, outputPath: jpgPath, wrapperData: img.wrapperData });
+                    await convertCloToJpg({ pixelData: img.pixelData!, outputPath: jpgPath, wrapperData: img.wrapperData });
                     const stat = await fs.promises.stat(jpgPath);
-                    console.log(`          Saved: ${safeDesc}.jpg (${(stat.size / 1024).toFixed(0)} KB) - ${img.seriesDescription}`);
+                    if (!multiSlice || i === 0 || i === seriesImages.length - 1) {
+                      console.log(`          Saved: ${multiSlice ? `${safeDesc}/${fileName}` : fileName} (${(stat.size / 1024).toFixed(0)} KB) - ${img.seriesDescription}`);
+                    } else if (i === 1) {
+                      console.log(`          ... converting ${seriesImages.length - 2} more slices ...`);
+                    }
                     imgCount++;
                   } catch (convErr) {
-                    console.log(`          CLO→JPG conversion failed for ${img.seriesDescription}: ${(convErr as Error).message}`);
+                    console.log(`          CLO→JPG conversion failed for ${img.seriesDescription} slice ${i + 1}: ${(convErr as Error).message}`);
                   }
+                }
+                if (multiSlice) {
+                  console.log(`          Series "${seriesImages[0].seriesDescription}": ${seriesImages.length} slices → ${seriesDir}`);
                 }
               }
 

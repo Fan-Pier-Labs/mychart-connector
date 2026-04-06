@@ -1232,7 +1232,7 @@ export const imaging = {
   ],
 };
 
-// Imaging lab result (X-ray) — returned when groupType=2 or when querying imaging results
+// Imaging lab results — returned when groupType=2 or when querying imaging results
 export const imagingLabResultsList = {
   areResultsFullyLoaded: true,
   isGroupingFullyLoaded: true,
@@ -1249,6 +1249,19 @@ export const imagingLabResultsList = {
       organizationID: 'ORG-SPRINGFIELD',
       sortDate: '2025-08-05T10:00:00',
       formattedDate: 'Aug 5, 2025',
+      isLargeGroup: false,
+    },
+    {
+      key: 'GRP-CT',
+      contactType: '',
+      resultList: ['RES-CT'],
+      isInpatient: false,
+      isEDVisit: false,
+      isCurrentAdmission: false,
+      visitProviderID: 'PROV-HIBBERT',
+      organizationID: 'ORG-SPRINGFIELD',
+      sortDate: '2025-09-15T14:30:00',
+      formattedDate: 'Sep 15, 2025',
       isLargeGroup: false,
     },
   ],
@@ -1404,6 +1417,163 @@ export const availableAppointments = [
     ],
   },
 ];
+
+// ─── CT Imaging (multi-slice) ──────────────────────────────────────
+// Homer had a CT of his head to see how many crayons are in there.
+// 3 series: Axial (5 slices), Bone Recon (3 slices), Scout (1 slice)
+function generateInstanceUIDs(seriesBase: string, count: number): string[] {
+  const uids: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    uids.push(`${seriesBase}.${i}`);
+  }
+  return uids;
+}
+
+export const ctImaging = {
+  studyUID: '1.2.840.114350.2.362.2.742742.2.9876543210.1',
+  accessionNumber: 'CT98765742',
+  serviceInstance: 'SPRINGFIELDstudystrategy',
+  patientId: '742$$$SPRINGFIELD',
+  series: [
+    {
+      seriesUID: '1.3.51.0.7.100000001.11111.22222.33333.44444.55555.66666',
+      instanceUIDs: generateInstanceUIDs('1.3.51.0.7.100000001.11111.22222.33333.44444.55555.66666', 5),
+      seriesDescription: 'AXIAL',
+      cloPrefix: 'checkerboard_512x512',
+    },
+    {
+      seriesUID: '1.3.51.0.7.200000002.77777.88888.99999.11111.22222.33333',
+      instanceUIDs: generateInstanceUIDs('1.3.51.0.7.200000002.77777.88888.99999.11111.22222.33333', 3),
+      seriesDescription: 'BONE RECON',
+      cloPrefix: 'gradient_h_512x512',
+    },
+    {
+      seriesUID: '1.3.51.0.7.300000003.44444.55555.66666.77777.88888.99999',
+      instanceUIDs: ['1.3.51.0.7.300000003.44444.55555.66666.77777.88888.99999.1'],
+      seriesDescription: 'SCOUT',
+      cloPrefix: 'diagonal_510x510',
+    },
+  ],
+};
+
+export const ctLabResultsList = {
+  areResultsFullyLoaded: true,
+  isGroupingFullyLoaded: true,
+  groupBy: 1,
+  newResultGroups: [
+    {
+      key: 'GRP-CT',
+      contactType: '',
+      resultList: ['RES-CT'],
+      isInpatient: false,
+      isEDVisit: false,
+      isCurrentAdmission: false,
+      visitProviderID: 'PROV-HIBBERT',
+      organizationID: 'ORG-SPRINGFIELD',
+      sortDate: '2025-09-15T14:30:00',
+      formattedDate: 'Sep 15, 2025',
+      isLargeGroup: false,
+    },
+  ],
+  organizationLoadMoreInfo: {},
+  newResults: {},
+  newProviderPhotoInfo: {},
+};
+
+export const ctLabResultDetails = {
+  orderName: 'CT Head without Contrast',
+  key: 'RES-CT',
+  results: [
+    {
+      name: 'CT Head without Contrast',
+      key: 'RES-CT',
+      showName: false,
+      showDetails: true,
+      orderMetadata: {
+        orderProviderName: 'Julius Hibbert, MD',
+        unreadCommentingProviderName: '',
+        readingProviderName: 'Julius Hibbert, MD',
+        resultTimestampDisplay: 'Sep 15, 2025 3:00 PM',
+        collectionTimestampsDisplay: 'Sep 15, 2025 2:30 PM',
+        specimensDisplay: '',
+        resultStatus: 'Final',
+        resultingLab: {
+          name: 'Springfield General Hospital Radiology',
+          address: ['123 Main Street', 'Springfield, NT 49007'],
+          phoneNumber: '(555) 636-3000',
+          labDirector: 'Julius Hibbert, MD',
+          cliaNumber: '',
+        },
+        resultType: 3,
+        read: 0,
+      },
+      resultComponents: [],
+      studyResult: {
+        narrative: {
+          isRTF: false,
+          hasContent: true,
+          contentAsString: 'FINDINGS: CT of the head without contrast. Multiple radiopaque foreign bodies identified within the cranial vault, consistent with crayon-shaped objects (at least 16 individual crayons). No acute intracranial hemorrhage. No midline shift. Ventricles are normal in size and configuration. Gray-white matter differentiation is preserved. No acute fracture identified.',
+          contentAsHtml: '<p>FINDINGS: CT of the head without contrast. Multiple radiopaque foreign bodies identified within the cranial vault, consistent with crayon-shaped objects (at least 16 individual crayons). No acute intracranial hemorrhage. No midline shift. Ventricles are normal in size and configuration. Gray-white matter differentiation is preserved. No acute fracture identified.</p>',
+          signingInstantTimestamp: '2025-09-15T15:00:00Z',
+        },
+        impression: {
+          isRTF: false,
+          hasContent: true,
+          contentAsString: 'IMPRESSION: 1. Multiple crayon-shaped foreign bodies within the cranial vault, unchanged from prior X-ray. 2. No acute intracranial abnormality. 3. Recommend continued monitoring. Patient declines surgical removal stating "the crayons keep me creative."',
+          contentAsHtml: '<p>IMPRESSION: 1. Multiple crayon-shaped foreign bodies within the cranial vault, unchanged from prior X-ray. 2. No acute intracranial abnormality. 3. Recommend continued monitoring. Patient declines surgical removal stating "the crayons keep me creative."</p>',
+          signingInstantTimestamp: '2025-09-15T15:00:00Z',
+        },
+        combinedRTFNarrativeImpression: { isRTF: false, hasContent: false, contentAsString: '', contentAsHtml: '', signingInstantTimestamp: '' },
+        addenda: [],
+        isCupidAddendum: false,
+        transcriptions: [],
+        ecgDiagnosis: [],
+        hasStudyContent: true,
+      },
+      shouldHideHistoricalData: false,
+      resultNote: { isRTF: false, hasContent: false, contentAsString: '', contentAsHtml: '', signingInstantTimestamp: '' },
+      reportDetails: {
+        isDownloadablePDFReport: false,
+        reportID: 'RPT-CT-001',
+        openRemotely: false,
+        reportContext: '',
+        reportVars: { ordId: 'ORD-CT-001', ordDat: 'ORD-CT-001-DAT' },
+      },
+      scans: [],
+      imageStudies: [
+        {
+          studyId: ctImaging.studyUID,
+          studyDescription: 'CT Head without Contrast',
+          studyDate: '2025-09-15',
+          modality: 'CT',
+          viewerUrl: '',
+          numberOfImages: 9,
+        },
+      ],
+      indicators: [],
+      geneticProfileLink: '',
+      shareEverywhereLogin: false,
+      showProviderNotReviewed: false,
+      providerComments: [],
+      resultLetter: { isRTF: false, hasContent: false, contentAsString: '', contentAsHtml: '', signingInstantTimestamp: '' },
+      warningType: '',
+      warningMessage: '',
+      variants: [],
+      tooManyVariants: false,
+      hasComment: false,
+      hasAllDetails: true,
+      isAbnormal: false,
+    },
+  ],
+  orderLimitReached: false,
+  ordersDeduplicated: false,
+  hideEncInfo: false,
+};
+
+export const ctReportContent = {
+  reportContent: `<div class="report-content"><h3>CT Head without Contrast</h3><p>FINDINGS: Multiple radiopaque foreign bodies within cranial vault consistent with crayons (at least 16).</p><div data-fdi-context='${JSON.stringify({ fdi: 'FDI-CT-001', ord: 'ORD-CT-001' })}'><a href="#">View Images</a></div></div>`,
+  reportCss: '',
+};
 
 // Report content HTML with data-fdi-context for image viewer access
 export const imagingReportContent = {

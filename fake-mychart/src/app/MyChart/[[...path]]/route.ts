@@ -597,6 +597,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (body.orderKey === 'GRP-XRAY') {
         return json(homer.imagingLabResultDetails);
       }
+      if (body.orderKey === 'GRP-CT') {
+        return json(homer.ctLabResultDetails);
+      }
     } catch { /* fall through */ }
     return json(homer.labResultsDetails);
   }
@@ -609,6 +612,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (body.reportID === 'RPT-XRAY-001') {
         return json(homer.imagingReportContent);
       }
+      if (body.reportID === 'RPT-CT-001') {
+        return json(homer.ctReportContent);
+      }
     } catch { /* fall through */ }
     return json({ reportContent: '' });
   }
@@ -617,8 +623,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower.startsWith('extensibility/redirection/fdidata')) {
     const url = new URL(request.url);
     const origin = url.origin;
+    // Determine which study based on the fdi parameter
+    const fdi = url.searchParams.get('fdi') ?? '';
+    const studyType = fdi.includes('CT') ? 'ct' : 'xray';
     return json({
-      url: `${origin}/e/saml-sts`,
+      url: `${origin}/e/saml-sts?study=${studyType}`,
       launchmode: 2,
       IsFdiPost: false,
     });
