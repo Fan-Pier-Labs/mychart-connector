@@ -11,6 +11,8 @@ jobs:
       - run: bun install
       - run: cd web && bun install
       - run: bun run lint
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
       - run: bun run test
       - run: cd web && bun --bun next build
       - run: docker build .
