@@ -1272,15 +1272,25 @@ async function main() {
       console.log(`  Using ${cliArgs.host} (user: ${cliArgs.user})`);
     }
   } else if (cliArgs.host && !cliArgs.user && !cliArgs.pass) {
-    const resolved = await resolveCredsFromBrowsers(cliArgs.host);
-    if (resolved) {
-      cliArgs.user = resolved.user;
-      cliArgs.pass = resolved.pass;
+    // Check for saved passkey first — no username/password needed
+    const savedPasskey = await loadPasskeyCredential(cliArgs.host);
+    if (savedPasskey) {
+      console.log(`\n  Found saved passkey for ${cliArgs.host}. Logging in with passkey...`);
+      cliArgs.usePasskey = true;
+      // Set dummy creds to enter non-interactive mode; passkey login runs first
+      cliArgs.user = 'passkey';
+      cliArgs.pass = 'passkey';
     } else {
-      console.log(`\n  Could not find credentials for ${cliArgs.host}.`);
-      console.log(`  Provide them: npx tsx src/cli.ts --host ${cliArgs.host} --user X --pass Y\n`);
-      closeRL();
-      process.exit(1);
+      const resolved = await resolveCredsFromBrowsers(cliArgs.host);
+      if (resolved) {
+        cliArgs.user = resolved.user;
+        cliArgs.pass = resolved.pass;
+      } else {
+        console.log(`\n  Could not find credentials for ${cliArgs.host}.`);
+        console.log(`  Provide them: npx tsx src/cli.ts --host ${cliArgs.host} --user X --pass Y\n`);
+        closeRL();
+        process.exit(1);
+      }
     }
   }
   nonInteractive = !!(cliArgs.host && cliArgs.user && cliArgs.pass);
@@ -1565,6 +1575,18 @@ async function main() {
               }
               await fs.promises.writeFile(path.join(hostDir, txtName), text);
               console.log(`        Saved: ${txtName}`);
+            } else if (r.reportDetails?.reportContent?.reportContent) {
+              // Fallback: extract text from report HTML when narrative/impression fields are empty
+              const reportText = r.reportDetails.reportContent.reportContent
+                .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'")
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/\s+/g, ' ').trim();
+              if (reportText.length > 20) {
+                const txtName = `${safeName}_narrative.txt`;
+                await fs.promises.writeFile(path.join(hostDir, txtName), reportText);
+                console.log(`        Report: ${reportText.substring(0, 200)}...`);
+                console.log(`        Saved: ${txtName}`);
+              }
             }
 
             if (r.imageStudies?.length) {
