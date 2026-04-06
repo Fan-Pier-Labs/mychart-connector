@@ -1,5 +1,5 @@
 {
-  "name": "@mychart-scrapers/clo-to-jpg-converter",
+  "name": "@mychart-scrapers/clo-image-parser",
   "version": "1.0.0",
   "private": true,
   "dependencies": {

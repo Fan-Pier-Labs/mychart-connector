@@ -115,7 +115,7 @@ function writeAmfString(buf: number[], str: string) {
 }
 
 // ─── Real CLO Image Data ─────────────────────────────────────────────
-// Pre-generated using scrapers/myChart/clo-to-jpg-converter/generate_clo.ts (checkerboard pattern).
+// Pre-generated using scrapers/myChart/clo-image-parser/generate_clo.ts (checkerboard pattern).
 // These are valid CLO files the scraper can decode into real images.
 const CLO_DATA_DIR = join(process.cwd(), 'src/data/clo-images');
 const cloWrapper = Buffer.concat([

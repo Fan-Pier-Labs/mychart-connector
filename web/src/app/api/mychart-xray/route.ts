@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/sessions';
 import { downloadImagingStudyDirect } from '../../../../../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../../../../../scrapers/myChart/clo-to-jpg-converter/clo_to_jpg';
+import { convertCloToJpg } from '../../../../../scrapers/myChart/clo-image-parser/clo_to_jpg';
 
 /**
  * Convert and serve X-ray images on-the-fly.
@@ -9,7 +9,7 @@ import { convertCloToJpg } from '../../../../../scrapers/myChart/clo-to-jpg-conv
  * MyChart X-ray images are stored in a proprietary CLO format accessible
  * via the eUnity DICOM viewer. This endpoint:
  * 1. Downloads CLO image data using the authenticated MyChart session
- * 2. Converts CLO → JPEG using the clo-to-jpg-converter
+ * 2. Converts CLO → JPEG using the clo-image-parser
  * 3. Returns the JPEG
  *
  * No caching — fetches and converts fresh each time.
