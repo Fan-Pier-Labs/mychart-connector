@@ -10,7 +10,7 @@ import { join } from 'path';
 import * as homer from '@/data/homer';
 
 // ─── In-memory eUnity sessions ──────────────────────────────────────
-const eunitySessions = new Map<string, { initialized: boolean; ts: number }>();
+const eunitySessions = new Map<string, { initialized: boolean; ts: number; studyType: string }>();
 
 function generateJsessionId(): string {
   return 'FAKE_JSESSIONID_' + Math.random().toString(36).substring(2, 18).toUpperCase();
@@ -37,13 +37,24 @@ function binary(data: Buffer, extraHeaders: Record<string, string> = {}) {
 }
 
 // ─── AMF3 Response Builder ──────────────────────────────────────────
+
+interface StudyData {
+  studyUID: string;
+  series: Array<{
+    seriesUID: string;
+    seriesDescription: string;
+    instanceUIDs?: string[];
+    instanceUID?: string;
+  }>;
+}
+
 /**
  * Build a minimal AMF3 response for getStudyListMeta.
  * The scraper's parseAmfResponse looks for "code" in the binary,
  * then reads an integer (0x04) and null (0x01).
  * The parseStudySeriesFromAmf scans for DICOM UID patterns.
  */
-function buildAmfResponse(): Buffer {
+function buildAmfResponse(study: StudyData): Buffer {
   const parts: number[] = [];
 
   // AmfServicesMessage typed object marker
@@ -80,17 +91,21 @@ function buildAmfResponse(): Buffer {
   // Now append study UIDs as readable strings so parseStudySeriesFromAmf can find them
   // It scans for patterns like 1.X.X.X.X.X...
   const padding = Buffer.from('\x00\x00\x00\x00');
-  const studyBuf = Buffer.from(homer.imaging.studyUID);
-  const series = homer.imaging.series;
+  const studyBuf = Buffer.from(study.studyUID);
 
   const trailingParts: Buffer[] = [padding, studyBuf, padding];
-  for (const s of series) {
+  for (const s of study.series) {
+    const instances = s.instanceUIDs ?? (s.instanceUID ? [s.instanceUID] : []);
     trailingParts.push(Buffer.from(s.seriesDescription));
     trailingParts.push(padding);
-    trailingParts.push(Buffer.from(s.seriesUID));
-    trailingParts.push(padding);
-    trailingParts.push(Buffer.from(s.instanceUID));
-    trailingParts.push(padding);
+    // For each instance, emit the seriesUID + instanceUID pair
+    // The parser groups instances by seriesUID frequency
+    for (const instanceUID of instances) {
+      trailingParts.push(Buffer.from(s.seriesUID));
+      trailingParts.push(padding);
+      trailingParts.push(Buffer.from(instanceUID));
+      trailingParts.push(padding);
+    }
   }
 
   return Buffer.concat([Buffer.from(parts), ...trailingParts]);
@@ -115,12 +130,14 @@ function writeAmfString(buf: number[], str: string) {
 }
 
 // ─── Real CLO Image Data ─────────────────────────────────────────────
-// Pre-generated skull X-ray images with crayons stuck in Homer's brain.
-// Each series maps to a different image (AP vs lateral view).
+// Pre-generated images for Homer's skull X-rays and CT scan.
+// Each series maps to a different CLO image file.
 const CLO_DATA_DIR = join(process.cwd(), 'src/data/clo-images');
 
 // Per-series CLO data keyed by seriesUID
 const seriesCloData = new Map<string, { wrapper: Buffer; pixel: Buffer }>();
+
+// Load X-ray series CLO data
 for (const s of homer.imaging.series) {
   const prefix = (s as { cloPrefix?: string }).cloPrefix ?? 'checkerboard_512x512';
   const wrapperBuf = readFileSync(join(CLO_DATA_DIR, `${prefix}_wrapper.clo`));
@@ -131,7 +148,18 @@ for (const s of homer.imaging.series) {
   });
 }
 
-// Fallback to first series for unmatched requests
+// Load CT series CLO data
+for (const s of homer.ctImaging.series) {
+  const prefix = (s as { cloPrefix?: string }).cloPrefix ?? 'checkerboard_512x512';
+  const wrapperBuf = readFileSync(join(CLO_DATA_DIR, `${prefix}_wrapper.clo`));
+  const pixelBuf = readFileSync(join(CLO_DATA_DIR, `${prefix}_pixel.clo`));
+  seriesCloData.set(s.seriesUID, {
+    wrapper: Buffer.concat([wrapperBuf, pixelBuf]),
+    pixel: pixelBuf,
+  });
+}
+
+// Fallback to first X-ray series for unmatched requests
 const defaultSeries = homer.imaging.series[0];
 const defaultClo = seriesCloData.get(defaultSeries.seriesUID)!;
 
@@ -142,12 +170,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const lower = joined.toLowerCase();
 
   // ── SAML STS page ─────────────────────────────────────────────
-  if (lower === 'saml-sts') {
+  if (lower === 'saml-sts' || lower.startsWith('saml-sts?')) {
     const origin = new URL(request.url).origin;
+    const url = new URL(request.url);
+    const studyType = url.searchParams.get('study') ?? 'xray';
     // Return HTML with auto-submit form (like a real SAML STS)
     return html(`<!DOCTYPE html>
 <html><head><title>SAML STS</title></head><body>
-<form method="POST" action="${origin}/e/saml-acs">
+<form method="POST" action="${origin}/e/saml-acs?study=${studyType}">
   <input type="hidden" name="SAMLResponse" value="fake-saml-response-token" />
   <input type="hidden" name="RelayState" value="fake-relay-state" />
   <noscript><button type="submit">Continue</button></noscript>
@@ -159,9 +189,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // ── eUnity Viewer ─────────────────────────────────────────────
   if (lower.startsWith('viewer')) {
     const jsessionId = generateJsessionId();
-    eunitySessions.set(jsessionId, { initialized: false, ts: Date.now() });
+    // Determine study type from the accession in the URL params
+    const url = new URL(request.url);
+    const accParam = url.searchParams.get('arg') ?? '';
+    const studyType = accParam.includes(homer.ctImaging.accessionNumber) ? 'ct' : 'xray';
+    eunitySessions.set(jsessionId, { initialized: false, ts: Date.now(), studyType });
 
-    const img = homer.imaging;
+    const img = studyType === 'ct' ? homer.ctImaging : homer.imaging;
     // The scraper extracts study params from viewer HTML body
     const viewerHtml = `<!DOCTYPE html>
 <html><head><title>eUnity Viewer</title></head><body>
@@ -185,10 +219,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const lower = joined.toLowerCase();
 
   // ── SAML ACS (Assertion Consumer Service) ─────────────────────
-  if (lower === 'saml-acs') {
+  if (lower === 'saml-acs' || lower.startsWith('saml-acs?')) {
     const origin = new URL(request.url).origin;
+    const url = new URL(request.url);
+    const studyType = url.searchParams.get('study') ?? 'xray';
     // Redirect to eUnity viewer with study params
-    const img = homer.imaging;
+    const img = studyType === 'ct' ? homer.ctImaging : homer.imaging;
     const viewerUrl = `${origin}/e/viewer?CLOAccessKeyID=fake-access-key&arg=accession%3D${img.accessionNumber}%26serviceInstance%3D${img.serviceInstance}%26patientId%3D${encodeURIComponent(img.patientId)}`;
     return NextResponse.redirect(viewerUrl, 302);
   }
@@ -200,10 +236,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return new NextResponse('Unauthorized', { status: 403 });
     }
 
-    // Mark session as initialized (required before CustomImageServlet works)
-    eunitySessions.set(jsessionId, { initialized: true, ts: Date.now() });
+    // Determine which study to serve based on the session
+    const sessionData = eunitySessions.get(jsessionId)!;
+    const studyType = sessionData.studyType ?? 'xray';
+    const study = studyType === 'ct' ? homer.ctImaging : homer.imaging;
 
-    const amfResponse = buildAmfResponse();
+    // Mark session as initialized (required before CustomImageServlet works)
+    eunitySessions.set(jsessionId, { ...sessionData, initialized: true, ts: Date.now() });
+
+    const amfResponse = buildAmfResponse(study);
     return binary(amfResponse);
   }
 

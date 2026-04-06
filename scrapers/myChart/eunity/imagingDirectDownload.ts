@@ -1024,6 +1024,8 @@ export interface DirectDownloadOptions {
   skipFileWrite?: boolean;
   /** Stop after downloading this many images (default: unlimited). */
   maxImages?: number;
+  /** Number of parallel downloads (default: 10). */
+  concurrency?: number;
 }
 
 /**
@@ -1100,6 +1102,7 @@ async function downloadImage(
       'User-Agent': UA,
     },
     body,
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!res.ok) {
@@ -1469,78 +1472,71 @@ export async function downloadImagingStudyDirect(
     }));
 
     // Step 6: Download images — each (seriesUID, instanceUID) pair is a separate image.
-    // The eUnity viewer requests each with its own seriesUID + objectUID, frameNumber=1.
+    // Download in parallel batches for speed (CT scans can have 700+ slices).
     const maxImages = options?.maxImages ?? Infinity;
-    for (const series of studyInfo.series) {
-      if (result.images.length >= maxImages) break;
-      console.log(`      Downloading ${series.seriesDescription} (${series.seriesUID.substring(series.seriesUID.length - 12)})...`);
-      const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
-      const safeDesc = series.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const concurrency = options?.concurrency ?? 5;
+    const seriesToDownload = studyInfo.series.slice(0, maxImages);
+    const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
+    const CLOCLHAAR_MAGIC = Buffer.from('CLOCLHAAR');
+    let completed = 0;
 
+    async function downloadOne(series: typeof studyInfo.series[0]): Promise<void> {
       try {
-        // Download CLOWRAPPER (metadata + image data)
-        const { data } = await downloadImage(session.cookieJar, baseUrl, {
-          studyUID: studyInfo.studyUID,
+        const { data } = await downloadImage(session!.cookieJar, baseUrl, {
+          studyUID: studyInfo!.studyUID,
           seriesUID: series.seriesUID,
           objectUID: series.instanceUID,
-          serviceInstance: studyParams.serviceInstance,
+          serviceInstance: studyParams!.serviceInstance,
           format: 'CLOWRAPPER',
         });
 
-        // Skip empty/error responses (< 256 bytes is too small for real image data)
+        completed++;
         if (data.length < 256 || (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR')) {
-          console.log(`      Skipping ${series.seriesDescription}: ${data.length} bytes`);
-          continue;
+          if (completed % 50 === 0 || completed === seriesToDownload.length) {
+            console.log(`      [${completed}/${seriesToDownload.length}] Progress...`);
+          }
+          return;
         }
-        console.log(`      Got ${series.seriesDescription} (${(data.length / 1024).toFixed(0)} KB)`);
 
-        const ext = isCloFormat(data) ? '.clo' : '.bin';
-        const fileName = `${safeName}_${safeDesc}_wrapper${ext}`;
-        const filePath = path.join(outputDir, fileName);
+        const safeDesc = series.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
 
         if (skipFileWrite) {
-          // Buffer mode: CLOWRAPPER contains [CLOHEADERZ01 metadata][CLOCLHAAR pixel data].
-          // Split into wrapper metadata and embedded pixel data for in-memory conversion.
-          const CLOCLHAAR_MAGIC = Buffer.from('CLOCLHAAR');
           const haarIdx = data.indexOf(CLOCLHAAR_MAGIC);
           if (haarIdx >= 0) {
             const wrapperMetadata = haarIdx > 0 ? data.subarray(0, haarIdx) : undefined;
             const embeddedPixelData = data.subarray(haarIdx);
-            console.log(`      Buffer: ${series.seriesDescription} wrapper=${haarIdx > 0 ? haarIdx : 0}B pixel=${embeddedPixelData.length}B`);
             result.images.push({
               filePath: '',
               sizeBytes: embeddedPixelData.length,
               seriesUID: series.seriesUID,
               instanceUID: series.instanceUID,
               seriesDescription: series.seriesDescription,
-              accessionNumber: studyParams.accession,
+              accessionNumber: studyParams!.accession,
               format: 'CLHAAR',
               pixelData: Buffer.from(embeddedPixelData),
               wrapperData: wrapperMetadata ? Buffer.from(wrapperMetadata) : undefined,
             });
-          } else {
-            console.log(`      Skipping ${series.seriesDescription}: no CLOCLHAAR magic in ${data.length}B response (starts with: ${data.toString('ascii', 0, 12)})`);
           }
         } else {
+          const ext = isCloFormat(data) ? '.clo' : '.bin';
+          const fileName = `${safeName}_${safeDesc}_wrapper${ext}`;
+          const filePath = path.join(outputDir, fileName);
           await fs.promises.writeFile(filePath, data);
-          console.log(`      Saved: ${fileName} (${(data.length / 1024).toFixed(0)} KB)`);
 
-          // Download all progressive CLOPIXEL levels for full quality
-          console.log(`      Downloading progressive pixel levels...`);
-          const pixelLevels = await downloadProgressiveClopixel(session.cookieJar, baseUrl, {
-            studyUID: studyInfo.studyUID,
+          const pixelLevels = await downloadProgressiveClopixel(session!.cookieJar, baseUrl, {
+            studyUID: studyInfo!.studyUID,
             seriesUID: series.seriesUID,
             objectUID: series.instanceUID,
-            serviceInstance: studyParams.serviceInstance,
+            serviceInstance: studyParams!.serviceInstance,
           });
-          // File mode: write wrapper + all pixel levels to disk
+
           result.images.push({
             filePath,
             sizeBytes: data.length,
             seriesUID: series.seriesUID,
             instanceUID: series.instanceUID,
             seriesDescription: series.seriesDescription,
-            accessionNumber: studyParams.accession,
+            accessionNumber: studyParams!.accession,
             format: isCloFormat(data) ? 'CLHAAR' : 'UNKNOWN',
           });
 
@@ -1556,19 +1552,26 @@ export async function downloadImagingStudyDirect(
               seriesUID: series.seriesUID,
               instanceUID: series.instanceUID,
               seriesDescription: `${series.seriesDescription} (pixel L${levelTag})`,
-              accessionNumber: studyParams.accession,
+              accessionNumber: studyParams!.accession,
               format: isCloFormat(pl.data) ? `CLHAAR_PIXEL_L${levelTag}` : 'UNKNOWN',
             });
           }
+        }
 
-          if (pixelLevels.length > 0) {
-            const totalPixelKB = pixelLevels.reduce((sum, pl) => sum + pl.data.length, 0) / 1024;
-            console.log(`      Total pixel data: ${pixelLevels.length} levels, ${totalPixelKB.toFixed(0)} KB`);
-          }
+        if (completed % 50 === 0 || completed === seriesToDownload.length) {
+          console.log(`      [${completed}/${seriesToDownload.length}] Downloaded ${(data.length / 1024).toFixed(0)} KB - ${series.seriesDescription}`);
         }
       } catch (err) {
+        completed++;
         result.errors.push(`${series.seriesDescription}: ${(err as Error).message}`);
       }
+    }
+
+    // Run downloads in parallel batches
+    console.log(`      Downloading ${seriesToDownload.length} images (concurrency: ${concurrency})...`);
+    for (let i = 0; i < seriesToDownload.length; i += concurrency) {
+      const batch = seriesToDownload.slice(i, i + concurrency);
+      await Promise.all(batch.map(s => downloadOne(s)));
     }
   } catch (err) {
     result.errors.push(`Fatal: ${(err as Error).message}`);
