@@ -248,6 +248,14 @@ export interface ImagingResult extends LabTestResult {
   viewerUrl?: string;
   /** Report text extracted from narrative + impression */
   reportText?: string;
+  /** Doctor's narrative (findings) — top-level convenience field */
+  narrative?: string;
+  /** Doctor's impression (conclusion) — top-level convenience field */
+  impression?: string;
+  /** Result date display string — top-level convenience field */
+  resultDate?: string;
+  /** Ordering provider name — top-level convenience field */
+  orderProvider?: string;
   /** Series info extracted from imageStudies (description, modality, image count) */
   series?: ImagingSeriesInfo[];
 }
