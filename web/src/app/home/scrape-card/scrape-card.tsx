@@ -49,7 +49,7 @@ export function ScrapeCard({ onLoadingChange }: { onLoadingChange: (loading: boo
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Button className="w-full" onClick={startScraping} disabled={scraping}>
+        <Button className="w-full" variant="secondary" onClick={startScraping} disabled={scraping}>
           Scrape Data Now
         </Button>
       </CardContent>
