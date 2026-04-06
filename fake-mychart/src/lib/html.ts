@@ -139,6 +139,7 @@ const NAV_ITEMS = [
     { icon: '\u{1F6E1}\uFE0F', label: 'Insurance', path: 'Insurance' },
     { icon: '\u{1F464}', label: 'Profile', path: 'PersonalInformation' },
     { icon: '\u{1F4DE}', label: 'Emergency Contacts', path: 'EmergencyContacts' },
+    { icon: '\u2699\uFE0F', label: 'Settings', path: 'Settings' },
   ]},
 ];
 
@@ -1189,6 +1190,122 @@ export function profilePage(): string {
             '<div class="card"><h3>Measurements</h3><div class="detail">Height: ' + (h.height ? h.height.value : 'N/A') + '</div><div class="detail">Weight: ' + (h.weight ? h.weight.value : 'N/A') + '</div></div>' +
           '</div>';
       });
+    </script>
+  `);
+}
+
+// ─── Settings ────────────────────────────────────────────────────────
+export function settingsPage(isTotpEnabled: boolean, passkeys: Array<{ rawId: string; name: string; createdOnDevice: string; creationInstant: string; lastUsedInstant: string | null }>): string {
+  const passkeyRows = passkeys.length === 0
+    ? '<p>No passkeys registered.</p>'
+    : '<table><tr><th>Name</th><th>Device</th><th>Created</th><th>Last Used</th><th>Actions</th></tr>' +
+      passkeys.map(pk => `<tr>
+        <td>${pk.name}</td>
+        <td>${pk.createdOnDevice}</td>
+        <td>${pk.creationInstant}</td>
+        <td>${pk.lastUsedInstant || 'Never'}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deletePasskey('${pk.rawId}')">Remove</button></td>
+      </tr>`).join('') + '</table>';
+
+  return portalLayout('Settings', 'Settings', `
+    <h1>Settings</h1>
+
+    <h2>Two-Factor Authentication (TOTP)</h2>
+    <div class="card" id="totp-card">
+      <h3>Authenticator App</h3>
+      <div class="detail" id="totp-status">
+        Status: <span class="badge ${isTotpEnabled ? 'badge-green' : 'badge-gray'}">${isTotpEnabled ? 'Enabled' : 'Disabled'}</span>
+      </div>
+      <div style="margin-top: 12px;">
+        ${isTotpEnabled
+          ? '<button class="btn" onclick="disableTotp()">Disable TOTP</button>'
+          : '<button class="btn" onclick="setupTotp()">Enable TOTP</button>'}
+      </div>
+      <div id="totp-setup-area" style="margin-top: 12px; display: none;"></div>
+    </div>
+
+    <h2>Passkeys</h2>
+    <div class="card" id="passkey-card">
+      <h3>Registered Passkeys</h3>
+      <div id="passkey-list">${passkeyRows}</div>
+      <div style="margin-top: 12px;">
+        <button class="btn" onclick="addPasskey()">Add Passkey</button>
+      </div>
+    </div>
+
+    <style>
+      .btn { background: #1a5276; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+      .btn:hover { background: #1a6fa5; }
+      .btn-danger { background: #c0392b; }
+      .btn-danger:hover { background: #e74c3c; }
+      .btn-sm { padding: 4px 10px; font-size: 12px; }
+    </style>
+
+    <script>
+      var csrfToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
+      var headers = { 'Content-Type': 'application/json', '__RequestVerificationToken': csrfToken };
+
+      function setupTotp() {
+        var area = document.getElementById('totp-setup-area');
+        area.style.display = 'block';
+        area.innerHTML = '<p>Verifying password...</p>';
+        fetch('/${FIRST_PATH}/api/secondary-validation/VerifyPasswordAndUpdateContact', {
+          method: 'POST', credentials: 'same-origin', headers: headers,
+          body: JSON.stringify({ Password: '' })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (!data.IsPasswordValid) { area.innerHTML = '<p style="color:red;">Invalid password.</p>'; return; }
+          area.innerHTML = '<p>Fetching QR code...</p>';
+          return fetch('/${FIRST_PATH}/api/secondary-validation/TotpQrCode', {
+            method: 'POST', credentials: 'same-origin', headers: headers, body: '{}'
+          }).then(function(r) { return r.json(); }).then(function(qr) {
+            var secret = qr.encodedSecretKey || qr.EncodedSecretKey || '';
+            area.innerHTML = '<p>Secret: <code>' + secret + '</code></p>' +
+              '<input id="totp-code" placeholder="Enter 6-digit code" style="padding:6px;margin:8px 0;">' +
+              '<button class="btn" onclick="verifyTotp()">Verify & Enable</button>';
+          });
+        });
+      }
+
+      function verifyTotp() {
+        var code = document.getElementById('totp-code').value;
+        fetch('/${FIRST_PATH}/api/secondary-validation/VerifyCode', {
+          method: 'POST', credentials: 'same-origin', headers: headers,
+          body: JSON.stringify({ Code: code })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (!data.Success) { alert('Invalid code'); return; }
+          return fetch('/${FIRST_PATH}/api/secondary-validation/UpdateTwoFactorTotpOptInStatus', {
+            method: 'POST', credentials: 'same-origin', headers: headers, body: '{}'
+          }).then(function() { location.reload(); });
+        });
+      }
+
+      function disableTotp() {
+        if (!confirm('Disable TOTP?')) return;
+        fetch('/${FIRST_PATH}/api/secondary-validation/UpdateTwoFactorTotpOptInStatus', {
+          method: 'POST', credentials: 'same-origin', headers: headers, body: '{}'
+        }).then(function() { location.reload(); });
+      }
+
+      function addPasskey() {
+        fetch('/${FIRST_PATH}/api/passkey-management/GenerateCreateRequest', {
+          method: 'POST', credentials: 'same-origin', headers: headers, body: '{}'
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          // In a real browser this would call navigator.credentials.create()
+          // For the fake UI we just show the challenge was generated
+          alert('Passkey creation challenge generated. Use the CLI --set-up-passkey to register a software passkey.');
+        });
+      }
+
+      function deletePasskey(rawId) {
+        if (!confirm('Remove this passkey?')) return;
+        fetch('/${FIRST_PATH}/api/passkey-management/DeletePasskey', {
+          method: 'POST', credentials: 'same-origin', headers: headers,
+          body: JSON.stringify({ rawId: rawId })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.success) location.reload();
+          else alert('Failed to remove passkey.');
+        });
+      }
     </script>
   `);
 }
