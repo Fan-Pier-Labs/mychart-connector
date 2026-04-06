@@ -594,6 +594,7 @@ function inverseHaarLevel(
   outH: number,
   outW: number
 ): Uint16Array {
+  // Get detail subband raw bytes
   const lhLow = getSubbandBytes(tiles, group, 1, inH, inW);
   const lhHigh = getSubbandBytes(tiles, group, 65537, inH, inW);
   const hlLow = getSubbandBytes(tiles, group, 2, inH, inW);
@@ -604,6 +605,7 @@ function inverseHaarLevel(
 
   const n = inH * inW;
 
+  // Combine byte planes and apply overflow bits, then zigzag decode
   const lhU = new Int32Array(n);
   const hlU = new Int32Array(n);
   const hhU = new Int32Array(n);
@@ -618,16 +620,17 @@ function inverseHaarLevel(
   const hl = zigzagDecode(hlU);
   const hh = zigzagDecode(hhU);
 
-  const out00 = new Int32Array(n);
-  const out01 = new Int32Array(n);
-  const out10 = new Int32Array(n);
-  const out11 = new Int32Array(n);
+  // Lifting scheme inverse Haar wavelet transform
+  const out00 = new Int32Array(n); // even row, even col
+  const out01 = new Int32Array(n); // even row, odd col
+  const out10 = new Int32Array(n); // odd row, even col
+  const out11 = new Int32Array(n); // odd row, odd col
 
   for (let i = 0; i < n; i++) {
-    const s = ll[i];
-    const a = hl[i];
-    const b = lh[i];
-    const c = hh[i];
+    const s = ll[i]; // LL (unsigned 16-bit)
+    const a = hl[i]; // vertical detail
+    const b = lh[i]; // horizontal detail
+    const c = hh[i]; // diagonal detail
 
     const z = s - (a >> 1);
     const lInit = b - (c >> 1);
@@ -640,6 +643,7 @@ function inverseHaarLevel(
     out11[i] = lUpd + nVal;
   }
 
+  // Interleave into output
   const output = new Int32Array(outH * outW);
   const actualH = Math.min(inH * 2, outH);
   const actualW = Math.min(inW * 2, outW);
@@ -648,27 +652,32 @@ function inverseHaarLevel(
   const nEvenCols = (actualW + 1) >> 1;
   const nOddCols = actualW >> 1;
 
+  // out00 → even rows, even cols
   for (let r = 0; r < nEvenRows; r++) {
     for (let c = 0; c < nEvenCols; c++) {
       output[(r * 2) * outW + (c * 2)] = out00[r * inW + c];
     }
   }
+  // out01 → even rows, odd cols
   for (let r = 0; r < nEvenRows; r++) {
     for (let c = 0; c < nOddCols; c++) {
       output[(r * 2) * outW + (c * 2 + 1)] = out01[r * inW + c];
     }
   }
+  // out10 → odd rows, even cols
   for (let r = 0; r < nOddRows; r++) {
     for (let c = 0; c < nEvenCols; c++) {
       output[(r * 2 + 1) * outW + (c * 2)] = out10[r * inW + c];
     }
   }
+  // out11 → odd rows, odd cols
   for (let r = 0; r < nOddRows; r++) {
     for (let c = 0; c < nOddCols; c++) {
       output[(r * 2 + 1) * outW + (c * 2 + 1)] = out11[r * inW + c];
     }
   }
 
+  // Handle odd output dimensions
   if (outH > actualH && actualH > 0) {
     for (let c = 0; c < outW; c++) {
       output[actualH * outW + c] = output[(actualH - 1) * outW + c];
@@ -680,6 +689,7 @@ function inverseHaarLevel(
     }
   }
 
+  // Convert to uint16
   const result = new Uint16Array(outH * outW);
   for (let i = 0; i < outH * outW; i++) {
     result[i] = output[i] & 0xffff;
@@ -743,6 +753,7 @@ function reconstructImage(
     throw new Error("Missing LL approximation block");
   }
 
+  // Count actual detail groups from tile data (groups >= 0 are detail levels)
   const detailGroups = new Set<number>();
   for (const key of tiles.keys()) {
     const [g] = parseTileKey(key);
@@ -756,10 +767,13 @@ function reconstructImage(
   }
 
   const [ch, cw] = levels[0];
+
+  // Assemble LL (coarsest approximation)
   let current = assembleSubbandU16(tiles, -1, 0, 65536, ch, cw);
   let curH = ch;
   let curW = cw;
 
+  // Progressive inverse Haar
   for (let lvlIdx = 0; lvlIdx < levels.length; lvlIdx++) {
     const group = lvlIdx;
     let nextH: number, nextW: number;
@@ -799,6 +813,7 @@ function reconstructImage(
     curW = nextW;
   }
 
+  // Apply display pipeline
   const invert = metadata.photometric === "MONOCHROME1";
   const displayed = applyVoiLut(current, curH, curW, metadata);
   return to8bit(displayed, invert);
