@@ -12,7 +12,7 @@ const CONFIG_PATH = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 export function readPluginConfig(): Record<string, string> {
   try {
     const fullConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-    return fullConfig?.plugins?.entries?.['openrecord']?.config ?? {};
+    return fullConfig?.plugins?.entries?.['openclaw-openrecord']?.config ?? {};
   } catch {
     return {};
   }
@@ -23,8 +23,8 @@ export function savePluginConfig(config: Record<string, string>) {
   const fullConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
   fullConfig.plugins ??= {};
   fullConfig.plugins.entries ??= {};
-  fullConfig.plugins.entries['openrecord'] ??= {};
-  fullConfig.plugins.entries['openrecord'].config = config;
+  fullConfig.plugins.entries['openclaw-openrecord'] ??= {};
+  fullConfig.plugins.entries['openclaw-openrecord'].config = config;
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(fullConfig, null, 2));
 }
 

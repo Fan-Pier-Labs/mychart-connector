@@ -165,7 +165,7 @@ async function trySetupPasskey(mychartRequest: MyChartRequest): Promise<void> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function ensureSession(api: any): Promise<MyChartRequest> {
+export async function ensureSession(api: any): Promise<MyChartRequest> {
   if (currentSession && !sessionExpired) return currentSession;
 
   const creds = getCredentials(api);

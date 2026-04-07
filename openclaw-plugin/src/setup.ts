@@ -1,7 +1,7 @@
 /**
  * Interactive setup CLI for MyChart plugin.
  *
- * Registered as `openclaw openrecord setup`, `openclaw openrecord status`, and `openclaw openrecord reset`.
+ * Registered as `openclaw openrecord setup`, `openclaw openrecord status`, `openclaw openrecord reset`, and `openclaw openrecord ping`.
  */
 
 import * as readline from 'readline';
@@ -11,9 +11,10 @@ import { setupPasskey } from '../../scrapers/myChart/setupPasskey';
 import { generateTotpCode } from '../../scrapers/myChart/totp';
 import { serializeCredential } from '../../scrapers/myChart/softwareAuthenticator';
 import { browserPasswordDbExists, importMyChartAccounts } from './password-import';
-import { clearSession } from './index';
+import { clearSession, ensureSession } from './index';
 import { isBlockedInstance } from '../../shared/blockedInstances';
 import { savePluginConfig } from './config';
+import { getMyChartProfile } from '../../scrapers/myChart/profile';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OpenClawApi = any;
@@ -351,6 +352,20 @@ async function resetCommand(): Promise<void> {
   console.log('Run `openclaw openrecord setup` to reconfigure.\n');
 }
 
+async function pingCommand(api: OpenClawApi): Promise<void> {
+  try {
+    const session = await ensureSession(api);
+    const profile = await getMyChartProfile(session);
+    const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Unknown';
+    console.log(`\n  ✓ Login successful — ${name}`);
+    console.log('  status: true\n');
+  } catch (err) {
+    console.error(`\n  ✗ ${(err as Error).message}`);
+    console.log('  status: false\n');
+    process.exitCode = 1;
+  }
+}
+
 export function registerCliCommands(api: OpenClawApi) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   api.registerCli((ctx: { program: any; config: any; logger: any }) => {
@@ -368,5 +383,9 @@ export function registerCliCommands(api: OpenClawApi) {
     openrecord.command('reset')
       .description('Clear saved MyChart credentials and reset the plugin')
       .action(() => resetCommand());
+
+    openrecord.command('ping')
+      .description('Login with saved credentials/passkey and verify by fetching profile')
+      .action(() => pingCommand(api));
   }, { commands: ['openrecord'] });
 }
