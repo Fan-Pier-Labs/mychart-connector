@@ -12,7 +12,7 @@ import { myChartUserPassLogin, myChartPasskeyLogin, complete2faFlow } from '../.
 import { setupPasskey } from '../../scrapers/myChart/setupPasskey';
 import { generateTotpCode } from '../../scrapers/myChart/totp';
 import { deserializeCredential, serializeCredential } from '../../scrapers/myChart/softwareAuthenticator';
-import { updatePluginConfig } from './config';
+import { readPluginConfig, updatePluginConfig } from './config';
 import { sendTelemetryEvent } from '../../shared/telemetry';
 import { checkForUpdate } from '../../shared/updateCheck';
 import pluginPkg from '../package.json';
@@ -84,12 +84,16 @@ interface Credentials {
 function getCredentials(api: any): Credentials | null {
   const cfg = api.pluginConfig;
   if (!cfg?.hostname || !cfg?.username || !cfg?.password) return null;
+  // Read passkey from disk to get the latest signCount — api.pluginConfig is
+  // an in-memory snapshot from gateway startup and goes stale when another
+  // process (e.g. `openclaw openrecord ping`) increments the counter.
+  const diskConfig = readPluginConfig();
   return {
     hostname: cfg.hostname,
     username: cfg.username,
     password: cfg.password,
     totpSecret: cfg.totpSecret || undefined,
-    passkey: cfg.passkey || undefined,
+    passkey: diskConfig.passkey || cfg.passkey || undefined,
   };
 }
 

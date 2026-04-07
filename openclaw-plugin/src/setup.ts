@@ -356,7 +356,7 @@ async function pingCommand(api: OpenClawApi): Promise<void> {
   try {
     const session = await ensureSession(api);
     const profile = await getMyChartProfile(session);
-    const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Unknown';
+    const name = profile?.name || 'Unknown';
     console.log(`\n  ✓ Login successful — ${name}`);
     console.log('  status: true\n');
   } catch (err) {
