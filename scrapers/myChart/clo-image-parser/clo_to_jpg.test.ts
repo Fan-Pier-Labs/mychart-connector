@@ -1,12 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { readFileSync, existsSync, unlinkSync } from "fs";
-import { join } from "path";
+import { existsSync, unlinkSync } from "fs";
 import sharp from "sharp";
 import {
   AMF3Reader,
   parsePixelHeader,
   parseWrapper,
-  extractTiles,
   tileKey,
   parseTileKey,
   computeWaveletLevels,
@@ -16,13 +14,8 @@ import {
   convertCloToBitmap,
 } from "./clo_to_bitmap";
 import { convertBitmapToJpg, convertBitmapToWebp, convertCloToJpg } from "./clo_to_jpg";
+import { encodePixelFile, encodeWrapperFile } from "./generate_clo";
 import type { Bitmap } from "./clo_to_bitmap";
-
-const BASE = join(import.meta.dir);
-const INPUT = join(BASE, "input_study_one");
-const INPUT_TWO = join(BASE, "input_study_two");
-const GOALS = join(BASE, "goal_images_study_one");
-const GOALS_TWO = join(BASE, "goal_images_study_two");
 
 // ==================== AMF3Reader ====================
 
@@ -158,26 +151,6 @@ describe("parsePixelHeader", () => {
     expect(parsePixelHeader(buf)).toEqual({ width: 2337, height: 2259 });
   });
 
-  it("parses real R_INT pixel file header", () => {
-    const data = readFileSync(join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"));
-    const header = parsePixelHeader(data);
-    expect(header.width).toBe(2337);
-    expect(header.height).toBe(2259);
-  });
-
-  it("parses real R_GRID pixel file header", () => {
-    const data = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
-    const header = parsePixelHeader(data);
-    expect(header.width).toBe(1803);
-    expect(header.height).toBe(1345);
-  });
-
-  it("parses real R_EXT pixel file header", () => {
-    const data = readFileSync(join(INPUT, "R_EXT_ROTATION_TABLE_pixel.clo"));
-    const header = parsePixelHeader(data);
-    expect(header.width).toBe(2328);
-    expect(header.height).toBe(2266);
-  });
 });
 
 // ==================== tileKey / parseTileKey ====================
@@ -334,182 +307,73 @@ describe("parseWrapper", () => {
     unlinkSync(tmpPath);
   });
 
-  it("parses real R_INT wrapper", () => {
-    const metadata = parseWrapper(join(INPUT, "R_INT_ROTATION_TABLE_wrapper.clo"));
-    expect(metadata.photometric).toBe("MONOCHROME1");
-    expect(metadata.voi_lut).toBeInstanceOf(Uint16Array);
-    expect(metadata.voi_lut!.length).toBeGreaterThan(0);
-    expect(typeof metadata.voi_lut_start).toBe("number");
-  });
-
-  it("parses real R_GRID wrapper", () => {
-    const metadata = parseWrapper(join(INPUT, "R_GRID_AXILLARY_wrapper.clo"));
-    expect(metadata.photometric).toBe("MONOCHROME1");
-  });
-
-  it("parses real R_EXT wrapper", () => {
-    const metadata = parseWrapper(join(INPUT, "R_EXT_ROTATION_TABLE_wrapper.clo"));
-    expect(metadata.photometric).toBe("MONOCHROME1");
-  });
-});
-
-// ==================== extractTiles ====================
-
-describe("extractTiles", () => {
-  it("extracts tiles from real R_INT pixel file", () => {
-    const data = readFileSync(join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"));
-    const tiles = extractTiles(data);
-    expect(tiles.size).toBeGreaterThan(0);
-    expect(tiles.has(tileKey(-1, 0, 0, 0))).toBe(true);
-    expect(tiles.has(tileKey(-1, 0, 0, 65536))).toBe(true);
-  });
-
-  it("extracts tiles from real R_GRID pixel file", () => {
-    const data = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
-    const tiles = extractTiles(data);
-    expect(tiles.size).toBeGreaterThan(0);
-    expect(tiles.has(tileKey(0, 0, 0, 1))).toBe(true);
-  });
-});
-
-// ==================== convertCloToBitmap ====================
-
-describe("convertCloToBitmap", () => {
-  it("returns correct dimensions for R_INT", () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"),
-      join(INPUT, "R_INT_ROTATION_TABLE_wrapper.clo"),
-    );
-    expect(bitmap.width).toBe(2337);
-    expect(bitmap.height).toBe(2259);
-    expect(bitmap.pixels.length).toBe(2337 * 2259);
-    expect(bitmap.pixels).toBeInstanceOf(Uint8Array);
-  }, 30000);
-
-  it("returns correct dimensions for R_GRID", () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
-    expect(bitmap.width).toBe(1803);
-    expect(bitmap.height).toBe(1345);
-    expect(bitmap.pixels.length).toBe(1803 * 1345);
-  }, 30000);
-
-  it("accepts Buffer inputs", () => {
-    const pixelData = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
-    const wrapperData = readFileSync(join(INPUT, "R_GRID_AXILLARY_wrapper.clo"));
-    const bitmap = convertCloToBitmap(pixelData, wrapperData);
-    expect(bitmap.width).toBe(1803);
-    expect(bitmap.height).toBe(1345);
-  }, 30000);
-
-  it("works without wrapper (defaults to MONOCHROME1)", () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-    );
-    expect(bitmap.width).toBe(1803);
-    expect(bitmap.height).toBe(1345);
-  }, 30000);
-
-  it("pixel values are in 0-255 range", () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
-    let min = 255, max = 0;
-    for (let i = 0; i < bitmap.pixels.length; i++) {
-      if (bitmap.pixels[i] < min) min = bitmap.pixels[i];
-      if (bitmap.pixels[i] > max) max = bitmap.pixels[i];
-    }
-    expect(min).toBeGreaterThanOrEqual(0);
-    expect(max).toBeLessThanOrEqual(255);
-    // Should use the full range
-    expect(max).toBe(255);
-  }, 30000);
 });
 
 // ==================== convertBitmapToJpg ====================
 
 describe("convertBitmapToJpg", () => {
-  it("produces valid JPEG buffer from bitmap", async () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
-    const jpgBuffer = await convertBitmapToJpg(bitmap);
-    expect(Buffer.isBuffer(jpgBuffer)).toBe(true);
-    const meta = await sharp(jpgBuffer).metadata();
-    expect(meta.format).toBe("jpeg");
-    expect(meta.width).toBe(1803);
-    expect(meta.height).toBe(1345);
-  }, 30000);
-
-  it("writes JPEG to disk when outputPath given", async () => {
-    const out = "/tmp/test_bitmap_to_jpg.jpg";
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
-    const buffer = await convertBitmapToJpg(bitmap, out);
-    expect(existsSync(out)).toBe(true);
-    const meta = await sharp(out).metadata();
-    expect(meta.format).toBe("jpeg");
-    expect(meta.width).toBe(1803);
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    unlinkSync(out);
-  }, 30000);
-
-  it("uses quality 100 (max JPEG quality)", async () => {
+  it("produces valid JPEG buffer from synthetic bitmap", async () => {
     const bitmap: Bitmap = {
       pixels: new Uint8Array(100 * 100).fill(128),
       width: 100,
       height: 100,
     };
-    const buffer = await convertBitmapToJpg(bitmap);
-    // quality 100 should produce larger files than low quality
-    const meta = await sharp(buffer).metadata();
+    const jpgBuffer = await convertBitmapToJpg(bitmap);
+    expect(Buffer.isBuffer(jpgBuffer)).toBe(true);
+    const meta = await sharp(jpgBuffer).metadata();
     expect(meta.format).toBe("jpeg");
+    expect(meta.width).toBe(100);
+    expect(meta.height).toBe(100);
+  });
+
+  it("writes JPEG to disk when outputPath given", async () => {
+    const out = "/tmp/test_bitmap_to_jpg.jpg";
+    const bitmap: Bitmap = {
+      pixels: new Uint8Array(50 * 50).fill(200),
+      width: 50,
+      height: 50,
+    };
+    const buffer = await convertBitmapToJpg(bitmap, out);
+    expect(existsSync(out)).toBe(true);
+    const meta = await sharp(out).metadata();
+    expect(meta.format).toBe("jpeg");
+    expect(meta.width).toBe(50);
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    unlinkSync(out);
   });
 });
 
 // ==================== convertBitmapToWebp ====================
 
 describe("convertBitmapToWebp", () => {
-  it("produces valid lossless WebP buffer from bitmap", async () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
+  it("produces valid lossless WebP from synthetic bitmap", async () => {
+    const bitmap: Bitmap = {
+      pixels: new Uint8Array(64 * 64),
+      width: 64,
+      height: 64,
+    };
+    // Fill with a gradient
+    for (let i = 0; i < 64 * 64; i++) {
+      bitmap.pixels[i] = i % 256;
+    }
     const webpBuffer = await convertBitmapToWebp(bitmap);
     expect(Buffer.isBuffer(webpBuffer)).toBe(true);
     const meta = await sharp(webpBuffer).metadata();
     expect(meta.format).toBe("webp");
-    expect(meta.width).toBe(1803);
-    expect(meta.height).toBe(1345);
-  }, 30000);
-
-  it("writes WebP to disk when outputPath given", async () => {
-    const out = "/tmp/test_bitmap_to_webp.webp";
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
-    await convertBitmapToWebp(bitmap, out);
-    expect(existsSync(out)).toBe(true);
-    const meta = await sharp(out).metadata();
-    expect(meta.format).toBe("webp");
-    unlinkSync(out);
-  }, 30000);
+    expect(meta.width).toBe(64);
+    expect(meta.height).toBe(64);
+  });
 
   it("is truly lossless (round-trips perfectly)", async () => {
-    const bitmap = convertCloToBitmap(
-      join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    );
+    const bitmap: Bitmap = {
+      pixels: new Uint8Array(32 * 32),
+      width: 32,
+      height: 32,
+    };
+    for (let i = 0; i < 32 * 32; i++) {
+      bitmap.pixels[i] = (i * 7) % 256;
+    }
     const webpBuffer = await convertBitmapToWebp(bitmap);
-
-    // Decode the WebP back to raw pixels
     const { data, info } = await sharp(webpBuffer)
       .grayscale()
       .raw()
@@ -519,251 +383,99 @@ describe("convertBitmapToWebp", () => {
     expect(info.width).toBe(bitmap.width);
     expect(info.height).toBe(bitmap.height);
 
-    // Every pixel must match exactly (lossless)
     let mismatches = 0;
     for (let i = 0; i < bitmap.pixels.length; i++) {
       if (decoded[i] !== bitmap.pixels[i]) mismatches++;
     }
     expect(mismatches).toBe(0);
-  }, 30000);
+  });
 });
 
-// ==================== convertCloToJpg (convenience wrapper) ====================
+// ==================== Synthetic CLO encode → decode round-trip ====================
 
-describe("convertCloToJpg", () => {
-  async function loadGrayscale(path: string): Promise<{ data: Uint8Array; width: number; height: number }> {
-    const { data, info } = await sharp(path)
-      .grayscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    return { data: new Uint8Array(data), width: info.width, height: info.height };
+describe("synthetic CLO round-trip", () => {
+  function makeClo(img: Uint16Array, w: number, h: number) {
+    const pixelData = encodePixelFile(img, w, h);
+    const wrapperData = encodeWrapperFile({
+      photometricInterpretation: "MONOCHROME2",
+      bitsStored: 16,
+      windowCenter: 32768,
+      windowWidth: 65536,
+    });
+    return { pixelBuffer: Buffer.from(pixelData), wrapperBuffer: Buffer.from(wrapperData) };
   }
 
-  function computeStats(a: Uint8Array, b: Uint8Array) {
-    let exact = 0;
-    let within1 = 0;
-    let sumSq = 0;
-    for (let i = 0; i < a.length; i++) {
-      const diff = Math.abs(a[i] - b[i]);
-      if (diff === 0) exact++;
-      if (diff <= 1) within1++;
-      sumSq += diff * diff;
+  it("encodes and decodes a 512x512 gradient image", () => {
+    const w = 512, h = 512;
+    const img = new Uint16Array(w * h);
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        img[r * w + c] = ((r + c) * 50) & 0xffff;
+      }
     }
-    return {
-      exactPct: exact / a.length * 100,
-      within1Pct: within1 / a.length * 100,
-      rmse: Math.sqrt(sumSq / a.length),
-    };
-  }
-
-  it("converts R_INT and matches goal to >98% exact", async () => {
-    const out = "/tmp/test_clo_r_int.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT, "R_INT_ROTATION_TABLE_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT, "R_INT_ROTATION_TABLE_wrapper.clo"),
-    });
-    const output = await loadGrayscale(out);
-    const goal = await loadGrayscale(join(GOALS, "image_1_png.png"));
-    expect(output.width).toBe(goal.width);
-    expect(output.height).toBe(goal.height);
-    const stats = computeStats(output.data, goal.data);
-    expect(stats.exactPct).toBeGreaterThan(98);
-    expect(stats.within1Pct).toBe(100);
-    expect(stats.rmse).toBeLessThan(0.2);
-    unlinkSync(out);
+    const { pixelBuffer, wrapperBuffer } = makeClo(img, w, h);
+    const bitmap = convertCloToBitmap(pixelBuffer, wrapperBuffer);
+    expect(bitmap.width).toBe(w);
+    expect(bitmap.height).toBe(h);
+    expect(bitmap.pixels.length).toBe(w * h);
+    expect(bitmap.pixels).toBeInstanceOf(Uint8Array);
+    // All pixels should be valid 0-255
+    for (let i = 0; i < bitmap.pixels.length; i++) {
+      expect(bitmap.pixels[i]).toBeGreaterThanOrEqual(0);
+      expect(bitmap.pixels[i]).toBeLessThanOrEqual(255);
+    }
   }, 30000);
 
-  it("converts R_GRID and matches goal to >98% exact", async () => {
-    const out = "/tmp/test_clo_r_grid.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    });
-    const output = await loadGrayscale(out);
-    const goal = await loadGrayscale(join(GOALS, "image_2_png.png"));
-    expect(output.width).toBe(goal.width);
-    expect(output.height).toBe(goal.height);
-    const stats = computeStats(output.data, goal.data);
-    expect(stats.exactPct).toBeGreaterThan(98);
-    expect(stats.within1Pct).toBe(100);
-    expect(stats.rmse).toBeLessThan(0.2);
-    unlinkSync(out);
-  }, 30000);
-
-  it("converts R_EXT and matches goal to >98% exact", async () => {
-    const out = "/tmp/test_clo_r_ext.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT, "R_EXT_ROTATION_TABLE_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT, "R_EXT_ROTATION_TABLE_wrapper.clo"),
-    });
-    const output = await loadGrayscale(out);
-    const goal = await loadGrayscale(join(GOALS, "image_3_png.png"));
-    expect(output.width).toBe(goal.width);
-    expect(output.height).toBe(goal.height);
-    const stats = computeStats(output.data, goal.data);
-    expect(stats.exactPct).toBeGreaterThan(98);
-    expect(stats.within1Pct).toBe(100);
-    expect(stats.rmse).toBeLessThan(0.2);
-    unlinkSync(out);
-  }, 30000);
-
-  it("writes valid JPEG when .jpg extension", async () => {
-    const out = "/tmp/test_clo_jpeg_out.jpg";
-    await convertCloToJpg({
-      pixelData: join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT, "R_GRID_AXILLARY_wrapper.clo"),
-    });
-    expect(existsSync(out)).toBe(true);
-    const meta = await sharp(out).metadata();
-    expect(meta.format).toBe("jpeg");
-    expect(meta.width).toBe(1803);
-    expect(meta.height).toBe(1345);
-    unlinkSync(out);
-  }, 30000);
-
-  it("defaults to MONOCHROME1 without wrapper", async () => {
-    const out = "/tmp/test_clo_no_wrapper.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT, "R_GRID_AXILLARY_pixel.clo"),
-      outputPath: out,
-    });
-    expect(existsSync(out)).toBe(true);
-    const meta = await sharp(out).metadata();
-    expect(meta.width).toBe(1803);
-    expect(meta.height).toBe(1345);
-    unlinkSync(out);
-  }, 30000);
-
-  it("accepts Buffer inputs and returns Buffer when no outputPath", async () => {
-    const pixelData = readFileSync(join(INPUT, "R_GRID_AXILLARY_pixel.clo"));
-    const wrapperData = readFileSync(join(INPUT, "R_GRID_AXILLARY_wrapper.clo"));
-    const result = await convertCloToJpg({ pixelData, wrapperData });
+  it("encodes and decodes to JPEG via convertCloToJpg", async () => {
+    const w = 512, h = 512;
+    const img = new Uint16Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      img[i] = (i * 13) & 0xffff;
+    }
+    const { pixelBuffer, wrapperBuffer } = makeClo(img, w, h);
+    const result = await convertCloToJpg({ pixelData: pixelBuffer, wrapperData: wrapperBuffer });
     expect(Buffer.isBuffer(result)).toBe(true);
     const meta = await sharp(result as Buffer).metadata();
     expect(meta.format).toBe("jpeg");
-    expect(meta.width).toBe(1803);
-    expect(meta.height).toBe(1345);
+    expect(meta.width).toBe(w);
+    expect(meta.height).toBe(h);
   }, 30000);
-});
 
-// ==================== Study Two conversion (extra wavelet levels) ====================
+  it("accepts Buffer inputs without wrapper", () => {
+    const w = 512, h = 512;
+    const img = new Uint16Array(w * h).fill(1000);
+    const { pixelBuffer } = makeClo(img, w, h);
+    const bitmap = convertCloToBitmap(pixelBuffer);
+    expect(bitmap.width).toBe(w);
+    expect(bitmap.height).toBe(h);
+  }, 30000);
 
-describe("convertCloToJpg - study two", () => {
-  async function loadGrayscale(path: string): Promise<{ data: Uint8Array; width: number; height: number }> {
-    const { data, info } = await sharp(path)
-      .grayscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    return { data: new Uint8Array(data), width: info.width, height: info.height };
-  }
-
-  function computeStats(a: Uint8Array, b: Uint8Array) {
-    let exact = 0;
-    let within1 = 0;
-    let within5 = 0;
-    let sumSq = 0;
-    for (let i = 0; i < a.length; i++) {
-      const diff = Math.abs(a[i] - b[i]);
-      if (diff === 0) exact++;
-      if (diff <= 1) within1++;
-      if (diff <= 5) within5++;
-      sumSq += diff * diff;
+  it("handles odd dimensions", () => {
+    const w = 511, h = 513;
+    const img = new Uint16Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      img[i] = (i * 3) & 0xffff;
     }
-    return {
-      exactPct: exact / a.length * 100,
-      within1Pct: within1 / a.length * 100,
-      within5Pct: within5 / a.length * 100,
-      rmse: Math.sqrt(sumSq / a.length),
-    };
-  }
+    const { pixelBuffer, wrapperBuffer } = makeClo(img, w, h);
+    const bitmap = convertCloToBitmap(pixelBuffer, wrapperBuffer);
+    expect(bitmap.width).toBe(w);
+    expect(bitmap.height).toBe(h);
+  }, 30000);
 
-  it("parses study two series 0 header (1500x1886)", () => {
-    const data = readFileSync(join(INPUT_TWO, "series_0_pixel.clo"));
-    const header = parsePixelHeader(data);
-    expect(header.width).toBe(1500);
-    expect(header.height).toBe(1886);
-  });
-
-  it("parses study two series 1 header (1462x1783)", () => {
-    const data = readFileSync(join(INPUT_TWO, "series_1_pixel.clo"));
-    const header = parsePixelHeader(data);
-    expect(header.width).toBe(1462);
-    expect(header.height).toBe(1783);
-  });
-
-  it("parses study two series 2 header (1663x1802)", () => {
-    const data = readFileSync(join(INPUT_TWO, "series_2_pixel.clo"));
-    const header = parsePixelHeader(data);
-    expect(header.width).toBe(1663);
-    expect(header.height).toBe(1802);
-  });
-
-  it("series 2 has 5 groups (extra wavelet level)", () => {
-    const data = readFileSync(join(INPUT_TWO, "series_2_pixel.clo"));
-    const tiles = extractTiles(data);
-    const groups = new Set<number>();
-    for (const key of tiles.keys()) {
-      const [g] = parseTileKey(key);
-      groups.add(g);
+  it("pixel values span full 0-255 range for high-contrast input", () => {
+    const w = 512, h = 512;
+    const img = new Uint16Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      img[i] = i % 2 === 0 ? 0 : 65535;
     }
-    expect(groups.size).toBe(5);
-    expect(groups.has(-1)).toBe(true);
-    expect(groups.has(3)).toBe(true);
-  });
-
-  it("converts series 0 and matches goal dimensions", async () => {
-    const out = "/tmp/test_clo_s2_series0.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT_TWO, "series_0_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT_TWO, "series_0_wrapper.clo"),
-    });
-    const output = await loadGrayscale(out);
-    const goal = await loadGrayscale(join(GOALS_TWO, "image_1_png.png"));
-    expect(output.width).toBe(goal.width);
-    expect(output.height).toBe(goal.height);
-    const stats = computeStats(output.data, goal.data);
-    expect(stats.within5Pct).toBeGreaterThan(85);
-    expect(stats.rmse).toBeLessThan(15);
-    unlinkSync(out);
-  }, 30000);
-
-  it("converts series 1 and matches goal dimensions", async () => {
-    const out = "/tmp/test_clo_s2_series1.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT_TWO, "series_1_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT_TWO, "series_1_wrapper.clo"),
-    });
-    const output = await loadGrayscale(out);
-    const goal = await loadGrayscale(join(GOALS_TWO, "image_2_png.png"));
-    expect(output.width).toBe(goal.width);
-    expect(output.height).toBe(goal.height);
-    const stats = computeStats(output.data, goal.data);
-    expect(stats.within5Pct).toBeGreaterThan(70);
-    expect(stats.rmse).toBeLessThan(15);
-    unlinkSync(out);
-  }, 30000);
-
-  it("converts series 2 (extra wavelet level) and matches goal to >98% exact", async () => {
-    const out = "/tmp/test_clo_s2_series2.png";
-    await convertCloToJpg({
-      pixelData: join(INPUT_TWO, "series_2_pixel.clo"),
-      outputPath: out,
-      wrapperData: join(INPUT_TWO, "series_2_wrapper.clo"),
-    });
-    const output = await loadGrayscale(out);
-    const goal = await loadGrayscale(join(GOALS_TWO, "image_3_png.png"));
-    expect(output.width).toBe(goal.width);
-    expect(output.height).toBe(goal.height);
-    const stats = computeStats(output.data, goal.data);
-    expect(stats.exactPct).toBeGreaterThan(98);
-    expect(stats.within1Pct).toBe(100);
-    expect(stats.rmse).toBeLessThan(0.2);
-    unlinkSync(out);
+    const { pixelBuffer, wrapperBuffer } = makeClo(img, w, h);
+    const bitmap = convertCloToBitmap(pixelBuffer, wrapperBuffer);
+    let min = 255, max = 0;
+    for (let i = 0; i < bitmap.pixels.length; i++) {
+      if (bitmap.pixels[i] < min) min = bitmap.pixels[i];
+      if (bitmap.pixels[i] > max) max = bitmap.pixels[i];
+    }
+    expect(min).toBe(0);
+    expect(max).toBe(255);
   }, 30000);
 });

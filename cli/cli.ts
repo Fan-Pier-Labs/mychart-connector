@@ -40,6 +40,8 @@ import { getConversationMessages } from '../scrapers/myChart/messages/messageThr
 import { getImagingResults } from '../scrapers/myChart/labs_and_procedure_results/labResults';
 import { downloadImagingStudyDirect } from '../scrapers/myChart/eunity/imagingDirectDownload';
 import { convertCloToJpg } from '../scrapers/myChart/clo-image-parser/clo_to_jpg';
+import { AMF3Reader } from '../scrapers/myChart/clo-image-parser/clo_to_bitmap';
+import { inflateSync } from 'zlib';
 import { deleteMessage } from '../scrapers/myChart/messages/deleteMessage';
 import { requestMedicationRefill } from '../scrapers/myChart/medicationRefill';
 import { sessionStore } from '../scrapers/myChart/sessionStore';
@@ -91,7 +93,7 @@ async function saveCachedSession(hostname: string, mychartRequest: MyChartReques
 //   npx tsx src/cli.ts --host <hostname> --action send-message  (send a new message)
 //   npx tsx src/cli.ts --host <hostname> --action send-reply --conversation-id <id> --message <msg>
 
-function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean } {
+function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean; saveClo?: boolean } {
   const args = process.argv.slice(2);
   const parsed: Record<string, string | boolean> = {};
   for (let i = 0; i < args.length; i++) {
@@ -113,8 +115,9 @@ function parseArgs(): { host?: string; user?: string; pass?: string; twofa?: str
     else if (args[i] === '--list-passkeys') parsed.listPasskeys = true;
     else if (args[i] === '--delete-passkey') parsed.deletePasskey = true;
     else if (args[i] === '--local') parsed.local = true;
+    else if (args[i] === '--save-clo') parsed.saveClo = true;
   }
-  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean };
+  return parsed as { host?: string; user?: string; pass?: string; twofa?: string; nocache?: boolean; readLoginFromBrowser?: boolean; action?: string; conversationId?: string; message?: string; subject?: string; setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean; setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean; deletePasskey?: boolean; local?: boolean; saveClo?: boolean };
 }
 
 const cliArgs = parseArgs();
@@ -1595,6 +1598,43 @@ async function main() {
                 const seriesDir = multiSlice ? path.join(studyDir, safeDesc) : studyDir;
                 if (multiSlice) await fs.promises.mkdir(seriesDir, { recursive: true });
 
+                // Sort multi-slice series by anatomical position (from wrapper metadata)
+                if (multiSlice) {
+                  try {
+                    const positions: Array<{ idx: number; x: number; y: number; z: number }> = [];
+                    for (let i = 0; i < seriesImages.length; i++) {
+                      const img = seriesImages[i];
+                      if (!img.wrapperData) { positions.push({ idx: i, x: 0, y: 0, z: 0 }); continue; }
+                      try {
+                        const wrapBuf = Buffer.isBuffer(img.wrapperData) ? img.wrapperData : Buffer.from(img.wrapperData);
+                        if (wrapBuf.subarray(0, 12).toString() !== 'CLOHEADERZ01') { positions.push({ idx: i, x: 0, y: 0, z: 0 }); continue; }
+                        const decompressed = inflateSync(wrapBuf.subarray(16));
+                        const reader = new AMF3Reader(decompressed);
+                        const meta = reader.readValue();
+                        const pos = meta?.calibration?.orientation?.positionPatient;
+                        if (pos) {
+                          positions.push({ idx: i, x: pos.position_x ?? 0, y: pos.position_y ?? 0, z: pos.position_z ?? 0 });
+                        } else {
+                          positions.push({ idx: i, x: 0, y: 0, z: 0 });
+                        }
+                      } catch { positions.push({ idx: i, x: 0, y: 0, z: 0 }); }
+                    }
+                    // Sort by the axis with the most variation
+                    const xs = positions.map(p => p.x), ys = positions.map(p => p.y), zs = positions.map(p => p.z);
+                    const range = (arr: number[]) => Math.max(...arr) - Math.min(...arr);
+                    const rx = range(xs), ry = range(ys), rz = range(zs);
+                    if (rx > 0.1 || ry > 0.1 || rz > 0.1) {
+                      const sortKey = rx >= ry && rx >= rz ? 'x' : ry >= rz ? 'y' : 'z';
+                      positions.sort((a, b) => a[sortKey] - b[sortKey]);
+                      const sorted = positions.map(p => seriesImages[p.idx]);
+                      for (let i = 0; i < sorted.length; i++) seriesImages[i] = sorted[i];
+                      console.log(`          Sorted ${seriesImages.length} slices by ${sortKey}-position (range: ${Math.max(rx, ry, rz).toFixed(1)}mm)`);
+                    }
+                  } catch (err) {
+                    console.log(`          Slice sorting failed, using download order: ${(err as Error).message}`);
+                  }
+                }
+
                 for (let i = 0; i < seriesImages.length; i++) {
                   const img = seriesImages[i];
                   const fileName = multiSlice
@@ -1602,6 +1642,20 @@ async function main() {
                     : `${safeDesc}.jpg`;
                   const jpgPath = path.join(seriesDir, fileName);
                   try {
+                    // Save raw CLO files if --save-clo flag is set
+                    if (cliArgs.saveClo && img.pixelData) {
+                      const cloBase = multiSlice
+                        ? `${String(i + 1).padStart(4, '0')}`
+                        : safeDesc;
+                      const pixelPath = path.join(seriesDir, `${cloBase}_pixel.clo`);
+                      await fs.promises.writeFile(pixelPath, img.pixelData);
+                      console.log(`          Saved CLO: ${multiSlice ? `${safeDesc}/${cloBase}_pixel.clo` : `${cloBase}_pixel.clo`}`);
+                      if (img.wrapperData) {
+                        const wrapperPath = path.join(seriesDir, `${cloBase}_wrapper.clo`);
+                        await fs.promises.writeFile(wrapperPath, img.wrapperData);
+                        console.log(`          Saved CLO: ${multiSlice ? `${safeDesc}/${cloBase}_wrapper.clo` : `${cloBase}_wrapper.clo`}`);
+                      }
+                    }
                     await convertCloToJpg({ pixelData: img.pixelData!, outputPath: jpgPath, wrapperData: img.wrapperData });
                     const stat = await fs.promises.stat(jpgPath);
                     if (!multiSlice || i === 0 || i === seriesImages.length - 1) {

@@ -82,6 +82,14 @@ The scraper must use each entry's own seriesUID + instanceUID as-is from the AMF
 
 WebAuthn spec requires the `challenge` field in `clientDataJSON` to be **base64url** encoded, not standard base64. The MyChart server sends the challenge as standard base64. Must convert: `Buffer.from(challenge, 'base64').toString('base64url')` before building clientDataJSON.
 
+## CLO Sign Encoding — Zigzag is Correct (2026-04-06)
+
+Attempted two's complement decoding based on eUnity's GPU shader code (`unpackedValueFromSignedShort`), but it produced WORSE results (visible checkerboard/tile artifacts). The shader's two's complement is for the final pixel display stage, NOT wavelet coefficient decoding. Zigzag is correct.
+
+## MRI Downloads Work (2026-04-06)
+
+MRI was previously skipped in the CLI (`nameLower.includes('mri')` check). Removed the skip — the eUnity pipeline is modality-agnostic (same CLO format for X-ray, CT, MRI). Successfully tested MRI downloads with multi-series studies.
+
 ## Project Patterns
 - Scrapers follow pattern: export async function that takes `MyChartRequest`, returns typed data
 - `MyChartRequest` handles cookies, headers, redirects via `makeRequest(config)`
