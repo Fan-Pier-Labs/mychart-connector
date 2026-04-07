@@ -88,7 +88,7 @@ Attempted two's complement decoding based on eUnity's GPU shader code (`unpacked
 
 ## MRI Downloads Work (2026-04-06)
 
-MRI was previously skipped in the CLI (`nameLower.includes('mri')` check). Removed the skip — the eUnity pipeline is modality-agnostic (same CLO format for X-ray, CT, MRI). Successfully downloaded 191 MRI shoulder arthrogram images across 13 series (Ax T1 FS, Cor T1 FS, Cor T2 FS, Sag T2 FS, Sag T1, etc.).
+MRI was previously skipped in the CLI (`nameLower.includes('mri')` check). Removed the skip — the eUnity pipeline is modality-agnostic (same CLO format for X-ray, CT, MRI). Successfully tested MRI downloads with multi-series studies.
 
 ## Project Patterns
 - Scrapers follow pattern: export async function that takes `MyChartRequest`, returns typed data

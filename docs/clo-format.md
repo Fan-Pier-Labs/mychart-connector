@@ -97,7 +97,7 @@ The root object contains the complete DICOM metadata for the image. Fields docum
 | `lowPixelValue` | number | Minimum pixel value in the image |
 | `highPixelValue` | number | Maximum pixel value in the image |
 | `numberOfFrames` | number | Number of frames (0 for single-frame) |
-| `seriesDescription` | string | e.g., "Sag T2 FS", "SKULL AP" |
+| `seriesDescription` | string | Series description text |
 | `imageLaterality` | string | "L", "R", or empty |
 | `accessionNumber` | string | Study accession number |
 | `lossyCompression` | object/null | Lossy compression info if applicable |
