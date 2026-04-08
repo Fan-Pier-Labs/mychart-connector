@@ -9,7 +9,7 @@
     "lint:web": "cd web && eslint",
     "dev_mock": "MOCK_DATA=true bun run dev",
     "cli": "bun cli/entry.ts",
-    "test": "bun test scrapers/myChart/__tests__/*.test.ts scrapers/myChart/eunity/__tests__/*.test.ts shared/__tests__/*.test.ts && cd web && bun test",
+    "test": "bun test scrapers/myChart/__tests__/*.test.ts scrapers/myChart/eunity/__tests__/*.test.ts shared/__tests__/*.test.ts openclaw-plugin/src/__tests__/*.test.ts && cd web && bun test",
     "test:unit": "bun test scrapers/myChart/__tests__/*.test.ts scrapers/myChart/eunity/__tests__/*.test.ts shared/__tests__/*.test.ts",
     "test:unit:web": "cd web && bun test",
     "test:integration": "NODE_ENV=development bun test scrapers/myChart/__tests__/integration/",
