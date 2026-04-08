@@ -11,7 +11,7 @@ import { serializeCredential } from '../../scrapers/myChart/softwareAuthenticato
 import { browserPasswordDbExists, importMyChartAccounts } from './password-import';
 import { clearSession, ensureSession } from './index';
 import { isBlockedInstance } from '../../shared/blockedInstances';
-import { savePluginConfig, savePasskey, readPasskey } from './config';
+import { savePluginConfig, savePasskey, readPasskey, clearPasskey } from './config';
 import { getMyChartProfile } from '../../scrapers/myChart/profile';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,6 +92,20 @@ async function setupCommand(): Promise<void> {
     console.log('\nWelcome to MyChart Health Data for OpenClaw!\n');
     console.log('This setup will configure your MyChart credentials so the plugin');
     console.log('can access your health data autonomously.\n');
+
+    // Warn if existing account/passkey is configured
+    const existingPasskey = readPasskey();
+    if (existingPasskey) {
+      console.log('An existing passkey is already configured.');
+      const overwrite = await ask(rl, 'Replace existing account and passkey? (y/n): ');
+      if (overwrite.trim().toLowerCase() !== 'y') {
+        console.log('Setup cancelled.\n');
+        return;
+      }
+      clearPasskey();
+      clearSession();
+      console.log('');
+    }
 
     let hostname = '';
     let username = '';
@@ -302,6 +316,7 @@ async function statusCommand(api: OpenClawApi): Promise<void> {
 
 async function resetCommand(): Promise<void> {
   clearSession();
+  clearPasskey();
   savePluginConfig({});
   console.log('\nMyChart plugin configuration has been reset.');
   console.log('Run `openclaw openrecord setup` to reconfigure.\n');
