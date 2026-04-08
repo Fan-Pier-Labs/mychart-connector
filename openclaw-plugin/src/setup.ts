@@ -6,9 +6,7 @@
 
 import * as readline from 'readline';
 import { myChartUserPassLogin, complete2faFlow } from '../../scrapers/myChart/login';
-import { setupTotp } from '../../scrapers/myChart/setupTotp';
 import { setupPasskey } from '../../scrapers/myChart/setupPasskey';
-import { generateTotpCode } from '../../scrapers/myChart/totp';
 import { serializeCredential } from '../../scrapers/myChart/softwareAuthenticator';
 import { browserPasswordDbExists, importMyChartAccounts } from './password-import';
 import { clearSession, ensureSession } from './index';
@@ -183,7 +181,6 @@ async function setupCommand(): Promise<void> {
       return;
     }
 
-    let totpSecret: string | undefined;
     let authenticatedSession: import('../../scrapers/myChart/myChartRequest').MyChartRequest | null = null;
 
     if (loginResult.state === 'need_2fa') {
@@ -209,91 +206,55 @@ async function setupCommand(): Promise<void> {
       }
 
       console.log('2FA verification successful!\n');
-
-      // Offer TOTP setup — explain why it's needed for the AI agent
-      const totpRl = createReadline();
-      console.log('\nEnable automatic sign-in?');
-      console.log('To access your MyChart account on your behalf, the AI agent needs to sign in');
-      console.log('automatically. We\'ll set up a TOTP authenticator so the agent can log in');
-      console.log('without requiring email codes each time.');
-      console.log('\nThis adds an authenticator app to your MyChart security settings.');
-      console.log('You can disable it anytime from your MyChart account.\n');
-      const setupTotpChoice = await ask(totpRl, 'Enable automatic sign-in? (y/n): ');
-      totpRl.close();
-
-      if (setupTotpChoice.trim().toLowerCase() === 'y') {
-        console.log('\nSetting up TOTP authenticator...');
-        const result = await setupTotp(twoFaResult.mychartRequest, password);
-
-        if (result.secret) {
-          console.log('Verifying TOTP setup...');
-          const verifyCode = await generateTotpCode(result.secret);
-          console.log(`Generated test code: ${verifyCode}`);
-          totpSecret = result.secret;
-          console.log('TOTP authenticator set up successfully!\n');
-        } else {
-          console.log(`\nTOTP setup failed: ${result.error}`);
-          console.log('Without automatic sign-in, your session will only last a few hours.');
-          console.log('Once it expires, you\'ll need to log in again with email verification.');
-          console.log('The AI agent won\'t be able to reconnect to your MyChart account automatically.\n');
-          const retryRl = createReadline();
-          const retryChoice = await ask(retryRl, 'Retry TOTP setup? (y/n): ');
-          retryRl.close();
-          if (retryChoice.trim().toLowerCase() === 'y') {
-            console.log('\nRetrying TOTP setup...');
-            const retryResult = await setupTotp(twoFaResult.mychartRequest, password);
-            if (retryResult.secret) {
-              console.log('Verifying TOTP setup...');
-              await generateTotpCode(retryResult.secret);
-              totpSecret = retryResult.secret;
-              console.log('TOTP authenticator set up successfully!\n');
-            } else {
-              console.log(`TOTP setup failed again: ${retryResult.error}\nContinuing without automatic sign-in.\n`);
-            }
-          }
-        }
-      } else {
-        console.log('\nWarning: 2FA not configured.');
-        console.log('Without automatic sign-in, your session will only last a few hours.');
-        console.log('Once it expires, you\'ll need to log in again with email verification.');
-        console.log('The AI agent won\'t be able to reconnect to your MyChart account automatically.\n');
-        const retryRl = createReadline();
-        const retryChoice = await ask(retryRl, 'Retry TOTP setup? (y/n): ');
-        retryRl.close();
-        if (retryChoice.trim().toLowerCase() === 'y') {
-          console.log('\nSetting up TOTP authenticator...');
-          const retryResult = await setupTotp(twoFaResult.mychartRequest, password);
-          if (retryResult.secret) {
-            console.log('Verifying TOTP setup...');
-            await generateTotpCode(retryResult.secret);
-            totpSecret = retryResult.secret;
-            console.log('TOTP authenticator set up successfully!\n');
-          } else {
-            console.log(`TOTP setup failed: ${retryResult.error}\nContinuing without automatic sign-in.\n`);
-          }
-        }
-      }
-      // Capture authenticated session for passkey setup
       authenticatedSession = twoFaResult.mychartRequest;
     } else {
       console.log('Login successful! (no 2FA required)\n');
       authenticatedSession = loginResult.mychartRequest;
     }
 
-    // Set up passkey for future logins (bypasses 2FA entirely)
+    // Offer passkey setup for automatic sign-in (bypasses 2FA entirely)
     let passkeyJson: string | undefined;
     if (authenticatedSession) {
-      console.log('Registering passkey for future logins...');
-      try {
-        const credential = await setupPasskey(authenticatedSession);
-        if (credential) {
-          passkeyJson = serializeCredential(credential);
-          console.log('Passkey registered — future logins will use passkey (no 2FA needed).\n');
-        } else {
-          console.log('Passkey registration was not available. Continuing without passkey.\n');
+      const passkeyRl = createReadline();
+      console.log('Enable automatic sign-in?');
+      console.log('A passkey lets the AI agent log into your MyChart account automatically');
+      console.log('without needing email verification codes each time.');
+      console.log('\nThis adds a passkey to your MyChart security settings.');
+      console.log('You can remove it anytime from your MyChart account.\n');
+      const setupChoice = await ask(passkeyRl, 'Set up a passkey? (y/n): ');
+      passkeyRl.close();
+
+      if (setupChoice.trim().toLowerCase() === 'y') {
+        console.log('\nRegistering passkey...');
+        try {
+          const credential = await setupPasskey(authenticatedSession);
+          if (credential) {
+            passkeyJson = serializeCredential(credential);
+            console.log('Passkey registered successfully!\n');
+          } else {
+            console.log('Passkey registration was not available on this MyChart instance.\n');
+          }
+        } catch (err) {
+          console.log(`Passkey setup failed: ${(err as Error).message}\n`);
+          // Offer retry
+          const retryRl = createReadline();
+          const retryChoice = await ask(retryRl, 'Retry passkey setup? (y/n): ');
+          retryRl.close();
+          if (retryChoice.trim().toLowerCase() === 'y') {
+            console.log('\nRetrying passkey registration...');
+            try {
+              const credential = await setupPasskey(authenticatedSession);
+              if (credential) {
+                passkeyJson = serializeCredential(credential);
+                console.log('Passkey registered successfully!\n');
+              } else {
+                console.log('Passkey registration was not available. Continuing without passkey.\n');
+              }
+            } catch (retryErr) {
+              console.log(`Passkey setup failed again: ${(retryErr as Error).message}\nContinuing without passkey.\n`);
+            }
+          }
         }
-      } catch (err) {
-        console.log(`Passkey setup failed: ${(err as Error).message}. Continuing without passkey.\n`);
       }
     }
 
@@ -303,9 +264,6 @@ async function setupCommand(): Promise<void> {
       username,
       password,
     };
-    if (totpSecret) {
-      config.totpSecret = totpSecret;
-    }
     if (passkeyJson) {
       savePasskey(passkeyJson);
     }
@@ -316,11 +274,9 @@ async function setupCommand(): Promise<void> {
     console.log('The plugin will now automatically log in when you use health data tools.\n');
     if (passkeyJson) {
       console.log('Passkey is configured — login will be fully automatic (no 2FA needed).');
-    } else if (totpSecret) {
-      console.log('TOTP is configured — login will be fully automatic.');
     } else {
-      console.log('Warning: Without TOTP or passkey, sessions expire after a few hours and require email 2FA to reconnect.');
-      console.log('Tip: Run `openclaw openrecord setup` again later to enable automatic sign-in.');
+      console.log('Warning: Without a passkey, sessions expire after a few hours and require email 2FA to reconnect.');
+      console.log('Tip: Run `openclaw openrecord setup` again later to set up a passkey.');
     }
   } finally {
     rl.close();
