@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Convert eUnity CLO (ClientOutlook) image files to JPEG.
+ * Convert eUnity CLO (ClientOutlook) image files to various formats.
  *
- * Thin wrapper that composes clo_to_bitmap + bitmap_to_jpg.
+ * Thin wrapper that composes clo_to_bitmap + exporters.
  * Kept for backward compatibility and CLI usage.
  *
  * Usage:
@@ -13,9 +13,12 @@
 import { readFileSync, existsSync, mkdirSync, statSync, readdirSync } from "fs";
 import { join, basename, extname, dirname } from "path";
 
-import { convertCloToBitmap } from "./clo_to_bitmap";
-import { convertBitmapToJpg } from "./bitmap_to_jpg";
-import { convertBitmapToWebp } from "./bitmap_to_webp";
+import { convertCloToBitmap, convertCloToBitmap16 } from "./clo_to_bitmap";
+import { convertBitmap16ToJpg } from "./exporters/to_jpg";
+import { convertBitmap16ToPng } from "./exporters/to_png";
+import { convertBitmap16ToAvif } from "./exporters/to_avif";
+import { convertBitmap16ToTiff } from "./exporters/to_tiff";
+import { convertBitmap16ToWebp } from "./exporters/to_webp";
 
 // Re-export everything from clo_to_bitmap for backward compatibility
 export {
@@ -28,12 +31,54 @@ export {
   computeWaveletLevels,
   zigzagDecode,
   to8bit,
+  to16bit,
   applyVoiLut,
   convertCloToBitmap,
+  convertCloToBitmap16,
 } from "./clo_to_bitmap";
-export type { Bitmap, CloMetadata, TileKey, TileMap } from "./clo_to_bitmap";
-export { convertBitmapToJpg } from "./bitmap_to_jpg";
-export { convertBitmapToWebp } from "./bitmap_to_webp";
+export type { Bitmap, Bitmap16, CloMetadata, TileKey, TileMap } from "./clo_to_bitmap";
+
+// Re-export all exporters
+export { convertBitmap16ToJpg } from "./exporters/to_jpg";
+export type { JpgOptions } from "./exporters/to_jpg";
+export { convertBitmap16ToPng } from "./exporters/to_png";
+export type { PngOptions } from "./exporters/to_png";
+export { convertBitmap16ToAvif } from "./exporters/to_avif";
+export type { AvifOptions } from "./exporters/to_avif";
+export { convertBitmap16ToTiff } from "./exporters/to_tiff";
+export type { TiffOptions } from "./exporters/to_tiff";
+export { convertBitmap16ToWebp } from "./exporters/to_webp";
+
+// Backward-compatible re-exports for existing consumers.
+// These use sharp directly with 8-bit input to maintain exact pixel-level
+// compatibility with the original bitmap_to_jpg.ts and bitmap_to_webp.ts.
+import sharp from "sharp";
+import { writeFileSync } from "fs";
+import type { Bitmap } from "./clo_to_bitmap";
+
+export async function convertBitmapToJpg(
+  bitmap: Bitmap,
+  outputPath?: string | null,
+): Promise<Buffer> {
+  const img = sharp(Buffer.from(bitmap.pixels.buffer, bitmap.pixels.byteOffset, bitmap.pixels.byteLength), {
+    raw: { width: bitmap.width, height: bitmap.height, channels: 1 },
+  });
+  const buffer = await img.jpeg({ quality: 100 }).toBuffer();
+  if (outputPath) writeFileSync(outputPath, buffer);
+  return buffer;
+}
+
+export async function convertBitmapToWebp(
+  bitmap: Bitmap,
+  outputPath?: string | null,
+): Promise<Buffer> {
+  const img = sharp(Buffer.from(bitmap.pixels.buffer, bitmap.pixels.byteOffset, bitmap.pixels.byteLength), {
+    raw: { width: bitmap.width, height: bitmap.height, channels: 1 },
+  });
+  const buffer = await img.webp({ lossless: true }).toBuffer();
+  if (outputPath) writeFileSync(outputPath, buffer);
+  return buffer;
+}
 
 const CLOCLHAAR_MAGIC = Buffer.from("CLOCLHAAR###");
 

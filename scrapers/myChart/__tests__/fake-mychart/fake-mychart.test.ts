@@ -305,17 +305,26 @@ describe('fake-mychart integration', () => {
     expect(result.success).toBe(true)
   }, 10_000)
 
-  it('getImagingResults returns imaging studies with report text', async () => {
+  it('getImagingResults returns X-ray and CT studies with report text', async () => {
     const result = await getImagingResults(session)
     expect(Array.isArray(result)).toBe(true)
-    expect(result.length).toBeGreaterThan(0)
-    // Should be an X-ray result
+    expect(result.length).toBeGreaterThanOrEqual(2)
+
+    // X-ray result
     const xray = result.find(r => r.orderName.includes('XR'))
     expect(xray).toBeDefined()
     expect(xray!.reportText).toContain('Calvarium')
     expect(xray!.fdiContext).toBeDefined()
     expect(xray!.fdiContext!.fdi).toBe('FDI-XRAY-001')
     expect(xray!.samlUrl).toBeDefined()
+
+    // CT result
+    const ct = result.find(r => r.orderName.includes('CT'))
+    expect(ct).toBeDefined()
+    expect(ct!.reportText).toContain('crayon')
+    expect(ct!.fdiContext).toBeDefined()
+    expect(ct!.fdiContext!.fdi).toBe('FDI-CT-001')
+    expect(ct!.samlUrl).toBeDefined()
   }, 30_000)
 
   it('followSamlChain reaches eUnity viewer', async () => {
@@ -333,27 +342,53 @@ describe('fake-mychart integration', () => {
     expect(viewerSession!.viewerBody).toContain('accessionNumber')
   }, 30_000)
 
-  it('downloadImagingStudyDirect downloads CLO image data', async () => {
-    // Get imaging result with FDI context
+  it('downloadImagingStudyDirect downloads X-ray CLO image data', async () => {
     const results = await getImagingResults(session)
-    const xray = results.find(r => r.fdiContext)
+    const xray = results.find(r => r.fdiContext && r.orderName.includes('XR'))
     expect(xray?.fdiContext).toBeDefined()
 
     const result = await downloadImagingStudyDirect(
       session,
       xray!.fdiContext!,
-      'Homer Chest XRay',
+      'Homer Skull XRay',
       '/tmp/fake-mychart-test-images',
       { skipFileWrite: true },
     )
 
-    expect(result.studyName).toBe('Homer Chest XRay')
+    expect(result.studyName).toBe('Homer Skull XRay')
     expect(result.errors).toHaveLength(0)
     expect(result.images.length).toBeGreaterThan(0)
-    // Should have CLO format data
     const img = result.images[0]
     expect(img.format).toBe('CLHAAR')
     expect(img.pixelData).toBeDefined()
     expect(img.pixelData!.length).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('downloadImagingStudyDirect downloads CT multi-slice images', async () => {
+    const results = await getImagingResults(session)
+    const ct = results.find(r => r.fdiContext && r.orderName.includes('CT'))
+    expect(ct?.fdiContext).toBeDefined()
+
+    const result = await downloadImagingStudyDirect(
+      session,
+      ct!.fdiContext!,
+      'Homer CT Head',
+      '/tmp/fake-mychart-test-ct',
+      { skipFileWrite: true },
+    )
+
+    expect(result.studyName).toBe('Homer CT Head')
+    expect(result.errors).toHaveLength(0)
+    // CT should have multiple images (multi-slice)
+    expect(result.images.length).toBeGreaterThan(2)
+    // All should be CLHAAR format
+    for (const img of result.images) {
+      expect(img.format).toBe('CLHAAR')
+      expect(img.pixelData).toBeDefined()
+      expect(img.pixelData!.length).toBeGreaterThan(0)
+    }
+    // Should have multiple series
+    expect(result.seriesList).toBeDefined()
+    expect(result.seriesList!.length).toBeGreaterThanOrEqual(2)
   }, 60_000)
 })

@@ -69,6 +69,12 @@ export interface Bitmap {
   height: number;
 }
 
+export interface Bitmap16 {
+  pixels: Uint16Array;
+  width: number;
+  height: number;
+}
+
 // ==================== AMF3 Parser ====================
 
 interface AMF3Traits {
@@ -743,12 +749,28 @@ export function to8bit(img: Uint16Array, invert: boolean): Uint8Array {
   return result;
 }
 
-function reconstructImage(
+export function to16bit(img: Uint16Array, invert: boolean): Uint16Array {
+  let maxVal = 1;
+  for (let i = 0; i < img.length; i++) {
+    if (img[i] > maxVal) maxVal = img[i];
+  }
+  const result = new Uint16Array(img.length);
+  for (let i = 0; i < img.length; i++) {
+    let v = Math.round(img[i] / maxVal * 65535);
+    if (v < 0) v = 0;
+    if (v > 65535) v = 65535;
+    if (invert) v = 65535 - v;
+    result[i] = v;
+  }
+  return result;
+}
+
+function reconstructImageCore(
   tiles: TileMap,
   width: number,
   height: number,
   metadata: CloMetadata
-): Uint8Array {
+): { img16: Uint16Array; invert: boolean } {
   if (!tiles.has(tileKey(-1, 0, 0, 65536))) {
     throw new Error("Missing LL approximation block");
   }
@@ -816,15 +838,35 @@ function reconstructImage(
   // Apply display pipeline
   const invert = metadata.photometric === "MONOCHROME1";
   const displayed = applyVoiLut(current, curH, curW, metadata);
-  return to8bit(displayed, invert);
+  return { img16: displayed, invert };
+}
+
+function reconstructImage(
+  tiles: TileMap,
+  width: number,
+  height: number,
+  metadata: CloMetadata
+): Uint8Array {
+  const { img16, invert } = reconstructImageCore(tiles, width, height, metadata);
+  return to8bit(img16, invert);
+}
+
+function reconstructImage16(
+  tiles: TileMap,
+  width: number,
+  height: number,
+  metadata: CloMetadata
+): Uint16Array {
+  const { img16, invert } = reconstructImageCore(tiles, width, height, metadata);
+  return to16bit(img16, invert);
 }
 
 // ==================== Public API ====================
 
-export function convertCloToBitmap(
+function parseInputs(
   pixelInput: string | Buffer,
   wrapperInput?: string | Buffer,
-): Bitmap {
+): { data: Buffer; width: number; height: number; metadata: CloMetadata; tiles: TileMap } {
   const data = typeof pixelInput === 'string' ? readFileSync(pixelInput) : pixelInput;
   const header = parsePixelHeader(data);
   const { width, height } = header;
@@ -849,6 +891,23 @@ export function convertCloToBitmap(
     throw new Error("No data blocks found in CLO file");
   }
 
+  return { data, width, height, metadata, tiles };
+}
+
+export function convertCloToBitmap(
+  pixelInput: string | Buffer,
+  wrapperInput?: string | Buffer,
+): Bitmap {
+  const { width, height, metadata, tiles } = parseInputs(pixelInput, wrapperInput);
   const pixels = reconstructImage(tiles, width, height, metadata);
+  return { pixels, width, height };
+}
+
+export function convertCloToBitmap16(
+  pixelInput: string | Buffer,
+  wrapperInput?: string | Buffer,
+): Bitmap16 {
+  const { width, height, metadata, tiles } = parseInputs(pixelInput, wrapperInput);
+  const pixels = reconstructImage16(tiles, width, height, metadata);
   return { pixels, width, height };
 }
