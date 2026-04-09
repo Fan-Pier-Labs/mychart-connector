@@ -137,18 +137,17 @@ async function login(creds: Credentials): Promise<MyChartRequest> {
   }
 
   if (result.state === 'need_2fa') {
-    if (!creds.totpSecret) {
-      throw new Error('MyChart requires 2FA but no TOTP secret is configured. Add totpSecret to plugin config.');
+    if (creds.totpSecret) {
+      const code = await generateTotpCode(creds.totpSecret);
+      const twoFa = await complete2faFlow({ mychartRequest: result.mychartRequest, code, isTOTP: true });
+      if (twoFa.state === 'logged_in') {
+        if (!creds.passkey) void trySetupPasskey(twoFa.mychartRequest);
+        return twoFa.mychartRequest;
+      }
+      if (twoFa.state === 'invalid_2fa') throw new Error('TOTP code was rejected. Check your totpSecret.');
+      throw new Error(`2FA failed: ${twoFa.state}`);
     }
-    const code = await generateTotpCode(creds.totpSecret);
-    const twoFa = await complete2faFlow({ mychartRequest: result.mychartRequest, code, isTOTP: true });
-    if (twoFa.state === 'logged_in') {
-      // Only auto-register passkey if one isn't already configured
-      if (!creds.passkey) void trySetupPasskey(twoFa.mychartRequest);
-      return twoFa.mychartRequest;
-    }
-    if (twoFa.state === 'invalid_2fa') throw new Error('TOTP code was rejected. Check your totpSecret.');
-    throw new Error(`2FA failed: ${twoFa.state}`);
+    throw new Error('MyChart requires 2FA but no passkey or TOTP is configured. Run `openclaw openrecord setup` to set up a passkey.');
   }
 
   throw new Error(`Login failed: ${result.state}${result.error ? ` — ${result.error}` : ''}`);
