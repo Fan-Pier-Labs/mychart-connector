@@ -9,7 +9,7 @@ import { myChartUserPassLogin, complete2faFlow } from '../../scrapers/myChart/lo
 import { setupPasskey } from '../../scrapers/myChart/setupPasskey';
 import { serializeCredential } from '../../scrapers/myChart/softwareAuthenticator';
 import { browserPasswordDbExists, importMyChartAccounts } from './password-import';
-import { clearSession, clearAllSessions, resolveSession } from './index';
+import { clearSession, clearAllSessions, clearActiveAccount, resolveSession } from './index';
 import { isBlockedInstance } from '../../shared/blockedInstances';
 import {
   readAccounts, addAccount, removeAccount, saveAccounts,
@@ -402,6 +402,7 @@ async function resetCommand(hostname?: string, opts?: { all?: boolean }): Promis
   // Reset all
   if (opts?.all) {
     clearAllSessions();
+    clearActiveAccount();
     clearAllPasskeys();
     saveAccounts([]);
     console.log(`\nAll ${accounts.length} account(s) have been removed.`);
@@ -421,6 +422,7 @@ async function resetCommand(hostname?: string, opts?: { all?: boolean }): Promis
       return;
     }
     clearSession(normalized);
+    clearActiveAccount();
     clearAccountPasskey(normalized);
     removeAccount(normalized);
     console.log(`\nAccount for ${found.hostname} has been removed.`);
@@ -439,6 +441,7 @@ async function resetCommand(hostname?: string, opts?: { all?: boolean }): Promis
 
   if (pick.trim().toLowerCase() === 'a') {
     clearAllSessions();
+    clearActiveAccount();
     clearAllPasskeys();
     saveAccounts([]);
     console.log(`\nAll ${accounts.length} account(s) have been removed.`);
@@ -454,6 +457,7 @@ async function resetCommand(hostname?: string, opts?: { all?: boolean }): Promis
 
   const target = accounts[idx];
   clearSession(target.hostname);
+  clearActiveAccount();
   clearAccountPasskey(target.hostname);
   removeAccount(target.hostname);
   console.log(`\nAccount for ${target.hostname} has been removed.`);

@@ -98,6 +98,30 @@ export function isConnected(hostname: string): boolean {
   return !!entry && !entry.expired;
 }
 
+// ─── Active account (single-tenant: one conversation at a time) ─────────────
+
+/**
+ * The currently selected account hostname set by mychart_select_account.
+ * Used as fallback when multiple accounts are configured and no explicit
+ * `account` parameter is passed to a tool.
+ */
+let activeAccountHostname: string | null = null;
+
+/** Set the active account. */
+export function setActiveAccount(hostname: string) {
+  activeAccountHostname = normalizeHostname(hostname);
+}
+
+/** Clear the active account selection. */
+export function clearActiveAccount() {
+  activeAccountHostname = null;
+}
+
+/** Get the current active account hostname (or null). */
+export function getActiveAccount(): string | null {
+  return activeAccountHostname;
+}
+
 // ─── Login ──────────────────────────────────────────────────────────────────
 
 async function loginAccount(account: AccountConfig): Promise<MyChartRequest> {
@@ -261,8 +285,20 @@ export async function resolveSession(account?: string): Promise<MyChartRequest> 
     return ensureAccountSession(accounts[0]);
   }
 
-  // Multiple accounts — check which are connected
-  const connected = accounts.filter(a => isConnected(a.hostname));
+  // Multiple accounts — check which are already connected
+  let connected = accounts.filter(a => isConnected(a.hostname));
+
+  // If none connected, auto-connect all accounts (like the web app does)
+  if (connected.length === 0) {
+    for (const acct of accounts) {
+      try {
+        await ensureAccountSession(acct);
+      } catch {
+        // Login failed for this account — continue with others
+      }
+    }
+    connected = accounts.filter(a => isConnected(a.hostname));
+  }
 
   if (connected.length === 1) {
     return ensureAccountSession(connected[0]);
@@ -270,12 +306,20 @@ export async function resolveSession(account?: string): Promise<MyChartRequest> 
 
   if (connected.length === 0) {
     const hostnames = accounts.map(a => a.hostname).join(', ');
-    throw new Error(`Multiple MyChart accounts configured. Specify the 'account' parameter with one of: ${hostnames}`);
+    throw new Error(`Could not connect to any MyChart account. Use mychart_select_account to pick one: ${hostnames}`);
   }
 
-  // Multiple connected
+  // Multiple connected — check if there's an active account set by mychart_select_account
+  if (activeAccountHostname) {
+    const activeAccount = accounts.find(a => normalizeHostname(a.hostname) === activeAccountHostname);
+    if (activeAccount) {
+      return ensureAccountSession(activeAccount);
+    }
+  }
+
+  // No active account set — agent must use mychart_select_account
   const hostnames = connected.map(a => a.hostname).join(', ');
-  throw new Error(`Multiple MyChart accounts connected. Specify the 'account' parameter with one of: ${hostnames}`);
+  throw new Error(`Multiple MyChart accounts connected. Use mychart_select_account to pick one: ${hostnames}`);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -356,6 +400,92 @@ export default function register(api: any) {
             hasTotpSecret: !!a.totpSecret,
           }));
           return textResult(result);
+        } catch (err) {
+          return errorResult((err as Error).message);
+        }
+      },
+    },
+
+    // Meta tool — select active account (match first, then connect)
+    {
+      name: 'mychart_select_account',
+      label: 'Select Account',
+      description: 'Select which MyChart account to use for subsequent tool calls. Pass a keyword like "uchealth" or "denver" to match against configured accounts. ALWAYS call this first when the user mentions a specific hospital or health system.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Keyword to match against account hostnames and usernames (e.g. "uchealth", "denver")' },
+        },
+        required: ['query'],
+      },
+      async execute(_toolCallId: string, params: Record<string, unknown>) {
+        try {
+          const query = (params.query as string || '').toLowerCase().trim();
+          if (!query) return errorResult('query parameter is required');
+
+          const accounts = readAccounts();
+          if (accounts.length === 0) {
+            return errorResult('No MyChart accounts configured. Run `openclaw openrecord setup` to add one.');
+          }
+
+          // Build account info list (for returning in all cases)
+          const accountList = accounts.map(a => ({
+            hostname: a.hostname,
+            username: a.username,
+            connected: isConnected(a.hostname),
+            hasPasskey: !!readAccountPasskey(a.hostname),
+          }));
+
+          // Match query against hostnames and usernames (case-insensitive substring)
+          const matches = accounts.filter(a =>
+            a.hostname.toLowerCase().includes(query) ||
+            a.username.toLowerCase().includes(query)
+          );
+
+          if (matches.length === 0) {
+            return textResult({
+              error: `No account matching "${params.query}". Available accounts listed below.`,
+              selected: null,
+              accounts: accountList,
+            });
+          }
+
+          if (matches.length > 1) {
+            const matched = matches.map(a => a.hostname);
+            return textResult({
+              error: `Multiple accounts match "${params.query}": ${matched.join(', ')}. Be more specific.`,
+              selected: null,
+              accounts: accountList,
+            });
+          }
+
+          // Exactly 1 match — connect to it
+          const match = matches[0];
+          try {
+            await ensureAccountSession(match);
+          } catch (err) {
+            // Login failed — do NOT set as active
+            return textResult({
+              error: `Matched ${match.hostname} but login failed: ${(err as Error).message}`,
+              selected: null,
+              accounts: accountList,
+            });
+          }
+
+          // Success — set as active account
+          setActiveAccount(match.hostname);
+          return textResult({
+            selected: {
+              hostname: match.hostname,
+              username: match.username,
+              connected: true,
+            },
+            accounts: accountList.map(a => ({
+              ...a,
+              connected: isConnected(a.hostname),
+              active: normalizeHostname(a.hostname) === normalizeHostname(match.hostname),
+            })),
+          });
         } catch (err) {
           return errorResult((err as Error).message);
         }
@@ -504,6 +634,7 @@ export default function register(api: any) {
     start: () => { api.logger.info('MyChart keepalive service started'); },
     stop: () => {
       clearAllSessions();
+      clearActiveAccount();
       api.logger.info('MyChart keepalive service stopped');
     },
   });
