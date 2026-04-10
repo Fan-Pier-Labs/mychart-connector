@@ -30,6 +30,62 @@ export function parseFirstPathPartFromLocation(locationHeader: string, hostname:
   return part || null;
 }
 
+export function parseFirstPathPartFromInput(input: string): string | null {
+  const trimmed = input.trim();
+  try {
+    const parsed = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    const part = parsed.pathname.split('/').filter(Boolean)[0];
+    if (!part || !part.toLowerCase().includes('mychart')) {
+      return null;
+    }
+    return part;
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeLoginPage(html: string): boolean {
+  const bodyLower = html.toLowerCase();
+  return bodyLower.includes('__requestverificationtoken')
+    || bodyLower.includes('login with passkey')
+    || bodyLower.includes('forgot login information')
+    || bodyLower.includes('error: please enable cookies to log in')
+    || bodyLower.includes('secondaryvalidationcontroller')
+    || bodyLower.includes('mychart® licensed from epic');
+}
+
+const COMMON_FIRST_PATH_PART_CANDIDATES = ['MyChart', 'MyChart-PRD', 'MyChartPRD'];
+
+export async function probeFirstPathPartByTryingCommonLoginPaths(mychartRequest: MyChartRequest): Promise<string | null> {
+  for (const candidate of COMMON_FIRST_PATH_PART_CANDIDATES) {
+    const candidateUrl = `${mychartRequest.protocol}://${mychartRequest.hostname}/${candidate}/Authentication/Login`;
+    try {
+      const resp = await mychartRequest.makeRequest({ url: candidateUrl });
+      const finalUrl = new URL(resp.url || candidateUrl, candidateUrl);
+      const html = await resp.text();
+
+      if (finalUrl.host !== mychartRequest.hostname) {
+        console.log(`Skipping ${candidate} probe: redirected off-host to ${finalUrl.host}`);
+        continue;
+      }
+
+      if (resp.status >= 400) {
+        continue;
+      }
+
+      const finalPathPart = finalUrl.pathname.split('/').filter(Boolean)[0];
+      if ((finalPathPart && finalPathPart.toLowerCase() === candidate.toLowerCase()) && looksLikeLoginPage(html)) {
+        console.log('Recovered firstPathPart by probing common login path:', finalPathPart || candidate);
+        return finalPathPart || candidate;
+      }
+    } catch (error) {
+      console.log(`Failed ${candidate} probe:`, error);
+    }
+  }
+
+  return null;
+}
+
 /**
  * When the root URL redirects cross-domain (e.g. to a marketing/landing page),
  * fetch that page and look for URLs pointing back to the original MyChart hostname.
@@ -118,6 +174,10 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
     else {
       console.log('could not extract second part', body)
     }
+  }
+
+  if (!firstPathPart) {
+    firstPathPart = await probeFirstPathPartByTryingCommonLoginPaths(mychartRequest);
   }
 
   if (!firstPathPart) {
@@ -224,6 +284,11 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   const hostnameWithoutPort = hostname.split(':')[0];
   const effectiveProtocol = protocol ?? (hostnameWithoutPort === 'localhost' || !hostnameWithoutPort.includes('.') ? 'http' : 'https');
   const mychartRequest = new MyChartRequest(hostname, effectiveProtocol);
+  const firstPathPartFromInput = parseFirstPathPartFromInput(hostname);
+  if (firstPathPartFromInput) {
+    console.log('Using firstPathPart from user input:', firstPathPartFromInput);
+    mychartRequest.setFirstPathPart(firstPathPartFromInput);
+  }
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest)
 
@@ -611,6 +676,11 @@ export async function myChartPasskeyLogin({hostname, credential, protocol}: {
   const hostnameWithoutPort = hostname.split(':')[0];
   const effectiveProtocol = protocol ?? (hostnameWithoutPort === 'localhost' || !hostnameWithoutPort.includes('.') ? 'http' : 'https');
   const mychartRequest = new MyChartRequest(hostname, effectiveProtocol);
+  const firstPathPartFromInput = parseFirstPathPartFromInput(hostname);
+  if (firstPathPartFromInput) {
+    console.log('Using firstPathPart from user input:', firstPathPartFromInput);
+    mychartRequest.setFirstPathPart(firstPathPartFromInput);
+  }
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest);
   if (!foundMyChartFirstPathPart) {
@@ -753,6 +823,11 @@ export async function login_TEST(hostname: string): Promise<MyChartRequest> {
 
 
   let mychartRequest = new MyChartRequest(hostname);
+  const firstPathPartFromInput = parseFirstPathPartFromInput(hostname);
+  if (firstPathPartFromInput) {
+    console.log('Using firstPathPart from user input:', firstPathPartFromInput);
+    mychartRequest.setFirstPathPart(firstPathPartFromInput);
+  }
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest);
 

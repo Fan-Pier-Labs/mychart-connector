@@ -1,7 +1,7 @@
 /**
- * Interactive setup CLI for MyChart plugin.
+ * Interactive setup CLI for MyChart plugin — Multi-Account.
  *
- * Registered as `openclaw openrecord setup`, `openclaw openrecord status`, `openclaw openrecord reset`, and `openclaw openrecord ping`.
+ * Registered as `openclaw openrecord setup`, `openclaw openrecord status`, `openclaw openrecord reset`.
  */
 
 import * as readline from 'readline';
@@ -9,32 +9,17 @@ import { myChartUserPassLogin, complete2faFlow } from '../../scrapers/myChart/lo
 import { setupPasskey } from '../../scrapers/myChart/setupPasskey';
 import { serializeCredential } from '../../scrapers/myChart/softwareAuthenticator';
 import { browserPasswordDbExists, importMyChartAccounts } from './password-import';
-import { clearSession, ensureSession } from './index';
+import { clearSession, clearAllSessions, clearActiveAccount, resolveSession } from './index';
 import { isBlockedInstance } from '../../shared/blockedInstances';
-import { savePluginConfig, savePasskey, readPasskey, clearPasskey } from './config';
+import {
+  readAccounts, addAccount, removeAccount, saveAccounts,
+  readAccountPasskey, saveAccountPasskey, clearAccountPasskey, clearAllPasskeys,
+  normalizeHostname, type AccountConfig,
+} from './config';
 import { getMyChartProfile } from '../../scrapers/myChart/profile';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OpenClawApi = any;
-
-interface Credentials {
-  hostname: string;
-  username: string;
-  password: string;
-  totpSecret?: string;
-}
-
-function getCredentials(api: OpenClawApi): Credentials | null {
-  const cfg = api.pluginConfig;
-  if (!cfg?.hostname || !cfg?.username || !cfg?.password) return null;
-  return {
-    hostname: cfg.hostname,
-    username: cfg.username,
-    password: cfg.password,
-    totpSecret: cfg.totpSecret || undefined,
-  };
-}
-
 
 /** Extract hostname from a URL or return the input as-is if it's already a hostname. */
 export function parseHostname(input: string): string {
@@ -95,26 +80,21 @@ function askMasked(rl: readline.Interface, question: string): Promise<string> {
   });
 }
 
+// ── Setup command (additive) ────────────────────────────────────────────────
+
 async function setupCommand(): Promise<void> {
   const rl = createReadline();
 
   try {
+    const existingAccounts = readAccounts();
     console.log('\nWelcome to MyChart Health Data for OpenClaw!\n');
-    console.log('This setup will configure your MyChart credentials so the plugin');
-    console.log('can access your health data autonomously.\n');
-
-    // Warn if existing account/passkey is configured
-    const existingPasskey = readPasskey();
-    if (existingPasskey) {
-      console.log('An existing passkey is already configured.');
-      const overwrite = await ask(rl, 'Replace existing account and passkey? (y/n): ');
-      if (overwrite.trim().toLowerCase() !== 'y') {
-        console.log('Setup cancelled.\n');
-        return;
-      }
-      clearPasskey();
-      clearSession();
-      console.log('');
+    if (existingAccounts.length > 0) {
+      console.log(`You have ${existingAccounts.length} account(s) configured:`);
+      existingAccounts.forEach((a, i) => console.log(`  [${i + 1}] ${a.hostname} — ${a.username}`));
+      console.log('\nThis setup will add a new account or update an existing one.\n');
+    } else {
+      console.log('This setup will configure your MyChart credentials so the plugin');
+      console.log('can access your health data autonomously.\n');
     }
 
     let hostname = '';
@@ -184,6 +164,22 @@ async function setupCommand(): Promise<void> {
         console.log('Password is required. Aborting setup.');
         return;
       }
+    }
+
+    // Check if account already exists
+    const normalizedHost = normalizeHostname(hostname);
+    const existing = existingAccounts.find(a => normalizeHostname(a.hostname) === normalizedHost);
+    if (existing) {
+      const confirmRl = createReadline();
+      const overwrite = await ask(confirmRl, `\nAccount for ${hostname} already exists (${existing.username}). Update it? (y/n): `);
+      confirmRl.close();
+      if (overwrite.trim().toLowerCase() !== 'y') {
+        console.log('Setup cancelled.\n');
+        return;
+      }
+      // Clear old passkey for this account since credentials are changing
+      clearAccountPasskey(normalizedHost);
+      clearSession(normalizedHost);
     }
 
     // Validate credentials
@@ -283,19 +279,20 @@ async function setupCommand(): Promise<void> {
       }
     }
 
-    // Save config
-    const config: Record<string, string> = {
-      hostname,
+    // Save account
+    const account: AccountConfig = {
+      hostname: normalizedHost,
       username,
       password,
     };
     if (passkeyJson) {
-      savePasskey(passkeyJson);
+      saveAccountPasskey(normalizedHost, passkeyJson);
     }
 
-    savePluginConfig(config);
+    addAccount(account);
 
-    console.log('Setup complete! Your MyChart credentials have been saved.');
+    const totalAccounts = readAccounts().length;
+    console.log(`Setup complete! Account for ${hostname} has been saved. (${totalAccounts} account(s) total)`);
     console.log('The plugin will now automatically log in when you use health data tools.\n');
     if (passkeyJson) {
       console.log('Passkey is configured — login will be fully automatic (no 2FA needed).');
@@ -308,44 +305,166 @@ async function setupCommand(): Promise<void> {
   }
 }
 
-async function statusCommand(api: OpenClawApi): Promise<void> {
-  const creds = getCredentials(api);
-  if (!creds) {
+// ── Status command (with live connection check) ─────────────────────────────
+
+async function statusCommand(hostname?: string, opts?: { host?: string; interactive?: boolean }): Promise<void> {
+  const accounts = readAccounts();
+  if (accounts.length === 0) {
     console.log('\nMyChart plugin is not configured.');
     console.log('Run `openclaw openrecord setup` to get started.\n');
     return;
   }
 
-  console.log('\nMyChart Plugin Status:');
-  console.log(`  Hostname:     ${creds.hostname}`);
-  console.log(`  Username:     ${creds.username}`);
-  console.log(`  Password:     ${'*'.repeat(Math.min(creds.password.length, 12))}`);
-  console.log(`  TOTP:         ${creds.totpSecret ? 'Configured' : 'Not configured'}`);
-  console.log(`  Passkey:      ${readPasskey() ? 'Configured' : 'Not configured'}`);
-  console.log();
-}
+  // Determine which accounts to show
+  const targetHost = hostname || opts?.host;
+  let accountsToShow: AccountConfig[];
 
-async function resetCommand(): Promise<void> {
-  clearSession();
-  clearPasskey();
-  savePluginConfig({});
-  console.log('\nMyChart plugin configuration has been reset.');
-  console.log('Run `openclaw openrecord setup` to reconfigure.\n');
-}
-
-async function pingCommand(api: OpenClawApi): Promise<void> {
-  try {
-    const session = await ensureSession(api);
-    const profile = await getMyChartProfile(session);
-    const name = profile?.name || 'Unknown';
-    console.log(`\n  ✓ Login successful — ${name}`);
-    console.log('  status: true\n');
-  } catch (err) {
-    console.error(`\n  ✗ ${(err as Error).message}`);
-    console.log('  status: false\n');
-    process.exitCode = 1;
+  if (opts?.interactive) {
+    // Interactive mode: list accounts, prompt for selection
+    console.log(`\n${accounts.length} account(s) configured:\n`);
+    accounts.forEach((a, i) => console.log(`  [${i + 1}] ${a.hostname} — ${a.username}`));
+    const rl = createReadline();
+    const pick = await ask(rl, `\nSelect account (1-${accounts.length}): `);
+    rl.close();
+    const idx = parseInt(pick.trim(), 10) - 1;
+    if (idx < 0 || idx >= accounts.length) {
+      console.log('Invalid selection.');
+      return;
+    }
+    accountsToShow = [accounts[idx]];
+  } else if (targetHost) {
+    const normalized = normalizeHostname(targetHost);
+    const found = accounts.filter(a => normalizeHostname(a.hostname) === normalized);
+    if (found.length === 0) {
+      console.log(`\nNo account found for hostname: ${targetHost}`);
+      console.log('Configured accounts:');
+      accounts.forEach(a => console.log(`  - ${a.hostname}`));
+      console.log();
+      return;
+    }
+    accountsToShow = found;
+  } else {
+    accountsToShow = accounts;
   }
+
+  console.log('\nMyChart Plugin Status:\n');
+
+  for (let i = 0; i < accountsToShow.length; i++) {
+    const a = accountsToShow[i];
+    const passkey = readAccountPasskey(a.hostname);
+
+    // Determine passkey/connection status by attempting a silent login
+    let passkeyStatus: string;
+    let accountSuffix = '';
+    if (passkey) {
+      // Suppress verbose scraper logging during the check
+      const origLog = console.log;
+      const origErr = console.error;
+      console.log = () => {};
+      console.error = () => {};
+      try {
+        const session = await resolveSession(a.hostname);
+        const profile = await getMyChartProfile(session);
+        const name = profile?.name || 'Unknown';
+        passkeyStatus = 'Active';
+        accountSuffix = ` \u2014 ${name}`;
+      } catch {
+        passkeyStatus = 'Stale';
+      } finally {
+        console.log = origLog;
+        console.error = origErr;
+      }
+    } else {
+      passkeyStatus = 'Not configured';
+    }
+
+    console.log(`  Account ${i + 1}: ${a.hostname}${accountSuffix}`);
+    console.log(`    Username:    ${a.username}`);
+    console.log(`    Password:    ${'*'.repeat(Math.min(a.password.length, 12))}`);
+    console.log(`    Passkey:     ${passkeyStatus}`);
+    console.log();
+  }
+
+  console.log(`${accounts.length} account(s) configured.\n`);
+  process.exit(0);
 }
+
+// ── Reset command (selective or full) ───────────────────────────────────────
+
+async function resetCommand(hostname?: string, opts?: { all?: boolean }): Promise<void> {
+  const accounts = readAccounts();
+
+  if (accounts.length === 0) {
+    console.log('\nNo accounts configured. Nothing to reset.\n');
+    return;
+  }
+
+  // Reset all
+  if (opts?.all) {
+    clearAllSessions();
+    clearActiveAccount();
+    clearAllPasskeys();
+    saveAccounts([]);
+    console.log(`\nAll ${accounts.length} account(s) have been removed.`);
+    console.log('Run `openclaw openrecord setup` to reconfigure.\n');
+    return;
+  }
+
+  // Reset specific hostname
+  if (hostname) {
+    const normalized = normalizeHostname(hostname);
+    const found = accounts.find(a => normalizeHostname(a.hostname) === normalized);
+    if (!found) {
+      console.log(`\nNo account found for hostname: ${hostname}`);
+      console.log('Configured accounts:');
+      accounts.forEach(a => console.log(`  - ${a.hostname}`));
+      console.log();
+      return;
+    }
+    clearSession(normalized);
+    clearActiveAccount();
+    clearAccountPasskey(normalized);
+    removeAccount(normalized);
+    console.log(`\nAccount for ${found.hostname} has been removed.`);
+    console.log(`${accounts.length - 1} account(s) remaining.\n`);
+    return;
+  }
+
+  // Interactive: list accounts, ask which to remove
+  console.log(`\n${accounts.length} account(s) configured:\n`);
+  accounts.forEach((a, i) => console.log(`  [${i + 1}] ${a.hostname} — ${a.username}`));
+  console.log(`  [A] Remove all accounts`);
+
+  const rl = createReadline();
+  const pick = await ask(rl, `\nSelect account to remove (1-${accounts.length}) or A for all: `);
+  rl.close();
+
+  if (pick.trim().toLowerCase() === 'a') {
+    clearAllSessions();
+    clearActiveAccount();
+    clearAllPasskeys();
+    saveAccounts([]);
+    console.log(`\nAll ${accounts.length} account(s) have been removed.`);
+    console.log('Run `openclaw openrecord setup` to reconfigure.\n');
+    return;
+  }
+
+  const idx = parseInt(pick.trim(), 10) - 1;
+  if (idx < 0 || idx >= accounts.length) {
+    console.log('Invalid selection. No changes made.');
+    return;
+  }
+
+  const target = accounts[idx];
+  clearSession(target.hostname);
+  clearActiveAccount();
+  clearAccountPasskey(target.hostname);
+  removeAccount(target.hostname);
+  console.log(`\nAccount for ${target.hostname} has been removed.`);
+  console.log(`${accounts.length - 1} account(s) remaining.\n`);
+}
+
+// ── Register CLI ─────────────────────────────────────────────────────────────
 
 export function registerCliCommands(api: OpenClawApi) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -354,19 +473,20 @@ export function registerCliCommands(api: OpenClawApi) {
       .description('OpenRecord health data plugin');
 
     openrecord.command('setup')
-      .description('Set up MyChart credentials and TOTP for automatic login')
+      .description('Add or update a MyChart account')
       .action(() => setupCommand());
 
     openrecord.command('status')
-      .description('Show current MyChart plugin configuration status')
-      .action(() => statusCommand(api));
+      .argument('[hostname]', 'Hostname of account to check')
+      .option('--host <hostname>', 'Hostname of account to check')
+      .option('-i, --interactive', 'Interactively select an account')
+      .description('Show MyChart account status with live connection check')
+      .action((hostname: string | undefined, opts: { host?: string; interactive?: boolean }) => statusCommand(hostname, opts));
 
     openrecord.command('reset')
-      .description('Clear saved MyChart credentials and reset the plugin')
-      .action(() => resetCommand());
-
-    openrecord.command('ping')
-      .description('Login with saved credentials/passkey and verify by fetching profile')
-      .action(() => pingCommand(api));
+      .argument('[hostname]', 'Hostname of account to remove')
+      .option('--all', 'Remove all accounts')
+      .description('Remove a MyChart account or all accounts')
+      .action((hostname: string | undefined, opts: { all?: boolean }) => resetCommand(hostname, opts));
   }, { commands: ['openrecord'] });
 }

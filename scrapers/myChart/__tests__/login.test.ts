@@ -1,5 +1,5 @@
 import { describe, it, expect, mock } from 'bun:test'
-import { areCookiesValid, parse2faDeliveryMethods, parseFirstPathPartFromLocation, parseFirstPathPartFromHtml, extractFirstPathPartFromMarketingPage } from '../login'
+import { areCookiesValid, parse2faDeliveryMethods, parseFirstPathPartFromLocation, parseFirstPathPartFromHtml, parseFirstPathPartFromInput, extractFirstPathPartFromMarketingPage, probeFirstPathPartByTryingCommonLoginPaths } from '../login'
 import { MyChartRequest } from '../myChartRequest'
 
 /**
@@ -220,6 +220,20 @@ describe('parseFirstPathPartFromHtml', () => {
   })
 })
 
+describe('parseFirstPathPartFromInput', () => {
+  it('extracts MyChart path from a full user-provided URL', () => {
+    expect(parseFirstPathPartFromInput(
+      'https://mychart.uchealth.org/MyChart/Authentication/Login'
+    )).toBe('MyChart')
+  })
+
+  it('returns null when the URL path is not a MyChart path', () => {
+    expect(parseFirstPathPartFromInput(
+      'https://uchealth.org/access-my-health-connection/'
+    )).toBe(null)
+  })
+})
+
 describe('cross-domain redirect handling', () => {
   it('detects cross-domain redirect correctly', () => {
     // Use url.host (not url.hostname) to include port in comparison,
@@ -325,5 +339,33 @@ describe('extractFirstPathPartFromMarketingPage', () => {
 
     const result = await extractFirstPathPartFromMarketingPage(req, 'https://example.com/portal/')
     expect(result).toBe('MyChart-PRD2')
+  })
+})
+
+describe('probeFirstPathPartByTryingCommonLoginPaths', () => {
+  it('recovers MyChart when marketing-page discovery fails', async () => {
+    const req = new MyChartRequest('mychart.uchealth.org')
+    req.fetchWithCookieJar = mock(async (url: string | URL | Request) => {
+      const href = url.toString()
+      if (href === 'https://mychart.uchealth.org/MyChart/Authentication/Login') {
+        return new Response(`<html><body>
+          <input name="__RequestVerificationToken" value="csrf-token" />
+        </body></html>`, { status: 200 })
+      }
+      return new Response('<html><body>Not found</body></html>', { status: 404 })
+    }) as typeof req.fetchWithCookieJar
+
+    const result = await probeFirstPathPartByTryingCommonLoginPaths(req)
+    expect(result).toBe('MyChart')
+  })
+
+  it('returns null when common login paths do not work', async () => {
+    const req = new MyChartRequest('mychart.example.com')
+    req.fetchWithCookieJar = mock(async () => {
+      return new Response('<html><body>Not found</body></html>', { status: 404 })
+    }) as typeof req.fetchWithCookieJar
+
+    const result = await probeFirstPathPartByTryingCommonLoginPaths(req)
+    expect(result).toBe(null)
   })
 })
