@@ -633,8 +633,10 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   const actualSeriesWithImages = [...seriesInstances.values()].filter(s => s.size > 0).length;
 
   if (candidateSeriesUIDs.length === 0 || totalInstances === 0) {
-    console.log(`      [AMF-PARSE] Positional analysis found ${candidateSeriesUIDs.length} series with ${totalInstances} instances, falling back to pair-based parsing`);
-    return parseStudySeriesFromAmfLegacy(amfBuf);
+    console.log(`      [AMF-PARSE] Positional analysis found ${candidateSeriesUIDs.length} series with ${totalInstances} instances, falling back`);
+    // Try boundary-based parsing first (handles MRI with shared UID prefixes),
+    // then fall back to legacy pair-based parsing
+    return parseStudySeriesFromAmfBoundary(amfBuf) ?? parseStudySeriesFromAmfLegacy(amfBuf);
   }
 
   // If positional analysis collapsed many UIDs into one series with few instances,
@@ -644,25 +646,50 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   // Don't fall back for CT/MRI with many instances per series (>10).
   const maxInstancesPerSeries = Math.max(...[...seriesInstances.values()].map(s => s.size));
   if (expectedPairCount >= 2 && actualSeriesWithImages <= 1 && maxInstancesPerSeries <= 10 && expectedPairCount > actualSeriesWithImages) {
-    console.log(`      [AMF-PARSE] Positional analysis found ${actualSeriesWithImages} series with images but ${expectedPairCount} pairs expected, falling back to pair-based parsing`);
-    return parseStudySeriesFromAmfLegacy(amfBuf);
+    console.log(`      [AMF-PARSE] Positional analysis found ${actualSeriesWithImages} series with images but ${expectedPairCount} pairs expected, falling back`);
+    return parseStudySeriesFromAmfBoundary(amfBuf) ?? parseStudySeriesFromAmfLegacy(amfBuf);
+  }
+
+  // If positional analysis collapsed many UIDs into very few series (e.g., 200+ UIDs
+  // into 2-3 series), try boundary-based parsing which may find more series.
+  // This catches MRI studies where all UIDs share the same parent prefix (Siemens scanners).
+  if (orderedUIDs.length > 20 && actualSeriesWithImages <= 3) {
+    const boundaryResult = parseStudySeriesFromAmfBoundary(amfBuf);
+    // Count unique series in boundary result
+    const boundarySeriesCount = boundaryResult
+      ? new Set(boundaryResult.series.map(s => s.seriesUID)).size
+      : 0;
+    if (boundaryResult && boundarySeriesCount > actualSeriesWithImages) {
+      console.log(`      [AMF-PARSE] Positional analysis found ${actualSeriesWithImages} series but boundary parser found ${boundarySeriesCount} series, using boundary result`);
+      return boundaryResult;
+    }
   }
 
   console.log(`      [AMF-PARSE] Detected ${candidateSeriesUIDs.length} series via positional analysis`);
 
-  // Extract series descriptions from nearby readable strings
-  const descriptionPattern = /[\x20-\x7e]{3,100}/g;
-  const readableStrings: Array<{ text: string; pos: number }> = [];
-  let strMatch;
-  while ((strMatch = descriptionPattern.exec(text)) !== null) {
-    const s = strMatch[0].trim();
-    if (/^\d+\.\d+\.\d+/.test(s)) continue;
-    if (s.includes('com.clientoutlook') || s.includes('flex.messaging')) continue;
-    if (s.includes('AmfServices') || s.includes('HTTPSimpleLoader')) continue;
-    if (s.includes('getStudyList') || s.includes('StudyService')) continue;
-    if (/^[\d.]+$/.test(s)) continue;
-    readableStrings.push({ text: s, pos: strMatch.index });
+  return buildSeriesResult(candidateSeriesUIDs, seriesInstances, firstPosition, text);
+}
+
+/**
+ * Build the final ParsedStudyInfo result from series/instance maps.
+ * Shared between positional and boundary-based parsers.
+ */
+function buildSeriesResult(
+  candidateSeriesUIDs: string[],
+  seriesInstances: Map<string, Set<string>>,
+  firstPosition: Map<string, number>,
+  text: string,
+): ParsedStudyInfo {
+  // Extract the study UID (first UID in the text)
+  const uidPattern = /1\.\d+\.\d+\.\d+(?:\.\d+){2,}/g;
+  let studyUID = '';
+  let m;
+  while ((m = uidPattern.exec(text)) !== null) {
+    if (!m[0].startsWith('1.2.840.10008.')) { studyUID = m[0]; break; }
   }
+
+  // Extract series descriptions from nearby readable strings
+  const readableStrings = extractReadableStrings(text);
 
   // Build the result — flatten each series' instances into individual entries
   // for backward compatibility with the download loop
@@ -677,25 +704,7 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
       ? (firstPosition.get(candidateSeriesUIDs[si + 1]) ?? text.length)
       : text.length;
 
-    // Find series description: look for readable strings between this series and the next
-    let bestDesc = `Series ${++seriesIdx}`;
-    let bestScore = 0;
-    for (const rs of readableStrings) {
-      if (rs.pos < seriesPos || rs.pos > nextSeriesPos) continue;
-      // Prefer strings that look like series names (short, no UIDs, not too generic)
-      const s = rs.text;
-      if (s.length < 3 || s.length > 50) continue;
-      // Score: prefer shorter, more descriptive strings
-      let score = 10;
-      if (/^[A-Z]/.test(s)) score += 5; // Starts with uppercase
-      if (s.includes(' ')) score += 3; // Has spaces (human-readable)
-      if (/\d+x\d+|\d+mm/i.test(s)) score += 3; // Resolution-like
-      if (s.length < 20) score += 2;
-      if (score > bestScore) {
-        bestScore = score;
-        bestDesc = s;
-      }
-    }
+    const bestDesc = findSeriesDescription(readableStrings, seriesPos, nextSeriesPos) ?? `Series ${++seriesIdx}`;
 
     if (instances.size === 0) {
       // Series with no detected instances — add a self-referencing entry
@@ -719,6 +728,136 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   console.log(`      [AMF-PARSE] Total: ${series.length} (seriesUID, instanceUID) entries across ${candidateSeriesUIDs.length} series`);
 
   return { studyUID, series };
+}
+
+/** Extract readable ASCII strings from AMF binary, filtering out noise. */
+function extractReadableStrings(text: string): Array<{ text: string; pos: number }> {
+  const descriptionPattern = /[\x20-\x7e]{3,100}/g;
+  const readableStrings: Array<{ text: string; pos: number }> = [];
+  let strMatch;
+  while ((strMatch = descriptionPattern.exec(text)) !== null) {
+    const s = strMatch[0].trim();
+    if (/^\d+\.\d+\.\d+/.test(s)) continue;
+    if (s.includes('com.clientoutlook') || s.includes('flex.messaging')) continue;
+    if (s.includes('AmfServices') || s.includes('HTTPSimpleLoader')) continue;
+    if (s.includes('getStudyList') || s.includes('StudyService')) continue;
+    if (/^[\d.]+$/.test(s)) continue;
+    readableStrings.push({ text: s, pos: strMatch.index });
+  }
+  return readableStrings;
+}
+
+/** Find the best series description from readable strings in a position range. */
+function findSeriesDescription(
+  readableStrings: Array<{ text: string; pos: number }>,
+  startPos: number,
+  endPos: number,
+): string | null {
+  let bestDesc: string | null = null;
+  let bestScore = 0;
+  for (const rs of readableStrings) {
+    if (rs.pos < startPos || rs.pos > endPos) continue;
+    const s = rs.text;
+    if (s.length < 3 || s.length > 50) continue;
+    let score = 10;
+    if (/^[A-Z]/.test(s)) score += 5;
+    if (s.includes(' ')) score += 3;
+    if (/\d+x\d+|\d+mm/i.test(s)) score += 3;
+    if (s.length < 20) score += 2;
+    if (score > bestScore) {
+      bestScore = score;
+      bestDesc = s;
+    }
+  }
+  return bestDesc;
+}
+
+/**
+ * Boundary-based parser for MRI/CT studies where UIDs share the same parent prefix.
+ *
+ * eUnity's AMF response uses "333333" as a series boundary marker (an AMF3-encoded
+ * color/delimiter value). Each series block ends with this marker. By splitting on
+ * these boundaries and grouping the UIDs within each segment, we can correctly
+ * identify series even when all UIDs share the same parent prefix (common with
+ * Siemens MRI scanners like 1.3.12.2.1107.5.2.43.XXXXX.YYYYY).
+ *
+ * Within each segment, the first UID is the series UID and the remaining UIDs
+ * are instance UIDs (individual slices).
+ */
+function parseStudySeriesFromAmfBoundary(amfBuf: Buffer): ParsedStudyInfo | null {
+  const text = amfBuf.toString('latin1');
+
+  // Find the "333333" boundary markers
+  const BOUNDARY = '333333';
+  const boundaryPositions: number[] = [];
+  let searchIdx = 0;
+  while ((searchIdx = text.indexOf(BOUNDARY, searchIdx)) !== -1) {
+    boundaryPositions.push(searchIdx);
+    searchIdx += BOUNDARY.length;
+  }
+
+  if (boundaryPositions.length < 2) return null; // Need at least 2 boundaries for meaningful parsing
+
+  // Find all UIDs
+  const uidPattern = /1\.\d+\.\d+\.\d+(?:\.\d+){2,}/g;
+  const allUids: Array<{ uid: string; pos: number }> = [];
+  const firstPosition = new Map<string, number>();
+  let match;
+  while ((match = uidPattern.exec(text)) !== null) {
+    const uid = match[0];
+    if (uid.startsWith('1.2.840.10008.')) continue;
+    allUids.push({ uid, pos: match.index });
+    if (!firstPosition.has(uid)) firstPosition.set(uid, match.index);
+  }
+
+  if (allUids.length < 3) return null;
+
+  const studyUID = allUids[0].uid;
+
+  // Split UIDs into segments by boundary markers.
+  // Boundaries: [0, marker1, marker2, ..., end_of_text]
+  const segmentBounds = [0, ...boundaryPositions, text.length];
+
+  const candidateSeriesUIDs: string[] = [];
+  const seriesInstances = new Map<string, Set<string>>();
+
+  for (let i = 0; i < segmentBounds.length - 1; i++) {
+    const segStart = segmentBounds[i];
+    const segEnd = segmentBounds[i + 1];
+
+    // Get UIDs in this segment, excluding the study UID
+    const segUids = allUids
+      .filter(u => u.pos >= segStart && u.pos < segEnd && u.uid !== studyUID)
+      .map(u => u.uid);
+
+    // Deduplicate while preserving order
+    const uniqueSegUids = [...new Set(segUids)];
+    if (uniqueSegUids.length === 0) continue;
+
+    // First UID in the segment is the series UID, rest are instance UIDs
+    const seriesUID = uniqueSegUids[0];
+    const instanceUIDs = uniqueSegUids.slice(1);
+
+    // Skip if this series UID was already seen (duplicate boundary)
+    if (seriesInstances.has(seriesUID)) {
+      // Add any new instances to the existing series
+      for (const uid of instanceUIDs) {
+        seriesInstances.get(seriesUID)!.add(uid);
+      }
+      continue;
+    }
+
+    candidateSeriesUIDs.push(seriesUID);
+    seriesInstances.set(seriesUID, new Set(instanceUIDs));
+  }
+
+  // Validate: boundary parsing should produce more than 1 series with instances
+  const totalInstances = [...seriesInstances.values()].reduce((sum, s) => sum + s.size, 0);
+  if (candidateSeriesUIDs.length < 2 || totalInstances === 0) return null;
+
+  console.log(`      [AMF-PARSE] Boundary parser: ${boundaryPositions.length} boundaries, ${candidateSeriesUIDs.length} series, ${totalInstances} instances`);
+
+  return buildSeriesResult(candidateSeriesUIDs, seriesInstances, firstPosition, text);
 }
 
 /**
@@ -1080,7 +1219,10 @@ async function downloadImage(
       break;
   }
 
-  const body = new URLSearchParams({
+  // Build POST body — omit serviceInstance when empty to let the server
+  // search all providers. The WASM viewer does the same: it only includes
+  // serviceInstance when the per-image metadata has a non-empty value.
+  const bodyParams: Record<string, string> = {
     requestType,
     contentType,
     studyUID: params.studyUID,
@@ -1091,9 +1233,10 @@ async function downloadImage(
     haveImageData,
     serializeType: 'zlib',
     compressionVersion: '3',
-    serviceInstance: params.serviceInstance,
     level,
-  }).toString();
+  };
+  if (params.serviceInstance) bodyParams.serviceInstance = params.serviceInstance;
+  const body = new URLSearchParams(bodyParams).toString();
 
   const res = await fetchWithCookies(cookieJar, `${baseUrl}/e/CustomImageServlet`, {
     method: 'POST',
@@ -1479,6 +1622,44 @@ export async function downloadImagingStudyDirect(
     const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
     const CLOCLHAAR_MAGIC = Buffer.from('CLOCLHAAR');
     let completed = 0;
+    // Track the effective serviceInstance — may change after CLOERROR retry
+    let downloadServiceInstance = studyParams.serviceInstance;
+
+    // Step 6a: Probe first image to detect provider mismatch.
+    // The WASM viewer omits serviceInstance from CustomImageServlet requests when
+    // the per-image metadata doesn't specify one, letting the server search all
+    // providers. We do the same: try with serviceInstance first, fall back to
+    // omitting it if we get CLOERROR.
+    if (seriesToDownload.length > 0) {
+      const probe = seriesToDownload[0];
+      try {
+        const { data: probeData } = await downloadImage(session!.cookieJar, baseUrl, {
+          studyUID: studyInfo.studyUID,
+          seriesUID: probe.seriesUID,
+          objectUID: probe.instanceUID,
+          serviceInstance: downloadServiceInstance,
+          format: 'CLOWRAPPER',
+        });
+
+        const isError = probeData.length < 256 || (probeData.length > 8 && probeData.toString('ascii', 0, 8) === 'CLOERROR');
+        if (isError) {
+          // Try without serviceInstance — lets the server search all providers.
+          // The WASM viewer omits serviceInstance when per-image metadata doesn't set it.
+          const { data: retryData } = await downloadImage(session!.cookieJar, baseUrl, {
+            studyUID: studyInfo.studyUID,
+            seriesUID: probe.seriesUID,
+            objectUID: probe.instanceUID,
+            serviceInstance: '',
+            format: 'CLOWRAPPER',
+          });
+          const retryOk = retryData.length >= 256 && retryData.toString('ascii', 0, 8) !== 'CLOERROR';
+          if (retryOk) {
+            console.log(`      [DOWNLOAD] Omitting serviceInstance (server will search all providers)`);
+            downloadServiceInstance = '';
+          }
+        }
+      } catch { /* probe failed, proceed with original serviceInstance */ }
+    }
 
     async function downloadOne(series: typeof studyInfo.series[0]): Promise<void> {
       try {
@@ -1486,7 +1667,7 @@ export async function downloadImagingStudyDirect(
           studyUID: studyInfo!.studyUID,
           seriesUID: series.seriesUID,
           objectUID: series.instanceUID,
-          serviceInstance: studyParams!.serviceInstance,
+          serviceInstance: downloadServiceInstance,
           format: 'CLOWRAPPER',
         });
 

@@ -1546,7 +1546,15 @@ async function main() {
         console.log(`    Saved: ${path.basename(allPath)}`);
 
         for (const result of imaging) {
-          const safeName = result.orderName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+          // Build folder name with date prefix (e.g., "2024-09-03_MRI_SHOULDER_RIGHT")
+          let datePrefix = '';
+          if (result.resultDate) {
+            const parsed = new Date(result.resultDate);
+            if (!isNaN(parsed.getTime())) {
+              datePrefix = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}_`;
+            }
+          }
+          const safeName = datePrefix + result.orderName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
           console.log(`\n      ${result.orderName}`);
 
           // Save report text if available
