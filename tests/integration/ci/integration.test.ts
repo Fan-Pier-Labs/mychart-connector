@@ -959,7 +959,51 @@ describe('Passkey setup and auto-login', () => {
 });
 
 // ===================================================================
-// 12. Cleanup
+// 12. AI Proxy
+// ===================================================================
+
+describe('AI Proxy', () => {
+  it('rejects unauthenticated requests', async () => {
+    const res = await fetch(`${BASE_URL}/api/ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects requests with no messages', async () => {
+    const res = await authedFetch('/api/ai', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [] }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('messages');
+  });
+
+  it('rejects messages with invalid role', async () => {
+    const res = await authedFetch('/api/ai', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'system', content: 'hello' }] }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns current spend via GET', async () => {
+    const res = await authedFetch('/api/ai');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(typeof body.spentCents).toBe('number');
+    expect(typeof body.limitCents).toBe('number');
+    expect(typeof body.remainingCents).toBe('number');
+    expect(typeof body.period).toBe('string');
+    expect(body.limitCents).toBe(5000); // $50.00
+  });
+});
+
+// ===================================================================
+// 13. Cleanup
 // ===================================================================
 
 describe('Cleanup', () => {

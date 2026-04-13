@@ -106,6 +106,8 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET**: Google OAuth credentials (optional, Google sign-in disabled without them)
 - **SENTRY_AUTH_TOKEN**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:mychart-connector-sentry-auth-token-UputCa`
   - Sentry auth token for error monitoring and source map uploads
+- **GEMINI_API_KEY**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:GEMINI_API_KEY`
+  - Google Gemini API key for the AI proxy. Can also be set via `GEMINI_API_KEY` env var in env-var mode.
 
 ## App Authentication & 2FA
 
@@ -145,6 +147,20 @@ Key files:
 - `web/src/app/api/mcp/route.ts` — HTTP transport handler (authenticates via API key)
 - `web/src/app/api/mcp/demo/route.ts` — Demo MCP endpoint (no auth required)
 - `web/src/app/api/mcp-key/route.ts` — API key management endpoint
+
+## AI Proxy
+
+Server-side AI proxy at `POST /api/ai` that forwards requests to Gemini (currently Gemini 2.0 Flash). Designed with a provider abstraction (`AiProvider` interface) so the backend can be swapped without changing the API contract.
+
+- **Per-user spending limit**: $50/month tracked via `ai_spend_cents` and `ai_spend_period` columns on the `user` table. Period resets automatically on calendar month boundaries.
+- **Usage endpoint**: `GET /api/ai` returns current spend info (spentCents, limitCents, remainingCents, period).
+- **Auth**: Session-based (same as other protected routes via `requireAuth`).
+
+Key files:
+- `web/src/lib/ai/types.ts` — Provider-agnostic types (`AiProvider`, `AiMessage`, `AiRequest`, `AiResponse`)
+- `web/src/lib/ai/gemini.ts` — Gemini provider implementation (swap this to change providers)
+- `web/src/lib/ai/usage.ts` — Per-user spending tracking and limit enforcement
+- `web/src/app/api/ai/route.ts` — API route (POST for chat, GET for spend info)
 
 ## Notification System
 
