@@ -11,9 +11,9 @@ import { getPoolOptions } from '../mcp/config';
 /** $50/month limit expressed in cents */
 const MONTHLY_LIMIT_CENTS = 50_00;
 
-/** Gemini 2.0 Flash pricing per 1M tokens (as of 2025) */
-const INPUT_COST_PER_MILLION = 0.10; // $0.10 per 1M input tokens
-const OUTPUT_COST_PER_MILLION = 0.40; // $0.40 per 1M output tokens
+/** Gemini 2.5 Flash pricing per 1M tokens (thinking tokens are free) */
+const INPUT_COST_PER_MILLION = 0.15; // $0.15 per 1M input tokens
+const OUTPUT_COST_PER_MILLION = 0.60; // $0.60 per 1M output tokens (non-thinking)
 
 let pool: Pool | null = null;
 

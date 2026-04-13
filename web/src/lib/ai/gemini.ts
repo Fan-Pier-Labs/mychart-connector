@@ -7,7 +7,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getGeminiApiKey } from '../mcp/config';
 import type { AiProvider, AiRequest, AiResponse } from './types';
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 let client: GoogleGenerativeAI | null = null;
 

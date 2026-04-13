@@ -150,7 +150,7 @@ Key files:
 
 ## AI Proxy
 
-Server-side AI proxy at `POST /api/ai` that forwards requests to Gemini (currently Gemini 2.0 Flash). Designed with a provider abstraction (`AiProvider` interface) so the backend can be swapped without changing the API contract.
+Server-side AI proxy at `POST /api/ai` that forwards requests to Gemini (currently Gemini 2.5 Flash). Designed with a provider abstraction (`AiProvider` interface) so the backend can be swapped without changing the API contract.
 
 - **Per-user spending limit**: $50/month tracked via `ai_spend_cents` and `ai_spend_period` columns on the `user` table. Period resets automatically on calendar month boundaries.
 - **Usage endpoint**: `GET /api/ai` returns current spend info (spentCents, limitCents, remainingCents, period).
