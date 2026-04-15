@@ -1,10 +1,19 @@
 import type { ExpoConfig } from "expo/config";
 
-// Reversed iOS OAuth client ID (e.g. com.googleusercontent.apps.1234-abc).
-// Required for Google sign-in. Set via env var or fall back to the committed value.
+// Google OAuth client IDs. These are not secrets — iOS bakes the reversed
+// client ID into its Info.plist URL schemes and ships it in every IPA, and
+// the web client ID is used client-side too. Stored in AWS Secrets Manager
+// under GOOGLE_OAUTH_CREDENTIALS for server parity; kept here as defaults
+// so local builds work without a Secrets Manager lookup.
+const GOOGLE_WEB_CLIENT_ID =
+  "810533222194-p2dod0idou95jlh70qi07m84uscb4170.apps.googleusercontent.com";
+const GOOGLE_IOS_CLIENT_ID =
+  "810533222194-hhcn0nkf1mgelfrgq5vogbsjuemmvde8.apps.googleusercontent.com";
+const GOOGLE_IOS_URL_SCHEME =
+  "com.googleusercontent.apps.810533222194-hhcn0nkf1mgelfrgq5vogbsjuemmvde8";
+
 const iosUrlScheme =
-  process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ??
-  "com.googleusercontent.apps.REPLACE_ME";
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ?? GOOGLE_IOS_URL_SCHEME;
 
 const googleSigninPlugin: [string, { iosUrlScheme: string }] = [
   "@react-native-google-signin/google-signin",
@@ -53,9 +62,9 @@ const config: ExpoConfig = {
       process.env.EXPO_PUBLIC_BACKEND_URL ??
       "https://openrecord.fanpierlabs.com",
     googleWebClientId:
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "",
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? GOOGLE_WEB_CLIENT_ID,
     googleIosClientId:
-      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "",
+      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? GOOGLE_IOS_CLIENT_ID,
   },
 };
 
