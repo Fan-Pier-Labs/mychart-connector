@@ -16,7 +16,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 - **Read local passwords** (`read-local-passwords/`): Browser password store extraction (Chrome, Arc, Firefox)
 - **CLO image parser** (`scrapers/myChart/clo-image-parser/`): eUnity CLO image format decoder and encoder
 - **Web app** (`web/`): Next.js demo app deployed to AWS Fargate. Includes an mcp server. Uses BetterAuth for user authentication (email+password, Google OAuth) and PostgreSQL for storing encrypted MyChart credentials.
-- **OpenClaw plugin** (`openclaw-plugin/`): Self-contained OpenClaw plugin that bundles all MyChart scrapers locally. No server dependency.
+- **OpenRecord plugin** (`openclaw-plugin/`): Self-contained OpenClaw plugin (package name: `openrecord`) that bundles all MyChart scrapers locally. No server dependency.
 - **Fake MyChart** (`fake-mychart/`): Standalone Next.js app that mimics MyChart's API surface with Homer Simpson fake data. Used for development without real MyChart access and CI integration tests. Run with `cd fake-mychart && bun run dev` (port 4000). Credentials: `homer`/`donuts123` (or set `FAKE_MYCHART_ACCEPT_ANY=true`). All state lives in RAM. Supports the full login flow including 2FA (code `123456`).
 
 ## Key Commands
@@ -59,7 +59,7 @@ End-to-end tests in `tests/integration/ci/` that exercise the full user journey 
 - **[CLI reference](docs/cli.md)** — Cookie caching, credential resolution, 2FA, CLI actions
 - **[Imaging scraper](docs/imaging.md)** — eUnity protocol, AMF3, instance-specific notes
 - **[Scraping guide](docs/scraping.md)** — MyChart login, scraping tips, and tooling
-- **[OpenClaw plugin](docs/openclaw.md)** — Build, install, setup, and tool registration
+- **[OpenRecord plugin](docs/openclaw.md)** — Build, install, setup, and tool registration
 - **[Deployment details](docs/deployment.md)** — Additional infrastructure notes
 - **[MyChart features](MYCHART_FEATURES.md)** — Full inventory of MyChart features and scraper coverage
 - **[MyChart TOTP](docs/mychart-totp.md)** — TOTP authenticator app 2FA setup, API endpoints, CLI flags
@@ -75,7 +75,7 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 ### AWS Fargate (primary)
 
 - **AWS account**: fanpierlabs (`aws --profile fanpierlabs`)
-- **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
+- **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy` (from repo root, uses `web/deploy.yaml`)
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
   - Domain: `openrecord.fanpierlabs.com` (CloudFront + ALB + Route53). Old domain `mychart.fanpierlabs.com` redirects via next.config.ts.
@@ -106,6 +106,8 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 - **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET**: Google OAuth credentials (optional, Google sign-in disabled without them)
 - **SENTRY_AUTH_TOKEN**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:mychart-connector-sentry-auth-token-UputCa`
   - Sentry auth token for error monitoring and source map uploads
+- **GEMINI_API_KEY**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:GEMINI_API_KEY-GPbdf6`
+  - Google Gemini API key for the AI proxy. Can also be set via `GEMINI_API_KEY` env var in env-var mode.
 
 ## App Authentication & 2FA
 
@@ -145,6 +147,20 @@ Key files:
 - `web/src/app/api/mcp/route.ts` — HTTP transport handler (authenticates via API key)
 - `web/src/app/api/mcp/demo/route.ts` — Demo MCP endpoint (no auth required)
 - `web/src/app/api/mcp-key/route.ts` — API key management endpoint
+
+## AI Proxy
+
+Server-side AI proxy at `POST /api/ai` that forwards requests to Gemini (currently Gemini 2.5 Flash). Designed with a provider abstraction (`AiProvider` interface) so the backend can be swapped without changing the API contract.
+
+- **Per-user spending limit**: $50/month tracked via `ai_spend_cents` and `ai_spend_period` columns on the `user` table. Period resets automatically on calendar month boundaries.
+- **Usage endpoint**: `GET /api/ai` returns current spend info (spentCents, limitCents, remainingCents, period).
+- **Auth**: Session-based (same as other protected routes via `requireAuth`).
+
+Key files:
+- `web/src/lib/ai/types.ts` — Provider-agnostic types (`AiProvider`, `AiMessage`, `AiRequest`, `AiResponse`)
+- `web/src/lib/ai/gemini.ts` — Gemini provider implementation (swap this to change providers)
+- `web/src/lib/ai/usage.ts` — Per-user spending tracking and limit enforcement
+- `web/src/app/api/ai/route.ts` — API route (POST for chat, GET for spend info)
 
 ## Notification System
 

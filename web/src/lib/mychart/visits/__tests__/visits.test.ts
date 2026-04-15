@@ -14,10 +14,10 @@ function mockRequest(responses: Array<{ body: string }>) {
 }
 
 describe('upcomingVisits', () => {
-  it('returns undefined when no token found', async () => {
+  it('returns error when no token found', async () => {
     const req = mockRequest([{ body: '<html></html>' }])
     const result = await upcomingVisits(req)
-    expect(result).toBeUndefined()
+    expect(result).toEqual({ visits: [], error: 'Authentication error: could not get CSRF token for visits' })
   })
 
   it('returns upcoming visits data', async () => {
@@ -95,10 +95,10 @@ describe('upcomingVisits', () => {
 })
 
 describe('pastVisits', () => {
-  it('returns undefined when no token found', async () => {
+  it('returns error when no token found', async () => {
     const req = mockRequest([{ body: '<html></html>' }])
     const result = await pastVisits(req, new Date('2023-01-01'))
-    expect(result).toBeUndefined()
+    expect(result).toEqual({ visits: [], error: 'Authentication error: could not get CSRF token for visits' })
   })
 
   it('returns past visits data', async () => {

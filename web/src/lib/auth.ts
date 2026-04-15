@@ -4,6 +4,7 @@ import { getPoolOptions, getBetterAuthSecret, getGoogleOAuthCredentials, hasGoog
 import { nextCookies } from 'better-auth/next-js';
 import { twoFactor } from 'better-auth/plugins/two-factor';
 import { magicLink } from 'better-auth/plugins/magic-link';
+import { bearer } from 'better-auth/plugins';
 import { passkey } from '@better-auth/passkey';
 import { sendEmail } from './email';
 
@@ -45,6 +46,11 @@ export async function getAuth(): Promise<any> {
     'http://localhost:3000',
     // Trust all Railway-provided subdomains so any deployment works without extra config.
     'https://*.up.railway.app',
+    // iOS app custom scheme (expo-app)
+    'openrecord://',
+    // AWS Fargate prod domain + legacy redirect source. BETTER_AUTH_URL is not set in the task env.
+    'https://openrecord.fanpierlabs.com',
+    'https://mychart.fanpierlabs.com',
   ];
   if (baseURL && !trustedOrigins.includes(baseURL)) {
     trustedOrigins.push(baseURL);
@@ -100,6 +106,7 @@ export async function getAuth(): Promise<any> {
         }
       : {}),
     plugins: [
+      bearer(),
       nextCookies(),
       twoFactor({
         issuer: 'MyChart MCP',

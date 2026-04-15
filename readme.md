@@ -129,12 +129,12 @@ This builds a Docker image, pushes it to ECR, and deploys to ECS Fargate. Infras
 openrecord/
   scrapers/          # Shared MyChart scraper code (login, API calls, parsing)
   web/               # Next.js web app + hosted MCP server
-  openclaw-plugin/   # Self-contained OpenClaw plugin
+  openclaw-plugin/   # Self-contained OpenRecord plugin for OpenClaw
   cli/               # Headless CLI for testing and scripting
   shared/            # Common types and enums
 ```
 
-The scrapers are shared across all entry points (web app, OpenClaw plugin, CLI). Each entry point handles auth and session management differently, but they all call into the same scraper functions.
+The scrapers are shared across all entry points (web app, OpenRecord plugin, CLI). Each entry point handles auth and session management differently, but they all call into the same scraper functions.
 
 ## Development
 

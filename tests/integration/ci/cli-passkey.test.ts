@@ -9,7 +9,7 @@
  * Run: bun test tests/integration/ci/cli-passkey.test.ts
  */
 
-import { describe, it, expect, afterAll } from 'bun:test';
+import { describe, it, expect, afterAll, beforeAll } from 'bun:test';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -57,8 +57,7 @@ function runCli(args: string[], timeoutMs = 30_000): Promise<{ code: number; std
   });
 }
 
-async function getPasskeysFromFakeMychart(): Promise<unknown[]> {
-  // First we need a session — login to fake-mychart
+async function loginToFakeMychart(): Promise<string> {
   const loginRes = await fetch(`${FAKE_MYCHART_URL}/MyChart/Authentication/Login/DoLogin`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -70,53 +69,47 @@ async function getPasskeysFromFakeMychart(): Promise<unknown[]> {
     }))}`,
     redirect: 'manual',
   });
-
   const setCookie = loginRes.headers.getSetCookie?.() ?? [];
   const sessionCookie = setCookie.find(c => c.startsWith('MyChartSession='));
   if (!sessionCookie) {
     throw new Error('Failed to get session cookie from fake-mychart');
   }
-  const cookieValue = sessionCookie.split(';')[0];
+  return sessionCookie.split(';')[0];
+}
 
-  // Now query passkey list
+async function getPasskeysFromFakeMychart(): Promise<unknown[]> {
+  const cookieValue = await loginToFakeMychart();
   const res = await fetch(`${FAKE_MYCHART_URL}/MyChart/api/passkey-management/LoadPasskeyInfo`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': cookieValue,
-    },
+    headers: { 'Content-Type': 'application/json', 'Cookie': cookieValue },
     body: '{}',
   });
   const data = await res.json() as { passkeys?: unknown[] };
   return data.passkeys || [];
 }
 
-async function getTotpStatusFromFakeMychart(): Promise<boolean> {
-  const loginRes = await fetch(`${FAKE_MYCHART_URL}/MyChart/Authentication/Login/DoLogin`, {
+async function deleteAllPasskeysFromFakeMychart(): Promise<void> {
+  const cookieValue = await loginToFakeMychart();
+  const res = await fetch(`${FAKE_MYCHART_URL}/MyChart/api/passkey-management/LoadPasskeyInfo`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `LoginInfo=${encodeURIComponent(JSON.stringify({
-      Credentials: {
-        Username: btoa('homer'),
-        Password: btoa('donuts123'),
-      },
-    }))}`,
-    redirect: 'manual',
+    headers: { 'Content-Type': 'application/json', 'Cookie': cookieValue },
+    body: '{}',
   });
-
-  const setCookie = loginRes.headers.getSetCookie?.() ?? [];
-  const sessionCookie = setCookie.find(c => c.startsWith('MyChartSession='));
-  if (!sessionCookie) {
-    throw new Error('Failed to get session cookie from fake-mychart');
+  const data = await res.json() as { passkeys?: Array<{ rawId: string }> };
+  for (const pk of data.passkeys || []) {
+    await fetch(`${FAKE_MYCHART_URL}/MyChart/api/passkey-management/DeletePasskey`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': cookieValue },
+      body: JSON.stringify({ rawId: pk.rawId }),
+    });
   }
-  const cookieValue = sessionCookie.split(';')[0];
+}
 
+async function getTotpStatusFromFakeMychart(): Promise<boolean> {
+  const cookieValue = await loginToFakeMychart();
   const res = await fetch(`${FAKE_MYCHART_URL}/MyChart/api/secondary-validation/GetTwoFactorInfo`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': cookieValue,
-    },
+    headers: { 'Content-Type': 'application/json', 'Cookie': cookieValue },
     body: '{}',
   });
   const data = await res.json() as { IsTotpEnabled?: boolean };
@@ -141,6 +134,11 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 describe('CLI passkey operations against fake-mychart', () => {
+  // Clean up any passkeys left over from a previous test run
+  beforeAll(async () => {
+    try { await deleteAllPasskeysFromFakeMychart(); } catch { /* server may not be up yet */ }
+  });
+
   it('health check — fake-mychart is reachable', async () => {
     const res = await fetch(`${FAKE_MYCHART_URL}/api/health`);
     expect(res.ok).toBe(true);

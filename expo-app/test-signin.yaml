@@ -1,0 +1,21 @@
+appId: com.fanpierlabs.openrecord
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "open-drawer"
+- tapOn:
+    id: "drawer-settings"
+- scrollUntilVisible:
+    element:
+      text: "Sign out"
+- tapOn: "Sign out"
+- extendedWaitUntil:
+    visible: "Continue with Google"
+    timeout: 10000
+- takeScreenshot: signed-out
+- tapOn: "Continue with Google"
+- extendedWaitUntil:
+    notVisible: "Continue with Google"
+    timeout: 20000
+- takeScreenshot: after-tap

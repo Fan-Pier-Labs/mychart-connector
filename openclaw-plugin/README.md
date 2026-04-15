@@ -1,4 +1,4 @@
-# openclaw-mychart
+# openrecord
 
 Access your Epic MyChart health records locally with [OpenClaw](https://openclaw.dev) — no server needed.
 
@@ -12,7 +12,7 @@ Provides 35+ tools covering medications, lab results, imaging, appointments, mes
 ## Installation
 
 ```sh
-openclaw plugins install openclaw-mychart
+openclaw plugins install openrecord
 ```
 
 ## Setup
@@ -20,7 +20,7 @@ openclaw plugins install openclaw-mychart
 Run the interactive setup wizard to configure your MyChart credentials:
 
 ```sh
-openclaw mychart setup
+openclaw openrecord setup
 ```
 
 This walks you through:
@@ -52,9 +52,9 @@ This walks you through:
 ## CLI Commands
 
 ```sh
-openclaw mychart setup   # Configure credentials interactively
-openclaw mychart status  # Show current configuration
-openclaw mychart reset   # Clear saved credentials
+openclaw openrecord setup   # Configure credentials interactively
+openclaw openrecord status  # Show current configuration
+openclaw openrecord reset   # Clear saved credentials
 ```
 
 ## License

@@ -146,6 +146,21 @@ export async function getPoolOptions(): Promise<{ connectionString: string; ssl:
   };
 }
 
+// ── Gemini API Key ──
+
+const GEMINI_API_KEY_SECRET_ARN = 'arn:aws:secretsmanager:us-east-2:555985150976:secret:GEMINI_API_KEY-GPbdf6';
+let cachedGeminiApiKey: string | null = null;
+
+export async function getGeminiApiKey(): Promise<string> {
+  if (cachedGeminiApiKey) return cachedGeminiApiKey;
+  if (process.env.GEMINI_API_KEY) {
+    cachedGeminiApiKey = process.env.GEMINI_API_KEY;
+    return cachedGeminiApiKey;
+  }
+  cachedGeminiApiKey = await getSecretValue(GEMINI_API_KEY_SECRET_ARN);
+  return cachedGeminiApiKey;
+}
+
 export async function getResendApiKey(): Promise<string> {
   if (cachedResendApiKey) return cachedResendApiKey;
   if (process.env.RESEND_API_KEY) {

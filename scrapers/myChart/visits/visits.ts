@@ -6,13 +6,13 @@ import { PastVisitsContainer, VisitListContainer } from "./types";
 
 export async function upcomingVisits(myChartRequest: MyChartRequest) {
 
-  const res = await myChartRequest.makeRequest({ path: '/Home/CSRFToken?noCache=' + Math.random() })
+  const res = await myChartRequest.makeRequest({ path: '/Visits/VisitsList?noCache=' + Math.random() })
 
   const requestVerificationToken = getRequestVerificationTokenFromBody(await res.text())
 
   if (!requestVerificationToken) {
     console.log('could not find request verification token', res)
-    return
+    return { visits: [], error: 'Authentication error: could not get CSRF token for visits' }
   }
 
 
@@ -36,13 +36,13 @@ export async function upcomingVisits(myChartRequest: MyChartRequest) {
 
 export async function pastVisits(myChartRequest: MyChartRequest, oldestRenderedDate: Date) {
 
-  const res = await myChartRequest.makeRequest({ path: '/Home/CSRFToken?noCache=' + Math.random() })
+  const res = await myChartRequest.makeRequest({ path: '/Visits/VisitsList?noCache=' + Math.random() })
 
   const requestVerificationToken = getRequestVerificationTokenFromBody(await res.text())
 
   if (!requestVerificationToken) {
     console.log('could not find request verification token', res)
-    return
+    return { visits: [], error: 'Authentication error: could not get CSRF token for visits' }
   }
 
 

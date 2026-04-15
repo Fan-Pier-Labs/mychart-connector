@@ -1,33 +1,18 @@
 {
-  "id": "openrecord",
+  "id": "openclaw-openrecord",
   "name": "OpenRecord Health Data",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Access your MyChart health records locally — no server needed",
   "configSchema": {
     "type": "object",
     "properties": {
-      "hostname": {
-        "type": "string",
-        "description": "MyChart hostname (e.g. mychart.example.org)"
-      },
-      "username": {
-        "type": "string",
-        "description": "MyChart username"
-      },
-      "password": {
-        "type": "string",
-        "description": "MyChart password"
-      },
-      "totpSecret": {
-        "type": "string",
-        "description": "TOTP authenticator secret for automatic 2FA"
+      "accounts": {
+        "type": "array",
+        "description": "MyChart accounts (managed via CLI: openclaw openrecord setup)"
       }
     },
     "required": []
   },
-  "uiHints": {
-    "password": { "sensitive": true },
-    "totpSecret": { "sensitive": true }
-  },
+  "uiHints": {},
   "skills": ["./skills/mychart"]
 }

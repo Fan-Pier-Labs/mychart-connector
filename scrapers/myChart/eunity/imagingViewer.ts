@@ -82,13 +82,26 @@ export function extractCopyContext(reportContentHtml: string): string | null {
 
 /**
  * Get a fresh CSRF token from MyChart. This is needed for the FdiData API call.
+ *
+ * The /Home/CSRFToken endpoint returns empty body on some instances (e.g. Denver Health),
+ * so we fall back to extracting the token from the /Home page HTML.
  */
 async function getCSRFToken(mychartRequest: MyChartRequest): Promise<string | null> {
   const res = await mychartRequest.makeRequest({
     path: '/Home/CSRFToken?noCache=' + Math.random(),
   });
   const html = await res.text();
-  return getRequestVerificationTokenFromBody(html) ?? null;
+  const token = getRequestVerificationTokenFromBody(html);
+  if (token) return token;
+
+  // Fallback: extract token from /Home page HTML (works when the endpoint returns empty)
+  try {
+    const homeRes = await mychartRequest.makeRequest({ path: '/Home' });
+    const homeBody = await homeRes.text();
+    return getRequestVerificationTokenFromBody(homeBody) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

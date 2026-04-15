@@ -1,0 +1,16 @@
+appId: com.fanpierlabs.openrecord
+---
+- launchApp:
+    clearState: false
+- assertVisible: "OpenRecord"
+- tapOn:
+    id: "open-drawer"
+- assertVisible:
+    id: "drawer-new-chat"
+- assertVisible:
+    id: "drawer-settings"
+- tapOn:
+    id: "drawer-settings"
+- assertVisible: "MyChart Accounts"
+- tapOn: "‹ Back"
+- assertVisible: "OpenRecord"

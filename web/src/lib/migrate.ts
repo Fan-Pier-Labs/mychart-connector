@@ -63,6 +63,14 @@ export async function runMigrations(): Promise<void> {
     ALTER TABLE mychart_instances ADD COLUMN IF NOT EXISTS encrypted_passkey_credential TEXT;
   `);
 
+  // 8. Add AI usage tracking columns to user table
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS ai_spend_cents INTEGER DEFAULT 0;
+  `);
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS ai_spend_period TEXT;
+  `);
+
   await pool.end();
   console.log('[migrate] Database migrations complete.');
 }

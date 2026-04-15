@@ -1,0 +1,23 @@
+appId: com.fanpierlabs.openrecord
+---
+# Test: Settings has account, Chat sends message, Claude responds with tool call
+- tapOn: "Settings, tab, 3 of 3"
+- assertVisible: "MyChart Accounts"
+- assertVisible: "fake-mychart.fanpierlabs.com"
+
+# Go to Chat and ask about medications
+- tapOn: "Chat, tab, 1 of 3"
+- tapOn: "New Chat"
+- tapOn: "Ask about your health data..."
+- inputText: "What medications am I on?"
+- tapOn: "Send"
+
+# Wait for Claude to respond (up to 45s — includes login + scrape + AI response)
+- extendedWaitUntil:
+    visible:
+      text: ".*[Mm]edication.*"
+    timeout: 45000
+
+# Verify History
+- tapOn: "History, tab, 2 of 3"
+- assertVisible: "Chat History"
