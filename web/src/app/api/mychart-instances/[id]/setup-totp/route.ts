@@ -3,15 +3,17 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance, updateMyChartInstance } from '@/lib/db';
 import { getSession } from '@/lib/sessions';
 import { setupTotp } from '@/lib/mychart/totp';
+import { readClientKey } from '@/lib/client-key-header';
 import { sendTelemetryEvent } from '../../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   sendTelemetryEvent('api_totp_setup');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const { id } = await params;
 
-    const instance = await getMyChartInstance(id, user.id);
+    const instance = await getMyChartInstance(id, user.id, cekHex);
     if (!instance) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Store the encrypted TOTP secret
-    await updateMyChartInstance(id, user.id, { totpSecret: result.secret });
+    await updateMyChartInstance(id, user.id, { totpSecret: result.secret }, cekHex);
     console.log(`[setup-totp] TOTP configured successfully for ${instance.hostname}`);
 
     return NextResponse.json({ success: true });

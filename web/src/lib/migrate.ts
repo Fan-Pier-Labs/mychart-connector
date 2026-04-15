@@ -71,6 +71,15 @@ export async function runMigrations(): Promise<void> {
     ALTER TABLE "user" ADD COLUMN IF NOT EXISTS ai_spend_period TEXT;
   `);
 
+  // 9. Client-side encryption flag. When TRUE, MyChart credentials are
+  // double-wrapped with a per-user Client Encryption Key that only ever lives
+  // in the browser's localStorage and inside the MCP URL. Defaults to FALSE
+  // so existing rows (already single-encrypted) keep working; new users opt
+  // in (set to TRUE) the first time they save a credential from the UI.
+  await pool.query(`
+    ALTER TABLE "user" ADD COLUMN IF NOT EXISTS client_encryption_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+  `);
+
   await pool.end();
   console.log('[migrate] Database migrations complete.');
 }

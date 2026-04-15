@@ -3,15 +3,17 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance } from '@/lib/db';
 import { sessionStore } from '@/lib/sessions';
 import { autoConnectInstance } from '@/lib/mcp/auto-connect';
+import { readClientKey } from '@/lib/client-key-header';
 import { sendTelemetryEvent } from '../../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   sendTelemetryEvent('api_instance_connect');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const { id } = await params;
 
-    const instance = await getMyChartInstance(id, user.id);
+    const instance = await getMyChartInstance(id, user.id, cekHex);
     if (!instance) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

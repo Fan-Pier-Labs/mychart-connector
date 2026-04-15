@@ -59,13 +59,14 @@ function jsonResult(data: unknown): CallToolResult {
  */
 async function resolveRequest(
   userId: string,
-  instanceHostname?: string
+  instanceHostname?: string,
+  cekHex?: string | null
 ): Promise<{ mychartRequest: MyChartRequest; instance: MyChartInstance } | { error: string }> {
   console.log(`[mcp] resolveRequest: userId=${userId}, instanceHostname=${instanceHostname || 'auto'}`);
   // Dump entire session store to see what's actually in it
   const allStoreEntries = Array.from(sessionStore.all().entries());
   console.log(`[mcp] resolveRequest: store has ${allStoreEntries.length} entries: ${allStoreEntries.map(([k, e]) => `${k}=${e.status}`).join(', ') || 'none'}`);
-  const allInstances = await getMyChartInstances(userId);
+  const allInstances = await getMyChartInstances(userId, cekHex);
   const instances = allInstances.filter(i => i.enabled);
   console.log(`[mcp] resolveRequest: found ${allInstances.length} instance(s), ${instances.length} enabled: ${instances.map(i => `${i.hostname}(id=${i.id})`).join(', ')}`);
 
@@ -152,13 +153,13 @@ async function resolveRequest(
 type ScraperFn = (req: MyChartRequest) => Promise<unknown>;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function registerScraperTool(server: McpServer, userId: string, reg: (name: string, handler: (...args: any[]) => Promise<CallToolResult>) => void, name: string, scraperFn: ScraperFn) {
+function registerScraperTool(server: McpServer, userId: string, cekHex: string | null | undefined, reg: (name: string, handler: (...args: any[]) => Promise<CallToolResult>) => void, name: string, scraperFn: ScraperFn) {
   reg(name,
     async (args: { instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: name });
       console.log(`[mcp] Tool call: ${name} (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) {
           console.log(`[mcp] Tool ${name}: resolve error - ${result.error}`);
           return errorResult(result.error);
@@ -181,7 +182,7 @@ function registerScraperTool(server: McpServer, userId: string, reg: (name: stri
   );
 }
 
-export function createMcpServer(userId: string): McpServer {
+export function createMcpServer(userId: string, cekHex?: string | null): McpServer {
   sendTelemetryEvent('mcp_server_created');
   const server = new McpServer({
     name: 'openrecord',
@@ -194,7 +195,6 @@ export function createMcpServer(userId: string): McpServer {
     server.registerTool(
       name,
       { description: def.description, inputSchema: def.inputSchema },
-      // @ts-expect-error zod v3/v4 compat
       handler
     );
   }
@@ -204,7 +204,7 @@ export function createMcpServer(userId: string): McpServer {
     async (): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: list_accounts (user=${userId})`);
       try {
-        const instances = await getMyChartInstances(userId);
+        const instances = await getMyChartInstances(userId, cekHex);
         console.log(`[mcp] list_accounts: found ${instances.length} instance(s)`);
         const accounts = instances.map(inst => {
           const sessionKey = `${userId}:${inst.id}`;
@@ -231,7 +231,7 @@ export function createMcpServer(userId: string): McpServer {
     async (args: { instance: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: connect_instance (user=${userId}, instance=${args.instance})`);
       try {
-        const instances = await getMyChartInstances(userId);
+        const instances = await getMyChartInstances(userId, cekHex);
         const inst = instances.find(i => i.hostname === args.instance);
         if (!inst) {
           const available = instances.map(i => i.hostname).join(', ');
@@ -255,7 +255,7 @@ export function createMcpServer(userId: string): McpServer {
     async (args: { instance?: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: check_session (user=${userId}, instance=${args.instance || 'all'})`);
       try {
-        const instances = await getMyChartInstances(userId);
+        const instances = await getMyChartInstances(userId, cekHex);
         console.log(`[mcp] check_session: found ${instances.length} instance(s)`);
 
         const toCheck = args.instance
@@ -307,7 +307,7 @@ export function createMcpServer(userId: string): McpServer {
     async (args: { code: string; instance: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: complete_2fa (user=${userId}, instance=${args.instance})`);
       try {
-        const instances = await getMyChartInstances(userId);
+        const instances = await getMyChartInstances(userId, cekHex);
         const inst = instances.find(i => i.hostname === args.instance);
         if (!inst) {
           return errorResult(`Instance '${args.instance}' not found.`);
@@ -343,23 +343,23 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Scraper tools
-  registerScraperTool(server, userId, reg,'get_profile', async (req) => {
+  registerScraperTool(server, userId, cekHex, reg,'get_profile', async (req) => {
     const profile = await getMyChartProfile(req);
     const email = await getEmail(req);
     return { ...profile, email };
   });
 
-  registerScraperTool(server, userId, reg,'get_health_summary', getHealthSummary);
-  registerScraperTool(server, userId, reg,'get_medications', getMedications);
-  registerScraperTool(server, userId, reg,'get_allergies', getAllergies);
-  registerScraperTool(server, userId, reg,'get_health_issues', getHealthIssues);
-  registerScraperTool(server, userId, reg,'get_upcoming_visits', upcomingVisits);
+  registerScraperTool(server, userId, cekHex, reg,'get_health_summary', getHealthSummary);
+  registerScraperTool(server, userId, cekHex, reg,'get_medications', getMedications);
+  registerScraperTool(server, userId, cekHex, reg,'get_allergies', getAllergies);
+  registerScraperTool(server, userId, cekHex, reg,'get_health_issues', getHealthIssues);
+  registerScraperTool(server, userId, cekHex, reg,'get_upcoming_visits', upcomingVisits);
 
   reg('get_past_visits',
     async (args: { years_back?: number; instance?: string }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_past_visits (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const oldest = new Date();
         oldest.setFullYear(oldest.getFullYear() - (args.years_back ?? 2));
@@ -378,7 +378,7 @@ export function createMcpServer(userId: string): McpServer {
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_lab_results (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const raw = await listLabResults(result.mychartRequest) as LabTestResultWithHistory[];
         const trimmed = trimLabResults(raw);
@@ -397,7 +397,7 @@ export function createMcpServer(userId: string): McpServer {
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_messages (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const raw = await listConversations(result.mychartRequest) as ConversationListResponse | null;
         const trimmed = trimMessages(raw);
@@ -417,7 +417,7 @@ export function createMcpServer(userId: string): McpServer {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_message_recipients' });
       console.log(`[mcp] Tool call: get_message_recipients (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const token = await getVerificationToken(result.mychartRequest);
         if (!token) return errorResult('Could not get verification token');
@@ -440,7 +440,7 @@ export function createMcpServer(userId: string): McpServer {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_message' });
       console.log(`[mcp] Tool call: send_message (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const token = await getVerificationToken(result.mychartRequest);
         if (!token) return errorResult('Could not get verification token');
@@ -499,7 +499,7 @@ export function createMcpServer(userId: string): McpServer {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'send_reply' });
       console.log(`[mcp] Tool call: send_reply (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const replyResult = await sendReply(result.mychartRequest, {
           conversationId: args.conversation_id,
@@ -520,7 +520,7 @@ export function createMcpServer(userId: string): McpServer {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'request_refill' });
       console.log(`[mcp] Tool call: request_refill (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
 
         // Get medications to find the matching one
@@ -563,7 +563,7 @@ export function createMcpServer(userId: string): McpServer {
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_billing (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const raw = await getBillingHistory(result.mychartRequest) as BillingAccount[];
         const trimmed = trimBilling(raw);
@@ -581,22 +581,22 @@ export function createMcpServer(userId: string): McpServer {
       }
     }
   );
-  registerScraperTool(server, userId, reg,'get_care_team', getCareTeam);
-  registerScraperTool(server, userId, reg,'get_insurance', getInsurance);
-  registerScraperTool(server, userId, reg,'get_immunizations', getImmunizations);
-  registerScraperTool(server, userId, reg,'get_preventive_care', getPreventiveCare);
-  registerScraperTool(server, userId, reg,'get_referrals', getReferrals);
-  registerScraperTool(server, userId, reg,'get_medical_history', getMedicalHistory);
-  registerScraperTool(server, userId, reg,'get_letters', getLetters);
-  registerScraperTool(server, userId, reg,'get_vitals', getVitals);
-  registerScraperTool(server, userId, reg,'get_emergency_contacts', getEmergencyContacts);
+  registerScraperTool(server, userId, cekHex, reg,'get_care_team', getCareTeam);
+  registerScraperTool(server, userId, cekHex, reg,'get_insurance', getInsurance);
+  registerScraperTool(server, userId, cekHex, reg,'get_immunizations', getImmunizations);
+  registerScraperTool(server, userId, cekHex, reg,'get_preventive_care', getPreventiveCare);
+  registerScraperTool(server, userId, cekHex, reg,'get_referrals', getReferrals);
+  registerScraperTool(server, userId, cekHex, reg,'get_medical_history', getMedicalHistory);
+  registerScraperTool(server, userId, cekHex, reg,'get_letters', getLetters);
+  registerScraperTool(server, userId, cekHex, reg,'get_vitals', getVitals);
+  registerScraperTool(server, userId, cekHex, reg,'get_emergency_contacts', getEmergencyContacts);
 
   reg('add_emergency_contact',
     async (args: { name: string; relationship_type: string; phone_number: string; instance?: string }): Promise<CallToolResult> => {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'add_emergency_contact' });
       console.log(`[mcp] Tool call: add_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const data = await addEmergencyContact(result.mychartRequest, {
           name: args.name,
@@ -617,7 +617,7 @@ export function createMcpServer(userId: string): McpServer {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'update_emergency_contact' });
       console.log(`[mcp] Tool call: update_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const data = await updateEmergencyContact(result.mychartRequest, {
           id: args.id,
@@ -639,7 +639,7 @@ export function createMcpServer(userId: string): McpServer {
       sendTelemetryEvent('mcp_tool_called', { tool_name: 'remove_emergency_contact' });
       console.log(`[mcp] Tool call: remove_emergency_contact (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const data = await removeEmergencyContact(result.mychartRequest, args.id);
         return jsonResult(data);
@@ -651,20 +651,20 @@ export function createMcpServer(userId: string): McpServer {
     }
   );
 
-  registerScraperTool(server, userId, reg,'get_documents', getDocuments);
-  registerScraperTool(server, userId, reg,'get_goals', getGoals);
-  registerScraperTool(server, userId, reg,'get_upcoming_orders', getUpcomingOrders);
-  registerScraperTool(server, userId, reg,'get_questionnaires', getQuestionnaires);
-  registerScraperTool(server, userId, reg,'get_care_journeys', getCareJourneys);
-  registerScraperTool(server, userId, reg,'get_activity_feed', getActivityFeed);
-  registerScraperTool(server, userId, reg,'get_education_materials', getEducationMaterials);
-  registerScraperTool(server, userId, reg,'get_ehi_export', getEhiExportTemplates);
+  registerScraperTool(server, userId, cekHex, reg,'get_documents', getDocuments);
+  registerScraperTool(server, userId, cekHex, reg,'get_goals', getGoals);
+  registerScraperTool(server, userId, cekHex, reg,'get_upcoming_orders', getUpcomingOrders);
+  registerScraperTool(server, userId, cekHex, reg,'get_questionnaires', getQuestionnaires);
+  registerScraperTool(server, userId, cekHex, reg,'get_care_journeys', getCareJourneys);
+  registerScraperTool(server, userId, cekHex, reg,'get_activity_feed', getActivityFeed);
+  registerScraperTool(server, userId, cekHex, reg,'get_education_materials', getEducationMaterials);
+  registerScraperTool(server, userId, cekHex, reg,'get_ehi_export', getEhiExportTemplates);
   // Imaging — trimmed (strips report HTML, keeps impression text)
   reg('get_imaging_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
       console.log(`[mcp] Tool call: get_imaging_results (user=${userId}, instance=${args.instance || 'auto'})`);
       try {
-        const result = await resolveRequest(userId, args.instance);
+        const result = await resolveRequest(userId, args.instance, cekHex);
         if ('error' in result) return errorResult(result.error);
         const raw = await getImagingResults(result.mychartRequest) as ImagingResult[];
         const trimmed = trimImagingResults(raw);
@@ -695,7 +695,7 @@ export function createMcpServer(userId: string): McpServer {
   );
 
   // Linked accounts — trimmed (drops logo URLs)
-  registerScraperTool(server, userId, reg,'get_linked_mychart_accounts', async (req) => {
+  registerScraperTool(server, userId, cekHex, reg,'get_linked_mychart_accounts', async (req) => {
     const raw = await getLinkedMyChartAccounts(req) as LinkedMyChart[];
     return trimLinkedAccounts(raw);
   });

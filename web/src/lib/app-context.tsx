@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import type { ScrapeResults } from "@/types/scrape-results";
 import { authClient } from "@/lib/auth-client";
+import { fetchWithCek } from "@/lib/client-encryption-key";
 
 export interface ProfileData {
   name: string;
@@ -97,7 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshInstances = useCallback(async () => {
     try {
-      const res = await fetch("/api/mychart-instances");
+      const res = await fetchWithCek("/api/mychart-instances");
       if (res.ok) {
         const data = await res.json();
         setInstances(data);

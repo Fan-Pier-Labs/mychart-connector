@@ -1,3 +1,5 @@
+import { postWithCek } from "@/lib/client-encryption-key";
+
 export type NotifPrefs = {
   enabled: boolean;
   includeContent: boolean;
@@ -16,11 +18,11 @@ export async function updateNotifPrefs(
   enabled: boolean,
   includeContent: boolean,
 ): Promise<{ ok: true; prefs: NotifPrefs } | { ok: false; error: string }> {
-  const res = await fetch("/api/notifications/preferences", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled, includeContent }),
-  });
+  const res = await postWithCek(
+    "/api/notifications/preferences",
+    { enabled, includeContent },
+    { method: "PUT" },
+  );
   const data = await res.json();
   if (res.ok) {
     return { ok: true, prefs: { enabled: data.enabled, includeContent: data.includeContent } };

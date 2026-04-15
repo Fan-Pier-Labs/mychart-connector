@@ -25,11 +25,11 @@ describe('mychart-accounts API', () => {
       const result = await addInstanceApi('mychart.example.org', 'user', 'pass');
       expect(result).toEqual({ ok: true });
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/mychart-instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostname: 'mychart.example.org', username: 'user', password: 'pass' }),
-      });
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('/api/mychart-instances');
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe(JSON.stringify({ hostname: 'mychart.example.org', username: 'user', password: 'pass' }));
+      expect(new Headers(init.headers).get('content-type')).toBe('application/json');
     });
 
     it('returns error on failure', async () => {
@@ -89,9 +89,9 @@ describe('mychart-accounts API', () => {
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ state: 'logged_in', sessionKey: 'k' })));
 
       await connectInstanceApi('my-inst-id');
-      expect(mockFetch).toHaveBeenCalledWith('/api/mychart-instances/my-inst-id/connect', {
-        method: 'POST',
-      });
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('/api/mychart-instances/my-inst-id/connect');
+      expect(init.method).toBe('POST');
     });
   });
 
@@ -122,11 +122,11 @@ describe('mychart-accounts API', () => {
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ state: 'logged_in', sessionKey: 'k' })));
 
       await submit2faApi('my-session', '654321');
-      expect(mockFetch).toHaveBeenCalledWith('/api/twofa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionKey: 'my-session', code: '654321' }),
-      });
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('/api/twofa');
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe(JSON.stringify({ sessionKey: 'my-session', code: '654321' }));
+      expect(new Headers(init.headers).get('content-type')).toBe('application/json');
     });
   });
 
@@ -163,11 +163,11 @@ describe('mychart-accounts API', () => {
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
 
       await toggleInstanceApi('inst-1', false);
-      expect(mockFetch).toHaveBeenCalledWith('/api/mychart-instances/inst-1', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: false }),
-      });
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('/api/mychart-instances/inst-1');
+      expect(init.method).toBe('PATCH');
+      expect(init.body).toBe(JSON.stringify({ enabled: false }));
+      expect(new Headers(init.headers).get('content-type')).toBe('application/json');
     });
   });
 });

@@ -3,10 +3,24 @@ import { createMcpServer } from '@/lib/mcp/server';
 import { validateApiKey } from '@/lib/mcp/api-keys';
 import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
-async function authenticateRequest(url: URL): Promise<{ userId: string } | null> {
-  const key = url.searchParams.get('key');
-  if (!key) return null;
-  return validateApiKey(key);
+interface AuthResult {
+  userId: string;
+  cekHex: string | null;
+}
+
+// URL format: `?key=<apiKey>` or `?key=<apiKey>.<cekHex>`.
+// The optional CEK is the user's client-side encryption key, which lives only
+// in their browser's localStorage + inside the MCP URL. It's used to peel the
+// outer encryption layer when a user has `client_encryption_enabled = true`.
+async function authenticateRequest(url: URL): Promise<AuthResult | null> {
+  const raw = url.searchParams.get('key');
+  if (!raw) return null;
+  const sepIdx = raw.indexOf('.');
+  const apiKey = sepIdx === -1 ? raw : raw.slice(0, sepIdx);
+  const cekHex = sepIdx === -1 ? null : raw.slice(sepIdx + 1);
+  const result = await validateApiKey(apiKey);
+  if (!result) return null;
+  return { userId: result.userId, cekHex: cekHex && cekHex.length > 0 ? cekHex : null };
 }
 
 export async function POST(req: Request) {
@@ -16,7 +30,7 @@ export async function POST(req: Request) {
   const auth = await authenticateRequest(url);
   if (!auth) {
     console.log(`[mcp-route] POST: auth failed (key=${url.searchParams.has('key') ? 'present' : 'missing'})`);
-    return new Response(JSON.stringify({ error: 'Missing or invalid API key. Use ?key={apiKey}' }), {
+    return new Response(JSON.stringify({ error: 'Missing or invalid API key. Use ?key={apiKey}.{clientKey}' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -30,7 +44,7 @@ export async function POST(req: Request) {
   });
 
   try {
-    const server = createMcpServer(auth.userId);
+    const server = createMcpServer(auth.userId, auth.cekHex);
     await server.connect(transport);
     return await transport.handleRequest(req);
   } catch (err) {

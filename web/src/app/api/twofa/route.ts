@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { complete2faFlow } from '@/lib/mychart/login';
 import { getSession, setSession, getSessionMetadata } from '@/lib/sessions';
 import { requireAuth, AuthError } from '@/lib/auth-helpers';
+import { readClientKey } from '@/lib/client-key-header';
 import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest) {
   try {
     await requireAuth(req);
     sendTelemetryEvent('api_2fa_submit');
+    const cekHex = readClientKey(req);
     const { sessionKey, code } = await req.json();
 
     if (!sessionKey || !code) {
@@ -46,9 +48,14 @@ export async function POST(req: NextRequest) {
     if (instanceId) {
       const { getMyChartInstance } = await import('@/lib/db');
       const userId = sessionKey.split(':')[0];
-      const instance = await getMyChartInstance(instanceId, userId);
-      if (instance && !instance.totpSecret) {
-        offerTotpSetup = true;
+      try {
+        const instance = await getMyChartInstance(instanceId, userId, cekHex);
+        if (instance && !instance.totpSecret) {
+          offerTotpSetup = true;
+        }
+      } catch {
+        // Layered user without CEK — skip the TOTP setup offer rather than failing
+        // the 2FA completion. The UI can still check manually afterwards.
       }
     }
 

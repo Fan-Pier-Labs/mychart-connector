@@ -3,14 +3,16 @@ import { requireAuth, AuthError } from '@/lib/auth-helpers';
 import { getMyChartInstance, updateMyChartInstance, deleteMyChartInstance } from '@/lib/db';
 import { getSession as getMyChartSession, deleteSession } from '@/lib/sessions';
 import { normalizeHostname } from '@/lib/utils';
+import { readClientKey } from '@/lib/client-key-header';
 import { sendTelemetryEvent } from '../../../../../../shared/telemetry';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   sendTelemetryEvent('api_instance_get');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const { id } = await params;
-    const instance = await getMyChartInstance(id, user.id);
+    const instance = await getMyChartInstance(id, user.id, cekHex);
     if (!instance) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -42,6 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   sendTelemetryEvent('api_instance_update');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const { id } = await params;
     const body = await req.json();
 
@@ -49,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       body.hostname = normalizeHostname(body.hostname);
     }
 
-    const instance = await updateMyChartInstance(id, user.id, body);
+    const instance = await updateMyChartInstance(id, user.id, body, cekHex);
     if (!instance) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

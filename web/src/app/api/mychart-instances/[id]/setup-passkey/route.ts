@@ -4,15 +4,17 @@ import { getMyChartInstance, updateMyChartInstance } from '@/lib/db';
 import { getSession } from '@/lib/sessions';
 import { setupPasskey } from '@/lib/mychart/login';
 import { serializeCredential } from '@/lib/mychart/login';
+import { readClientKey } from '@/lib/client-key-header';
 import { sendTelemetryEvent } from '../../../../../../../shared/telemetry';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   sendTelemetryEvent('api_passkey_setup');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const { id } = await params;
 
-    const instance = await getMyChartInstance(id, user.id);
+    const instance = await getMyChartInstance(id, user.id, cekHex);
     if (!instance) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Store the encrypted passkey credential
-    await updateMyChartInstance(id, user.id, { passkeyCredential: serializeCredential(credential) });
+    await updateMyChartInstance(id, user.id, { passkeyCredential: serializeCredential(credential) }, cekHex);
     console.log(`[setup-passkey] Passkey configured successfully for ${instance.hostname}`);
 
     return NextResponse.json({ success: true });
@@ -54,9 +56,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   sendTelemetryEvent('api_passkey_remove');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const { id } = await params;
 
-    const instance = await getMyChartInstance(id, user.id);
+    const instance = await getMyChartInstance(id, user.id, cekHex);
     if (!instance) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

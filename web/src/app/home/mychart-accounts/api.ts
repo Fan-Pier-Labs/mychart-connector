@@ -1,3 +1,5 @@
+import { fetchWithCek, postWithCek } from "@/lib/client-encryption-key";
+
 export type AddInstanceResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -7,11 +9,7 @@ export async function addInstanceApi(
   username: string,
   password: string,
 ): Promise<AddInstanceResult> {
-  const res = await fetch("/api/mychart-instances", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ hostname, username, password }),
-  });
+  const res = await postWithCek("/api/mychart-instances", { hostname, username, password });
   const data = await res.json();
   if (!res.ok) {
     return { ok: false, error: data.error || "Failed to add instance." };
@@ -26,7 +24,7 @@ export type ConnectResult =
   | { state: "error"; error?: string };
 
 export async function connectInstanceApi(instanceId: string): Promise<ConnectResult> {
-  const res = await fetch(`/api/mychart-instances/${instanceId}/connect`, {
+  const res = await fetchWithCek(`/api/mychart-instances/${instanceId}/connect`, {
     method: "POST",
   });
   return res.json();
@@ -38,11 +36,7 @@ export type TwofaResult =
   | { state: "error"; error?: string };
 
 export async function submit2faApi(sessionKey: string, code: string): Promise<TwofaResult> {
-  const res = await fetch("/api/twofa", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionKey, code }),
-  });
+  const res = await postWithCek("/api/twofa", { sessionKey, code });
   return res.json();
 }
 
@@ -54,11 +48,7 @@ export async function toggleInstanceApi(
   id: string,
   enabled: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`/api/mychart-instances/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
-  });
+  const res = await postWithCek(`/api/mychart-instances/${id}`, { enabled }, { method: "PATCH" });
   if (!res.ok) {
     const data = await res.json();
     return { ok: false, error: data.error || "Failed to update instance." };

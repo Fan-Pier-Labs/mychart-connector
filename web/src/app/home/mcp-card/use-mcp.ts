@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAppContext } from "@/lib/app-context";
 import { track } from "@/lib/track";
+import { getOrCreateCek } from "@/lib/client-encryption-key";
 
 export function useMcp() {
   const ctx = useAppContext();
@@ -31,7 +32,8 @@ export function useMcp() {
       if (data.error) {
         toast.error(data.error);
       } else {
-        const mcpUrl = `${window.location.origin}/api/mcp?key=${data.key}`;
+        const cek = getOrCreateCek();
+        const mcpUrl = `${window.location.origin}/api/mcp?key=${data.key}.${cek}`;
         ctx.setMcpUrl(mcpUrl);
         setMcpKeyGenerated(true);
         setHasExistingKey(true);

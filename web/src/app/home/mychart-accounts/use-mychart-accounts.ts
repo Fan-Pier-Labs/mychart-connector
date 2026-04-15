@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAppContext, type MyChartInstanceInfo } from "@/lib/app-context";
 import { track } from "@/lib/track";
+import { fetchWithCek, postWithCek, getOrCreateCek } from "@/lib/client-encryption-key";
 
 export function useMyChartAccounts() {
   const ctx = useAppContext();
@@ -76,14 +77,13 @@ export function useMyChartAccounts() {
 
     setAddLoading(true);
     try {
-      const res = await fetch("/api/mychart-instances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hostname: newHostname,
-          username: newUsername,
-          password: newPassword,
-        }),
+      // Ensure a CEK exists before we send credentials — this is where
+      // layered encryption kicks in for the first time for fresh users.
+      getOrCreateCek();
+      const res = await postWithCek("/api/mychart-instances", {
+        hostname: newHostname,
+        username: newUsername,
+        password: newPassword,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -108,7 +108,7 @@ export function useMyChartAccounts() {
     setConnectingId(instance.id);
 
     try {
-      const res = await fetch(`/api/mychart-instances/${instance.id}/connect`, {
+      const res = await fetchWithCek(`/api/mychart-instances/${instance.id}/connect`, {
         method: "POST",
       });
       const data = await res.json();
@@ -153,11 +153,7 @@ export function useMyChartAccounts() {
 
     setTwofaLoading(true);
     try {
-      const res = await fetch("/api/twofa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionKey: twofaSessionKey, code: twofaCode }),
-      });
+      const res = await postWithCek("/api/twofa", { sessionKey: twofaSessionKey, code: twofaCode });
       const data = await res.json();
 
       if (data.state === "invalid_2fa") {
@@ -196,7 +192,7 @@ export function useMyChartAccounts() {
   async function handleTotpSetup() {
     setTotpSetupLoading(true);
     try {
-      const res = await fetch(`/api/mychart-instances/${totpPromptInstanceId}/setup-totp`, {
+      const res = await fetchWithCek(`/api/mychart-instances/${totpPromptInstanceId}/setup-totp`, {
         method: "POST",
       });
       const data = await res.json();
@@ -236,7 +232,7 @@ export function useMyChartAccounts() {
   async function setupPasskey(instanceId: string) {
     setPasskeySetupLoading(instanceId);
     try {
-      const res = await fetch(`/api/mychart-instances/${instanceId}/setup-passkey`, {
+      const res = await fetchWithCek(`/api/mychart-instances/${instanceId}/setup-passkey`, {
         method: "POST",
       });
       const data = await res.json();
@@ -275,11 +271,7 @@ export function useMyChartAccounts() {
 
   async function toggleInstance(id: string, enabled: boolean) {
     try {
-      const res = await fetch(`/api/mychart-instances/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
+      const res = await postWithCek(`/api/mychart-instances/${id}`, { enabled }, { method: "PATCH" });
       if (!res.ok) {
         const data = await res.json();
         toast.error(data.error || "Failed to update instance.");

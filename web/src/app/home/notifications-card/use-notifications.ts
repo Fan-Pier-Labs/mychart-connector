@@ -25,6 +25,14 @@ export function useNotifications() {
   }, [ctx.user]);
 
   async function updateNotifPrefs(enabled: boolean, includeContent: boolean) {
+    // Enabling notifications strips the client-side encryption layer so the
+    // server can decrypt credentials on its own schedule. Warn the user.
+    if (enabled && !notifEnabled) {
+      const ok = window.confirm(
+        "Enabling email notifications disables client-side encryption so the server can check your MyChart account on its own. Your credentials will still be encrypted on disk with the server key. Continue?",
+      );
+      if (!ok) return;
+    }
     setNotifLoading(true);
     try {
       const result = await updateNotifPrefsApi(enabled, includeContent);

@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, AuthError } from '@/lib/auth-helpers';
-import { createMyChartInstance, getMyChartInstances } from '@/lib/db';
+import {
+  createMyChartInstance,
+  getMyChartInstances,
+  getMyChartInstancesMetadata,
+  getUserClientEncryptionEnabled,
+} from '@/lib/db';
 import { normalizeHostname } from '@/lib/utils';
 import { autoConnectInstance } from '@/lib/mcp/auto-connect';
 import { sessionStore } from '@/lib/sessions';
+import { readClientKey } from '@/lib/client-key-header';
 import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 import { isBlockedInstance } from '../../../../../shared/blockedInstances';
 
@@ -11,7 +17,35 @@ export async function GET(req: NextRequest) {
   sendTelemetryEvent('api_instances_list');
   try {
     const user = await requireAuth(req);
-    const instances = await getMyChartInstances(user.id);
+    const cekHex = readClientKey(req);
+    const layered = await getUserClientEncryptionEnabled(user.id);
+
+    // Layered user who didn't send the CEK: fall back to the metadata-only
+    // list so we can still render the UI. Skip auto-connect in this mode —
+    // there's no way to decrypt the stored credentials.
+    if (layered && !cekHex) {
+      const metadata = await getMyChartInstancesMetadata(user.id);
+      const response = metadata.map((inst) => {
+        const sessionKey = `${user.id}:${inst.id}`;
+        const entry = sessionStore.getEntry(sessionKey);
+        const connected = !!entry && entry.status === 'logged_in';
+        return {
+          id: inst.id,
+          hostname: inst.hostname,
+          username: inst.username,
+          mychartEmail: inst.mychartEmail,
+          hasTotpSecret: inst.hasTotpSecret,
+          hasPasskeyCredential: inst.hasPasskeyCredential,
+          enabled: inst.enabled,
+          connected,
+          createdAt: inst.createdAt,
+          updatedAt: inst.updatedAt,
+        };
+      });
+      return NextResponse.json(response);
+    }
+
+    const instances = await getMyChartInstances(user.id, cekHex);
 
     // Auto-connect instances with passkey or TOTP that aren't already logged in (skip disabled)
     await Promise.all(
@@ -59,6 +93,7 @@ export async function POST(req: NextRequest) {
   sendTelemetryEvent('api_instance_create');
   try {
     const user = await requireAuth(req);
+    const cekHex = readClientKey(req);
     const body = await req.json();
     const { hostname, username, password, totpSecret, mychartEmail } = body;
 
@@ -78,7 +113,7 @@ export async function POST(req: NextRequest) {
       password,
       totpSecret,
       mychartEmail,
-    });
+    }, cekHex);
 
 
     return NextResponse.json({

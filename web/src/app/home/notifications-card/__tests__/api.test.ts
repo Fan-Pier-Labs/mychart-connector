@@ -51,12 +51,11 @@ describe('notifications API', () => {
         prefs: { enabled: true, includeContent: true },
       });
 
-      // Verify fetch was called with correct args
-      expect(mockFetch).toHaveBeenCalledWith('/api/notifications/preferences', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: true, includeContent: true }),
-      });
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('/api/notifications/preferences');
+      expect(init.method).toBe('PUT');
+      expect(init.body).toBe(JSON.stringify({ enabled: true, includeContent: true }));
+      expect(new Headers(init.headers).get('content-type')).toBe('application/json');
     });
 
     it('returns error on failure', async () => {
