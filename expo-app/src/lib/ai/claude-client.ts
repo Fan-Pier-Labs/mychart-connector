@@ -308,6 +308,7 @@ export async function sendMessage(
 
   const conversation: ChatMessage[] = [...messages];
   const toolCalls: ToolCall[] = [];
+  const pendingImageIds: string[] = [];
   let lastAnswer = "";
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -336,6 +337,17 @@ export async function sendMessage(
       } catch (err) {
         toolResult = `Error: ${(err as Error).message}`;
       }
+      // If an image tool returned an image_id, remember it so we can make
+      // sure the final answer includes the [image:id] token even when the
+      // model forgets to echo it.
+      try {
+        const parsedResult = JSON.parse(toolResult);
+        if (parsedResult && typeof parsedResult.image_id === "string") {
+          pendingImageIds.push(parsedResult.image_id);
+        }
+      } catch {
+        /* tool result wasn't JSON */
+      }
       conversation.push({
         role: "user",
         content: `Tool result for ${name}:\n${toolResult}`,
@@ -346,6 +358,12 @@ export async function sendMessage(
     // Final answer path: either the model returned {"answer": "..."} or free-form text.
     lastAnswer =
       parsed && typeof parsed.answer === "string" ? (parsed.answer as string) : content;
+    // Ensure image tokens are present so the UI can render attachments.
+    for (const id of pendingImageIds) {
+      if (!lastAnswer.includes(`[image:${id}]`)) {
+        lastAnswer = `${lastAnswer.trim()}\n\n[image:${id}]`;
+      }
+    }
     callbacks.onText(lastAnswer);
     callbacks.onDone(lastAnswer, toolCalls);
     return;
