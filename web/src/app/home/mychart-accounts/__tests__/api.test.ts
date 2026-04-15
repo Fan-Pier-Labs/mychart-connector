@@ -101,12 +101,12 @@ describe('mychart-accounts API', () => {
         state: 'logged_in',
         sessionKey: 'user-1:inst-1',
         instanceId: 'inst-1',
-        offerTotpSetup: true,
+        offerPasskeySetup: true,
       })));
 
       const result = await submit2faApi('session-key', '123456');
       expect(result.state).toBe('logged_in');
-      expect((result as { offerTotpSetup: boolean }).offerTotpSetup).toBe(true);
+      expect((result as { offerPasskeySetup: boolean }).offerPasskeySetup).toBe(true);
     });
 
     it('returns invalid_2fa on wrong code', async () => {

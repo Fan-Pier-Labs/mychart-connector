@@ -21,11 +21,11 @@ export function useMyChartAccounts() {
   const [twofaLoading, setTwofaLoading] = useState(false);
   const [twofaDelivery, setTwofaDelivery] = useState<{ method: string; contact?: string } | null>(null);
 
-  // TOTP setup state
-  const [totpPromptInstanceId, setTotpPromptInstanceId] = useState("");
-  const [totpSetupLoading, setTotpSetupLoading] = useState(false);
-  const [totpWarning, setTotpWarning] = useState(false);
-  const [totpErrorMessage, setTotpErrorMessage] = useState("");
+  // Passkey setup prompt state (shown after 2FA)
+  const [passkeyPromptInstanceId, setPasskeyPromptInstanceId] = useState("");
+  const [passkeyPromptLoading, setPasskeyPromptLoading] = useState(false);
+  const [passkeyPromptWarning, setPasskeyPromptWarning] = useState(false);
+  const [passkeyPromptError, setPasskeyPromptError] = useState("");
 
   // Passkey setup state
   const [passkeySetupLoading, setPasskeySetupLoading] = useState("");
@@ -183,8 +183,8 @@ export function useMyChartAccounts() {
       setTwofaDelivery(null);
       await ctx.refreshInstances();
 
-      if (data.offerTotpSetup && instanceId) {
-        setTotpPromptInstanceId(instanceId);
+      if (data.offerPasskeySetup && instanceId) {
+        setPasskeyPromptInstanceId(instanceId);
       }
     } catch (err) {
       toast.error("Network error: " + (err as Error).message);
@@ -193,44 +193,44 @@ export function useMyChartAccounts() {
     }
   }
 
-  async function handleTotpSetup() {
-    setTotpSetupLoading(true);
+  async function handlePasskeyPromptSetup() {
+    setPasskeyPromptLoading(true);
     try {
-      const res = await fetch(`/api/mychart-instances/${totpPromptInstanceId}/setup-totp`, {
+      const res = await fetch(`/api/mychart-instances/${passkeyPromptInstanceId}/setup-passkey`, {
         method: "POST",
       });
       const data = await res.json();
       if (data.success) {
-        setTotpPromptInstanceId("");
-        setTotpWarning(false);
-        setTotpErrorMessage("");
+        setPasskeyPromptInstanceId("");
+        setPasskeyPromptWarning(false);
+        setPasskeyPromptError("");
         await ctx.refreshInstances();
       } else {
-        setTotpSetupLoading(false);
-        setTotpWarning(true);
-        setTotpErrorMessage(data.error || "");
+        setPasskeyPromptLoading(false);
+        setPasskeyPromptWarning(true);
+        setPasskeyPromptError(data.error || "");
       }
     } catch {
-      setTotpSetupLoading(false);
-      setTotpWarning(true);
-      setTotpErrorMessage("");
+      setPasskeyPromptLoading(false);
+      setPasskeyPromptWarning(true);
+      setPasskeyPromptError("");
     } finally {
-      setTotpSetupLoading(false);
+      setPasskeyPromptLoading(false);
     }
   }
 
-  function handleTotpSkip() {
-    setTotpWarning(true);
+  function handlePasskeyPromptSkip() {
+    setPasskeyPromptWarning(true);
   }
 
-  function handleTotpContinueAnyway() {
-    setTotpPromptInstanceId("");
-    setTotpWarning(false);
+  function handlePasskeyPromptContinueAnyway() {
+    setPasskeyPromptInstanceId("");
+    setPasskeyPromptWarning(false);
   }
 
-  function handleTotpRetry() {
-    setTotpWarning(false);
-    setTotpErrorMessage("");
+  function handlePasskeyPromptRetry() {
+    setPasskeyPromptWarning(false);
+    setPasskeyPromptError("");
   }
 
   async function setupPasskey(instanceId: string) {
@@ -330,15 +330,15 @@ export function useMyChartAccounts() {
     handle2fa,
     cancel2fa,
 
-    // TOTP setup
-    totpPromptInstanceId,
-    totpSetupLoading,
-    totpWarning,
-    totpErrorMessage,
-    handleTotpSetup,
-    handleTotpSkip,
-    handleTotpContinueAnyway,
-    handleTotpRetry,
+    // Passkey setup prompt (after 2FA)
+    passkeyPromptInstanceId,
+    passkeyPromptLoading,
+    passkeyPromptWarning,
+    passkeyPromptError,
+    handlePasskeyPromptSetup,
+    handlePasskeyPromptSkip,
+    handlePasskeyPromptContinueAnyway,
+    handlePasskeyPromptRetry,
 
     // Connection
     connectingId,

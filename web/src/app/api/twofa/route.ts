@@ -40,19 +40,19 @@ export async function POST(req: NextRequest) {
     const metadata = getSessionMetadata(sessionKey);
     setSession(sessionKey, result.mychartRequest, metadata ?? undefined);
 
-    // Check if this instance has no TOTP secret — offer setup
+    // Check if this instance has no passkey — offer setup
     const instanceId = sessionKey.split(':')[1];
-    let offerTotpSetup = false;
+    let offerPasskeySetup = false;
     if (instanceId) {
       const { getMyChartInstance } = await import('@/lib/db');
       const userId = sessionKey.split(':')[0];
       const instance = await getMyChartInstance(instanceId, userId);
-      if (instance && !instance.totpSecret) {
-        offerTotpSetup = true;
+      if (instance && !instance.passkeyCredential) {
+        offerPasskeySetup = true;
       }
     }
 
-    return NextResponse.json({ state: 'logged_in', sessionKey, offerTotpSetup, instanceId });
+    return NextResponse.json({ state: 'logged_in', sessionKey, offerPasskeySetup, instanceId });
   } catch (err) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
