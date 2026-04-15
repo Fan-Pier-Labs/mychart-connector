@@ -34,13 +34,18 @@ function externalOrigin(request: NextRequest): string {
   const hostHeader = request.headers.get('host');
   // Prefer x-forwarded-host, then the Host header, ignoring localhost/bind
   // values that sneak in when Next.js serves behind a load balancer.
+  const isLocalHost = (h: string | null) =>
+    !!h && /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(h);
   const pickedHost =
     forwardedHost ||
-    (hostHeader && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(hostHeader)
-      ? hostHeader
-      : null) ||
+    (hostHeader && !isLocalHost(hostHeader) ? hostHeader : null) ||
     url.host;
-  const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '');
+  // Force https for any external (non-localhost) hostname. iOS ATS blocks
+  // http redirects, and load balancers sometimes drop x-forwarded-proto.
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const proto = isLocalHost(pickedHost)
+    ? forwardedProto ?? url.protocol.replace(':', '')
+    : 'https';
   return `${proto}://${pickedHost}`;
 }
 
