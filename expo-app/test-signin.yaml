@@ -1,0 +1,13 @@
+appId: com.fanpierlabs.openrecord
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "open-drawer"
+- tapOn:
+    id: "drawer-settings"
+- scrollUntilVisible:
+    element:
+      text: "Sign Out"
+- tapOn: "Sign Out"
+- tapOn: "Sign Out"

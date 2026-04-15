@@ -19,7 +19,11 @@ export async function backendFetch(path: string, init: RequestInit = {}): Promis
   if (!headers.has("Origin")) {
     headers.set("Origin", "openrecord://");
   }
-  return fetch(`${getBackendUrl()}${path}`, { ...init, headers });
+  return fetch(`${getBackendUrl()}${path}`, {
+    credentials: "omit",
+    ...init,
+    headers,
+  });
 }
 
 export function backendUrl(path = ""): string {
