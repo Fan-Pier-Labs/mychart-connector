@@ -8,7 +8,20 @@ import { ReportContent } from '../labs_and_procedure_results/labtestresulttype';
  * Fetch wrapper that uses Node's built-in fetch (undici) with tough-cookie jar.
  * We use the built-in fetch instead of node-fetch because the SAML selfauth endpoint
  * does TLS fingerprinting and rejects node-fetch's HTTP stack with "socket hang up".
+ *
+ * On iOS (React Native) the built-in fetch silently follows 3xx responses even
+ * with `redirect: "manual"`. We prefer `expo/fetch` when it's available — its
+ * Swift-side URLSessionDelegate honors the manual-redirect flag.
  */
+let fetchImpl: typeof globalThis.fetch = globalThis.fetch;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const expoFetch = require('expo/fetch') as { fetch?: typeof globalThis.fetch };
+  if (expoFetch?.fetch) fetchImpl = expoFetch.fetch;
+} catch {
+  /* Node / non-Expo runtime — stick with globalThis.fetch */
+}
+
 async function fetchWithCookies(
   jar: tough.CookieJar,
   url: string,
@@ -22,7 +35,7 @@ async function fetchWithCookies(
     headers['Cookie'] = cookieHeader;
   }
 
-  const response = await globalThis.fetch(url, { ...opts, headers });
+  const response = await fetchImpl(url, { ...opts, headers });
 
   // Store Set-Cookie headers from response
   const setCookies = response.headers.getSetCookie?.() ?? [];

@@ -29,11 +29,16 @@ function abortAfter(ms: number): AbortSignal {
 }
 import { FdiContext, followSamlChain, getImageViewerSamlUrl } from './imagingViewer';
 
-/**
- * Fetch wrapper using Node's built-in fetch with tough-cookie jar.
- * Uses undici under the hood, which passes TLS fingerprinting checks
- * that node-fetch fails at the SAML selfauth endpoint.
- */
+// Prefer `expo/fetch` on iOS; its Swift URLSessionDelegate actually
+// honors `redirect: "manual"`. Falls back to Node's built-in fetch
+// (undici) which passes the TLS fingerprinting that node-fetch fails.
+let fetchImpl: typeof globalThis.fetch = globalThis.fetch;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const expoFetch = require('expo/fetch') as { fetch?: typeof globalThis.fetch };
+  if (expoFetch?.fetch) fetchImpl = expoFetch.fetch;
+} catch { /* non-Expo runtime */ }
+
 async function fetchWithCookies(
   jar: tough.CookieJar,
   url: string,
@@ -43,7 +48,7 @@ async function fetchWithCookies(
   const cookieHeader = cookies.map(c => `${c.key}=${c.value}`).join('; ');
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string> ?? {}) };
   if (cookieHeader) headers['Cookie'] = cookieHeader;
-  const response = await globalThis.fetch(url, { ...opts, headers });
+  const response = await fetchImpl(url, { ...opts, headers });
   const setCookies = response.headers.getSetCookie?.() ?? [];
   for (const sc of setCookies) {
     try { await jar.setCookie(sc, url); } catch { /* ignore */ }
