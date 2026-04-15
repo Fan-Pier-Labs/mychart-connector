@@ -190,6 +190,7 @@ export default function ChatScreen() {
 
       <LeftDrawer
         visible={drawerOpen}
+        onOpen={() => setDrawerOpen(true)}
         onClose={() => setDrawerOpen(false)}
         currentChatId={chatId}
         onNewChat={handleNewChat}

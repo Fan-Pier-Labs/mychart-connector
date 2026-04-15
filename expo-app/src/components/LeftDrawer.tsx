@@ -9,7 +9,7 @@ import {
   FlatList,
   TextInput,
   Alert,
-  Modal,
+  PanResponder,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -17,19 +17,21 @@ import { getChats, deleteChat, searchChats, type Chat } from "@/lib/storage/data
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get("window").width * 0.82);
 const INITIAL_VISIBLE = 8;
+const OPEN_THRESHOLD = DRAWER_WIDTH * 0.35;
+const OPEN_EDGE_WIDTH = 24;
 
 type Props = {
   visible: boolean;
+  onOpen: () => void;
   onClose: () => void;
   currentChatId?: string | null;
   onNewChat?: () => void;
 };
 
-export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props) {
+export function LeftDrawer({ visible, onOpen, onClose, currentChatId, onNewChat }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
   const [chats, setChats] = useState<Chat[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -49,20 +51,62 @@ export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props
     }, [loadChats])
   );
 
+  const animateTo = useCallback(
+    (toValue: number, cb?: () => void) => {
+      Animated.spring(translateX, {
+        toValue,
+        useNativeDriver: true,
+        bounciness: 0,
+        speed: 18,
+      }).start(() => cb?.());
+    },
+    [translateX]
+  );
+
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(translateX, {
-        toValue: visible ? 0 : -DRAWER_WIDTH,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: visible ? 0.45 : 0,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [visible, translateX, backdropOpacity]);
+    animateTo(visible ? 0 : -DRAWER_WIDTH);
+  }, [visible, animateTo]);
+
+  // Pan on the drawer itself: drag left to close.
+  const drawerPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_e, g) => {
+        const clamped = Math.max(-DRAWER_WIDTH, Math.min(0, g.dx));
+        translateX.setValue(clamped);
+      },
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx < -OPEN_THRESHOLD || g.vx < -0.5) {
+          animateTo(-DRAWER_WIDTH, () => onClose());
+        } else {
+          animateTo(0);
+        }
+      },
+      onPanResponderTerminate: () => animateTo(0),
+    }),
+  ).current;
+
+  // Edge pan: swipe from the left edge of the screen to open.
+  const edgePan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (e) => e.nativeEvent.pageX < OPEN_EDGE_WIDTH,
+      onMoveShouldSetPanResponder: (e, g) =>
+        e.nativeEvent.pageX < OPEN_EDGE_WIDTH && g.dx > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_e, g) => {
+        const next = Math.max(-DRAWER_WIDTH, Math.min(0, -DRAWER_WIDTH + g.dx));
+        translateX.setValue(next);
+      },
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > OPEN_THRESHOLD || g.vx > 0.5) {
+          animateTo(0, () => onOpen());
+        } else {
+          animateTo(-DRAWER_WIDTH, () => onClose());
+        }
+      },
+      onPanResponderTerminate: () => animateTo(-DRAWER_WIDTH),
+    }),
+  ).current;
 
   function handleSelect(chatId: string) {
     onClose();
@@ -97,93 +141,114 @@ export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props
   const visibleChats = showAll || searchQuery ? chats : chats.slice(0, INITIAL_VISIBLE);
   const hiddenCount = chats.length - visibleChats.length;
 
-  return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
+  const backdropOpacity = translateX.interpolate({
+    inputRange: [-DRAWER_WIDTH, 0],
+    outputRange: [0, 0.45],
+    extrapolate: "clamp",
+  });
+  const backdropPointerEvents = visible ? "auto" : "none";
 
-        <Animated.View
+  return (
+    <>
+      {/* Edge-swipe capture — thin invisible strip on the left side. Always mounted. */}
+      <View
+        pointerEvents="box-none"
+        style={styles.edgeCapture}
+        {...edgePan.panHandlers}
+      />
+
+      {/* Backdrop — darkens the screen behind the drawer. Tappable to close. */}
+      <Animated.View
+        pointerEvents={backdropPointerEvents}
+        style={[styles.backdrop, { opacity: backdropOpacity }]}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      </Animated.View>
+
+      {/* Drawer itself. Mounted always so gestures can drag it in/out smoothly. */}
+      <Animated.View
+        style={[styles.drawer, { transform: [{ translateX }] }]}
+        {...drawerPan.panHandlers}
+      >
+        <View
           style={[
-            styles.drawer,
-            { transform: [{ translateX }] },
+            styles.drawerInner,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
           ]}
         >
-          <View
-            style={[
-              styles.drawerInner,
-              { paddingTop: insets.top, paddingBottom: insets.bottom },
-            ]}
-          >
-            <View style={styles.topSection}>
-              <Pressable testID="drawer-new-chat" style={styles.newChatRow} onPress={handleNew}>
-                <Text style={styles.newChatIcon}>+</Text>
-                <Text style={styles.newChatText}>New Chat</Text>
-              </Pressable>
-
-              <TextInput
-                style={styles.search}
-                placeholder="Search"
-                placeholderTextColor="#999"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-            </View>
-
-            <FlatList
-              data={visibleChats}
-              keyExtractor={(item) => item.id}
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={
-                <Text style={styles.empty}>
-                  {searchQuery ? "No matches" : "No chats yet"}
-                </Text>
-              }
-              renderItem={({ item }) => (
-                <Pressable
-                  style={[
-                    styles.chatRow,
-                    item.id === currentChatId && styles.chatRowActive,
-                  ]}
-                  onPress={() => handleSelect(item.id)}
-                  onLongPress={() => handleDelete(item)}
-                >
-                  <Text style={styles.chatTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                </Pressable>
-              )}
-              ListFooterComponent={
-                hiddenCount > 0 && !searchQuery ? (
-                  <Pressable style={styles.seeMore} onPress={() => setShowAll(true)}>
-                    <Text style={styles.seeMoreText}>
-                      See more ({hiddenCount})
-                    </Text>
-                  </Pressable>
-                ) : null
-              }
-            />
-
-            <Pressable testID="drawer-settings" style={styles.settingsRow} onPress={handleSettings}>
-              <Text style={styles.settingsIcon}>⚙</Text>
-              <Text style={styles.settingsText}>Settings</Text>
+          <View style={styles.topSection}>
+            <Pressable testID="drawer-new-chat" style={styles.newChatRow} onPress={handleNew}>
+              <Text style={styles.newChatIcon}>+</Text>
+              <Text style={styles.newChatText}>New Chat</Text>
             </Pressable>
+
+            <TextInput
+              style={styles.search}
+              placeholder="Search"
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
           </View>
-        </Animated.View>
-      </View>
-    </Modal>
+
+          <FlatList
+            data={visibleChats}
+            keyExtractor={(item) => item.id}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <Text style={styles.empty}>
+                {searchQuery ? "No matches" : "No chats yet"}
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                style={[
+                  styles.chatRow,
+                  item.id === currentChatId && styles.chatRowActive,
+                ]}
+                onPress={() => handleSelect(item.id)}
+                onLongPress={() => handleDelete(item)}
+              >
+                <Text style={styles.chatTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+              </Pressable>
+            )}
+            ListFooterComponent={
+              hiddenCount > 0 && !searchQuery ? (
+                <Pressable style={styles.seeMore} onPress={() => setShowAll(true)}>
+                  <Text style={styles.seeMoreText}>See more ({hiddenCount})</Text>
+                </Pressable>
+              ) : null
+            }
+          />
+
+          <Pressable testID="drawer-settings" style={styles.settingsRow} onPress={handleSettings}>
+            <Text style={styles.settingsIcon}>⚙</Text>
+            <Text style={styles.settingsText}>Settings</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  edgeCapture: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: OPEN_EDGE_WIDTH,
+    zIndex: 10,
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000",
+    zIndex: 20,
   },
   drawer: {
     position: "absolute",
@@ -194,6 +259,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRightWidth: 1,
     borderRightColor: "#eee",
+    zIndex: 30,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 16,
   },
   drawerInner: { flex: 1 },
   topSection: {
