@@ -622,7 +622,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // ── FdiData (bridge from MyChart to eUnity) ───────────────────
   if (lower.startsWith('extensibility/redirection/fdidata')) {
     const url = new URL(request.url);
-    const origin = url.origin;
+    // Use the Host header so the SAML URL is reachable from whatever
+    // network the caller is on (e.g. fake-mychart:3000 inside Docker).
+    // Next.js's request.url normalizes to the bind address (localhost).
+    const host = request.headers.get('host') ?? url.host;
+    const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '');
+    const origin = `${proto}://${host}`;
     // Determine which study based on the fdi parameter
     const fdi = url.searchParams.get('fdi') ?? '';
     const studyType = fdi.includes('CT') ? 'ct' : 'xray';

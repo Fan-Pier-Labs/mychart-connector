@@ -12,6 +12,10 @@
 
 import { describe, it, expect } from 'bun:test';
 import { parseTotpUri } from '../../../scrapers/myChart/totp';
+import { myChartUserPassLogin } from '../../../scrapers/myChart/login';
+import { getImagingResults } from '../../../scrapers/myChart/labs_and_procedure_results/labResults';
+import { downloadImagingStudyDirect } from '../../../scrapers/myChart/eunity/imagingDirectDownload';
+import { convertCloToJpg } from '../../../scrapers/myChart/clo-image-parser/clo_to_jpg';
 import { Client } from 'pg';
 
 // ---------------------------------------------------------------------------
@@ -20,6 +24,9 @@ import { Client } from 'pg';
 
 const BASE_URL = process.env.CI_WEB_URL || 'http://localhost:8080';
 const FAKE_MYCHART_HOSTNAME = process.env.CI_FAKE_MYCHART_HOSTNAME || 'fake-mychart:3000';
+// Host-side address for the scraper-level eUnity test, which talks to
+// fake-mychart directly (not through the web app's Docker network).
+const FAKE_MYCHART_HOST_URL = process.env.CI_FAKE_MYCHART_HOST_URL || 'localhost:4000';
 
 const TEST_EMAIL = `ci-test-${Date.now()}@example.com`;
 const TEST_PASSWORD = 'TestPassword123!';
@@ -336,6 +343,207 @@ describe('Full data scrape', () => {
     // Spot-check health summary exists
     if (data.healthSummary && !data.healthSummary.error) {
       expect(JSON.stringify(data.healthSummary).length).toBeGreaterThan(10);
+    }
+  }, 120_000);
+});
+
+// ===================================================================
+// 4b. eUnity Imaging Pipeline (CLO download → JPEG)
+// ===================================================================
+
+describe('eUnity imaging pipeline', () => {
+  // Shared state across sub-tests so we only walk the SAML+AMF chain once.
+  let fdiParam = '';
+  let firstSeriesUID = '';
+  let firstObjectUID = '';
+  let allImages: Array<{ seriesUID: string; objectUID: string }> = [];
+  let studyDescription = '';
+
+  it('exposes fdiContext on scraped imaging results', async () => {
+    const res = await authedFetch('/api/scrape', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    const imagingResults = data.imagingResults;
+    expect(Array.isArray(imagingResults)).toBe(true);
+    expect(imagingResults.length).toBeGreaterThan(0);
+
+    const withFdi = imagingResults.find(
+      (r: { fdiContext?: { fdi: string; ord: string } }) => r.fdiContext?.fdi && r.fdiContext?.ord,
+    );
+    expect(withFdi).toBeDefined();
+    expect(withFdi.fdiContext.fdi).toBeTruthy();
+    expect(withFdi.fdiContext.ord).toBeTruthy();
+
+    fdiParam = Buffer.from(JSON.stringify(withFdi.fdiContext)).toString('base64');
+    studyDescription = withFdi.orderName ?? 'xray';
+  }, 120_000);
+
+  it('initializes the eUnity session and returns series metadata', async () => {
+    expect(fdiParam).toBeTruthy();
+    const res = await authedFetch(
+      `/api/mychart-series?token=${encodeURIComponent(sessionKey)}&fdi=${encodeURIComponent(fdiParam)}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.series)).toBe(true);
+    expect(body.series.length).toBeGreaterThan(0);
+
+    const firstSeries = body.series[0];
+    expect(firstSeries.seriesUID).toBeTruthy();
+    expect(firstSeries.description).toBeTruthy();
+    expect(Array.isArray(firstSeries.images)).toBe(true);
+    expect(firstSeries.images.length).toBeGreaterThan(0);
+
+    firstSeriesUID = firstSeries.images[0].seriesUID;
+    firstObjectUID = firstSeries.images[0].objectUID;
+
+    // Flatten all images across all series for the ZIP test below.
+    allImages = body.series.flatMap(
+      (s: { images: Array<{ seriesUID: string; objectUID: string }> }) => s.images,
+    );
+  }, 60_000);
+
+  it('downloads a single CLO image and converts it to JPEG', async () => {
+    expect(firstSeriesUID).toBeTruthy();
+    expect(firstObjectUID).toBeTruthy();
+
+    const url =
+      `/api/mychart-xray?token=${encodeURIComponent(sessionKey)}` +
+      `&fdi=${encodeURIComponent(fdiParam)}` +
+      `&seriesUID=${encodeURIComponent(firstSeriesUID)}` +
+      `&objectUID=${encodeURIComponent(firstObjectUID)}`;
+    const res = await authedFetch(url);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('image/jpeg');
+
+    const jpeg = Buffer.from(await res.arrayBuffer());
+    // JPEG magic bytes (SOI: FF D8, end: FF D9)
+    expect(jpeg.byteLength).toBeGreaterThan(1000);
+    expect(jpeg[0]).toBe(0xff);
+    expect(jpeg[1]).toBe(0xd8);
+    expect(jpeg[jpeg.byteLength - 2]).toBe(0xff);
+    expect(jpeg[jpeg.byteLength - 1]).toBe(0xd9);
+  }, 60_000);
+
+  it('bundles all images from the study into a ZIP', async () => {
+    expect(allImages.length).toBeGreaterThan(0);
+    const imagesJson = encodeURIComponent(JSON.stringify(allImages));
+    const desc = encodeURIComponent(studyDescription);
+    const url =
+      `/api/mychart-xray-zip?token=${encodeURIComponent(sessionKey)}` +
+      `&fdi=${encodeURIComponent(fdiParam)}&images=${imagesJson}&description=${desc}`;
+    const res = await authedFetch(url);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/zip');
+
+    const zip = Buffer.from(await res.arrayBuffer());
+    // ZIP local file header magic: 50 4B 03 04
+    expect(zip.byteLength).toBeGreaterThan(100);
+    expect(zip[0]).toBe(0x50);
+    expect(zip[1]).toBe(0x4b);
+    expect(zip[2]).toBe(0x03);
+    expect(zip[3]).toBe(0x04);
+  }, 120_000);
+
+  it('rejects xray requests with an unknown session token', async () => {
+    // Use placeholder UIDs so the auth check fires before the param check.
+    const url =
+      '/api/mychart-xray?token=bogus-token&fdi=eyJmZGkiOiJ4In0=' +
+      '&seriesUID=placeholder&objectUID=placeholder';
+    const res = await authedFetch(url);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ===================================================================
+// 4c. eUnity scraper end-to-end (login → SAML → AMF → CLO → JPEG)
+// ===================================================================
+//
+// Exercises the actual scraper code (not the web app routes) against
+// fake-mychart, then runs the downloaded CLO bytes through the
+// CLO-to-JPEG converter to validate the entire imaging pipeline.
+
+describe('eUnity scraper end-to-end', () => {
+  it('downloads the X-ray study via downloadImagingStudyDirect and converts to JPEG', async () => {
+    const loginResult = await myChartUserPassLogin({
+      hostname: FAKE_MYCHART_HOST_URL,
+      user: 'homer',
+      pass: 'donuts123',
+      protocol: 'http',
+    });
+    expect(loginResult.state).toBe('logged_in');
+    if (loginResult.state !== 'logged_in') return;
+
+    const imagingResults = await getImagingResults(loginResult.mychartRequest);
+    const xray = imagingResults.find(r => r.fdiContext && r.orderName?.includes('XR'));
+    expect(xray).toBeDefined();
+    expect(xray!.fdiContext!.fdi).toBe('FDI-XRAY-001');
+
+    const downloadResult = await downloadImagingStudyDirect(
+      loginResult.mychartRequest,
+      xray!.fdiContext!,
+      'Homer Skull XRay',
+      '/tmp/ci-xray-images',
+      { skipFileWrite: true },
+    );
+
+    expect(downloadResult.errors).toHaveLength(0);
+    expect(downloadResult.images.length).toBeGreaterThan(0);
+
+    const firstImage = downloadResult.images[0];
+    expect(firstImage.format).toBe('CLHAAR');
+    expect(firstImage.pixelData).toBeDefined();
+    expect(firstImage.pixelData!.length).toBeGreaterThan(0);
+    expect(firstImage.wrapperData).toBeDefined();
+
+    // Round-trip the CLO bytes through the parser to a real JPEG.
+    const jpeg = await convertCloToJpg({
+      pixelData: firstImage.pixelData!,
+      wrapperData: firstImage.wrapperData!,
+    });
+    expect(Buffer.isBuffer(jpeg)).toBe(true);
+    const buf = jpeg as Buffer;
+    expect(buf.byteLength).toBeGreaterThan(1000);
+    expect(buf[0]).toBe(0xff);
+    expect(buf[1]).toBe(0xd8);
+    expect(buf[buf.byteLength - 2]).toBe(0xff);
+    expect(buf[buf.byteLength - 1]).toBe(0xd9);
+  }, 120_000);
+
+  it('downloads the multi-slice CT study via downloadImagingStudyDirect', async () => {
+    const loginResult = await myChartUserPassLogin({
+      hostname: FAKE_MYCHART_HOST_URL,
+      user: 'homer',
+      pass: 'donuts123',
+      protocol: 'http',
+    });
+    expect(loginResult.state).toBe('logged_in');
+    if (loginResult.state !== 'logged_in') return;
+
+    const imagingResults = await getImagingResults(loginResult.mychartRequest);
+    const ct = imagingResults.find(r => r.fdiContext && r.orderName?.includes('CT'));
+    expect(ct).toBeDefined();
+    expect(ct!.fdiContext!.fdi).toBe('FDI-CT-001');
+
+    const downloadResult = await downloadImagingStudyDirect(
+      loginResult.mychartRequest,
+      ct!.fdiContext!,
+      'Homer CT Head',
+      '/tmp/ci-ct-images',
+      { skipFileWrite: true },
+    );
+
+    expect(downloadResult.errors).toHaveLength(0);
+    expect(downloadResult.images.length).toBeGreaterThan(2);
+    expect(downloadResult.seriesList).toBeDefined();
+    expect(downloadResult.seriesList!.length).toBeGreaterThanOrEqual(2);
+    for (const img of downloadResult.images) {
+      expect(img.format).toBe('CLHAAR');
+      expect(img.pixelData!.length).toBeGreaterThan(0);
     }
   }, 120_000);
 });

@@ -22,6 +22,19 @@ function getJsessionFromCookie(request: NextRequest): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * Build the externally-reachable origin from the request's Host header.
+ * Next.js normalizes `request.url` to the bind address (localhost), so we
+ * can't use it for URLs returned to clients on a different network (e.g.
+ * `fake-mychart:3000` inside Docker, or `localhost:4000` on the host).
+ */
+function externalOrigin(request: NextRequest): string {
+  const url = new URL(request.url);
+  const host = request.headers.get('host') ?? url.host;
+  const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '');
+  return `${proto}://${host}`;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────
 function html(body: string, status = 200, extraHeaders: Record<string, string> = {}) {
   return new NextResponse(body, {
@@ -171,7 +184,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // ── SAML STS page ─────────────────────────────────────────────
   if (lower === 'saml-sts' || lower.startsWith('saml-sts?')) {
-    const origin = new URL(request.url).origin;
+    const origin = externalOrigin(request);
     const url = new URL(request.url);
     const studyType = url.searchParams.get('study') ?? 'xray';
     // Return HTML with auto-submit form (like a real SAML STS)
@@ -220,7 +233,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── SAML ACS (Assertion Consumer Service) ─────────────────────
   if (lower === 'saml-acs' || lower.startsWith('saml-acs?')) {
-    const origin = new URL(request.url).origin;
+    const origin = externalOrigin(request);
     const url = new URL(request.url);
     const studyType = url.searchParams.get('study') ?? 'xray';
     // Redirect to eUnity viewer with study params
