@@ -75,7 +75,7 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
 ### AWS Fargate (primary)
 
 - **AWS account**: fanpierlabs (`aws --profile fanpierlabs`)
-- **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy_scraper_demo`
+- **Web app** (`web/`): Next.js app deployed to AWS Fargate via `bun run deploy` (from repo root, uses `web/deploy.yaml`)
   - Uses the `deploy` package (dev dependency) which builds a Docker image, pushes to ECR, and deploys to ECS Fargate
   - Config: `web/deploy.yaml`
   - Domain: `openrecord.fanpierlabs.com` (CloudFront + ALB + Route53). Old domain `mychart.fanpierlabs.com` redirects via next.config.ts.
