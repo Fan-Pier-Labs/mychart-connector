@@ -1,0 +1,8 @@
+appId: com.fanpierlabs.openrecord
+---
+- launchApp:
+    clearState: false
+- assertVisible: "OpenRecord"
+- tapOn: "Ask about your health data..."
+- assertVisible: "Ask about your health data..."
+- takeScreenshot: keyboard-up

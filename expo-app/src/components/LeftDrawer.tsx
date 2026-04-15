@@ -11,7 +11,7 @@ import {
   Alert,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { getChats, deleteChat, searchChats, type Chat } from "@/lib/storage/database";
 
@@ -27,6 +27,7 @@ type Props = {
 
 export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const [chats, setChats] = useState<Chat[]>([]);
@@ -109,9 +110,14 @@ export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props
             { transform: [{ translateX }] },
           ]}
         >
-          <SafeAreaView style={styles.drawerInner} edges={["top", "left", "bottom"]}>
+          <View
+            style={[
+              styles.drawerInner,
+              { paddingTop: insets.top, paddingBottom: insets.bottom },
+            ]}
+          >
             <View style={styles.topSection}>
-              <Pressable style={styles.newChatRow} onPress={handleNew}>
+              <Pressable testID="drawer-new-chat" style={styles.newChatRow} onPress={handleNew}>
                 <Text style={styles.newChatIcon}>+</Text>
                 <Text style={styles.newChatText}>New Chat</Text>
               </Pressable>
@@ -162,11 +168,11 @@ export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props
               }
             />
 
-            <Pressable style={styles.settingsRow} onPress={handleSettings}>
+            <Pressable testID="drawer-settings" style={styles.settingsRow} onPress={handleSettings}>
               <Text style={styles.settingsIcon}>@</Text>
               <Text style={styles.settingsText}>Settings</Text>
             </Pressable>
-          </SafeAreaView>
+          </View>
         </Animated.View>
       </View>
     </Modal>
