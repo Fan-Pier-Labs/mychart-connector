@@ -171,16 +171,42 @@ The fake server replicates the exact login flow that `scrapers/myChart/login.ts`
 - Sessions expire after 30 minutes of inactivity
 - Keepalive endpoint at `/MyChart/Home/KeepAlive` returns `"1"`
 
+## eUnity / Imaging Viewer
+
+The fake server includes a stub eUnity imaging viewer co-located on the same host so the full CLO download pipeline (SAML chain → AMF3 session init → CLO wrapper + pixel data → JPEG conversion) can be exercised end-to-end without a real Epic deployment.
+
+### Routes (all served from `/e/*` on the same origin)
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/MyChart/api/test-results/GetWidgetList?groupType=2` | POST | Lists imaging studies (X-ray skull, CT head) |
+| `/MyChart/api/test-results/GetDetails?id=...` | POST | Returns study metadata with `reportID` |
+| `/MyChart/api/report-content/LoadReportContent` | POST | Returns HTML containing `data-fdi-context` |
+| `/MyChart/Extensibility/Redirection/FdiData` | POST | Bridge: returns `{url, launchmode, IsFdiPost}` pointing at `/e/saml-sts` |
+| `/e/saml-sts` | GET | SAML STS page with auto-submit form (mimics real STS) |
+| `/e/saml-acs` | POST | SAML ACS that 302-redirects to the eUnity viewer |
+| `/e/viewer` | GET | Viewer HTML; sets `JSESSIONID` cookie and embeds study params |
+| `/e/AmfServicesServlet` | POST | AMF3 `getStudyListMeta` response with study/series/instance UIDs. Required before `CustomImageServlet` returns image bytes. |
+| `/e/CustomImageServlet` | POST | Returns pre-generated CLO data (`requestType=CLOWRAPPER` or `CLOPIXEL`) keyed by `seriesUID` |
+
+### CLO image data
+
+Pre-generated CLO files for each Homer study live in `src/data/clo-images/`:
+
+- **X-ray skull** — `skull_ap_*.clo`, `skull_lateral_*.clo`
+- **CT head** — `checkerboard_512x512_*.clo`, `circle_512x512_*.clo`, `gradient_h_512x512_*.clo`, `gradient_v_512x512_*.clo`, `diagonal_510x510_*.clo` (one per series/instance)
+
+Each image is a wrapper + pixel pair. The encoder lives at `scrapers/myChart/clo-image-parser/generate_clo.ts` if you need to add more synthetic test patterns.
+
+### Origin handling
+
+`FdiData`, `/e/saml-sts`, and `/e/saml-acs` build SAML/viewer URLs from the inbound `Host` header (not `request.url`) because Next.js normalizes `request.url` to the bind address. This makes the URLs reachable from any caller — the host (`localhost:4000`), another container in the same Docker network (`fake-mychart:3000`), or a custom Compose alias.
+
+### Coverage in CI
+
+`tests/integration/ci/integration.test.ts` (the "eUnity imaging pipeline" describe block) walks the full chain through the web app's xray endpoints: scrape → `/api/mychart-series` → `/api/mychart-xray` (single CLO → JPEG) → `/api/mychart-xray-zip` (multi-image bundle).
+
 ## What's NOT Implemented
-
-### eUnity / Imaging Viewer
-
-The imaging system (eUnity) is an entirely separate server that MyChart links to via SAML authentication. It uses a proprietary binary protocol (AMF3) to serve medical images. This is **not implemented** in the fake server because:
-
-- It requires a separate server with its own session management
-- The AMF3 protocol for image data is complex binary serialization
-- SAML authentication chain involves multiple redirects across domains
-- The scraper endpoints affected: `FdiData` API, SAML chain, eUnity viewer, image pixel data download
 
 ### Medication Refill
 

@@ -12,6 +12,10 @@
 
 import { describe, it, expect } from 'bun:test';
 import { parseTotpUri } from '../../../scrapers/myChart/totp';
+import { myChartUserPassLogin } from '../../../scrapers/myChart/login';
+import { getImagingResults } from '../../../scrapers/myChart/labs_and_procedure_results/labResults';
+import { downloadImagingStudyDirect } from '../../../scrapers/myChart/eunity/imagingDirectDownload';
+import { convertCloToJpg } from '../../../scrapers/myChart/clo-image-parser/clo_to_jpg';
 import { Client } from 'pg';
 
 // ---------------------------------------------------------------------------
@@ -20,6 +24,9 @@ import { Client } from 'pg';
 
 const BASE_URL = process.env.CI_WEB_URL || 'http://localhost:8080';
 const FAKE_MYCHART_HOSTNAME = process.env.CI_FAKE_MYCHART_HOSTNAME || 'fake-mychart:3000';
+// Host-side address for the scraper-level eUnity test, which talks to
+// fake-mychart directly (not through the web app's Docker network).
+const FAKE_MYCHART_HOST_URL = process.env.CI_FAKE_MYCHART_HOST_URL || 'localhost:4000';
 
 const TEST_EMAIL = `ci-test-${Date.now()}@example.com`;
 const TEST_PASSWORD = 'TestPassword123!';
@@ -450,6 +457,95 @@ describe('eUnity imaging pipeline', () => {
     const res = await authedFetch(url);
     expect(res.status).toBe(401);
   });
+});
+
+// ===================================================================
+// 4c. eUnity scraper end-to-end (login → SAML → AMF → CLO → JPEG)
+// ===================================================================
+//
+// Exercises the actual scraper code (not the web app routes) against
+// fake-mychart, then runs the downloaded CLO bytes through the
+// CLO-to-JPEG converter to validate the entire imaging pipeline.
+
+describe('eUnity scraper end-to-end', () => {
+  it('downloads the X-ray study via downloadImagingStudyDirect and converts to JPEG', async () => {
+    const loginResult = await myChartUserPassLogin({
+      hostname: FAKE_MYCHART_HOST_URL,
+      user: 'homer',
+      pass: 'donuts123',
+      protocol: 'http',
+    });
+    expect(loginResult.state).toBe('logged_in');
+    if (loginResult.state !== 'logged_in') return;
+
+    const imagingResults = await getImagingResults(loginResult.mychartRequest);
+    const xray = imagingResults.find(r => r.fdiContext && r.orderName?.includes('XR'));
+    expect(xray).toBeDefined();
+    expect(xray!.fdiContext!.fdi).toBe('FDI-XRAY-001');
+
+    const downloadResult = await downloadImagingStudyDirect(
+      loginResult.mychartRequest,
+      xray!.fdiContext!,
+      'Homer Skull XRay',
+      '/tmp/ci-xray-images',
+      { skipFileWrite: true },
+    );
+
+    expect(downloadResult.errors).toHaveLength(0);
+    expect(downloadResult.images.length).toBeGreaterThan(0);
+
+    const firstImage = downloadResult.images[0];
+    expect(firstImage.format).toBe('CLHAAR');
+    expect(firstImage.pixelData).toBeDefined();
+    expect(firstImage.pixelData!.length).toBeGreaterThan(0);
+    expect(firstImage.wrapperData).toBeDefined();
+
+    // Round-trip the CLO bytes through the parser to a real JPEG.
+    const jpeg = await convertCloToJpg({
+      pixelData: firstImage.pixelData!,
+      wrapperData: firstImage.wrapperData!,
+    });
+    expect(Buffer.isBuffer(jpeg)).toBe(true);
+    const buf = jpeg as Buffer;
+    expect(buf.byteLength).toBeGreaterThan(1000);
+    expect(buf[0]).toBe(0xff);
+    expect(buf[1]).toBe(0xd8);
+    expect(buf[buf.byteLength - 2]).toBe(0xff);
+    expect(buf[buf.byteLength - 1]).toBe(0xd9);
+  }, 120_000);
+
+  it('downloads the multi-slice CT study via downloadImagingStudyDirect', async () => {
+    const loginResult = await myChartUserPassLogin({
+      hostname: FAKE_MYCHART_HOST_URL,
+      user: 'homer',
+      pass: 'donuts123',
+      protocol: 'http',
+    });
+    expect(loginResult.state).toBe('logged_in');
+    if (loginResult.state !== 'logged_in') return;
+
+    const imagingResults = await getImagingResults(loginResult.mychartRequest);
+    const ct = imagingResults.find(r => r.fdiContext && r.orderName?.includes('CT'));
+    expect(ct).toBeDefined();
+    expect(ct!.fdiContext!.fdi).toBe('FDI-CT-001');
+
+    const downloadResult = await downloadImagingStudyDirect(
+      loginResult.mychartRequest,
+      ct!.fdiContext!,
+      'Homer CT Head',
+      '/tmp/ci-ct-images',
+      { skipFileWrite: true },
+    );
+
+    expect(downloadResult.errors).toHaveLength(0);
+    expect(downloadResult.images.length).toBeGreaterThan(2);
+    expect(downloadResult.seriesList).toBeDefined();
+    expect(downloadResult.seriesList!.length).toBeGreaterThanOrEqual(2);
+    for (const img of downloadResult.images) {
+      expect(img.format).toBe('CLHAAR');
+      expect(img.pixelData!.length).toBeGreaterThan(0);
+    }
+  }, 120_000);
 });
 
 // ===================================================================
