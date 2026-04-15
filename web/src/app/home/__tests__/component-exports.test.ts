@@ -20,9 +20,9 @@ describe('home page component exports', () => {
       expect(typeof mod.TwofaPrompt).toBe('function');
     });
 
-    it('exports TotpSetupPrompt', async () => {
-      const mod = await import('../mychart-accounts/totp-setup-prompt');
-      expect(typeof mod.TotpSetupPrompt).toBe('function');
+    it('exports PasskeySetupPrompt', async () => {
+      const mod = await import('../mychart-accounts/passkey-setup-prompt');
+      expect(typeof mod.PasskeySetupPrompt).toBe('function');
     });
   });
 

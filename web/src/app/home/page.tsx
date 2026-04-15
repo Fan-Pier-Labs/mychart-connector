@@ -11,7 +11,7 @@ import { useAppContext } from "@/lib/app-context";
 import { useMyChartAccounts } from "./mychart-accounts/use-mychart-accounts";
 import { MyChartAccountsCard } from "./mychart-accounts/mychart-accounts-card";
 import { TwofaPrompt } from "./mychart-accounts/twofa-prompt";
-import { TotpSetupPrompt } from "./mychart-accounts/totp-setup-prompt";
+import { PasskeySetupPrompt } from "./mychart-accounts/passkey-setup-prompt";
 import { ProfileCard } from "./profile-card/profile-card";
 import { ScrapeCard } from "./scrape-card/scrape-card";
 import { McpCard } from "./mcp-card/mcp-card";
@@ -69,17 +69,17 @@ export default function HomePage() {
     );
   }
 
-  // TOTP setup prompt (full-page takeover)
-  if (accounts.totpPromptInstanceId) {
+  // Passkey setup prompt (full-page takeover)
+  if (accounts.passkeyPromptInstanceId) {
     return (
-      <TotpSetupPrompt
-        totpSetupLoading={accounts.totpSetupLoading}
-        totpWarning={accounts.totpWarning}
-        totpErrorMessage={accounts.totpErrorMessage}
-        handleTotpSetup={accounts.handleTotpSetup}
-        handleTotpSkip={accounts.handleTotpSkip}
-        handleTotpContinueAnyway={accounts.handleTotpContinueAnyway}
-        handleTotpRetry={accounts.handleTotpRetry}
+      <PasskeySetupPrompt
+        passkeyPromptLoading={accounts.passkeyPromptLoading}
+        passkeyPromptWarning={accounts.passkeyPromptWarning}
+        passkeyPromptError={accounts.passkeyPromptError}
+        handlePasskeyPromptSetup={accounts.handlePasskeyPromptSetup}
+        handlePasskeyPromptSkip={accounts.handlePasskeyPromptSkip}
+        handlePasskeyPromptContinueAnyway={accounts.handlePasskeyPromptContinueAnyway}
+        handlePasskeyPromptRetry={accounts.handlePasskeyPromptRetry}
       />
     );
   }

@@ -7,11 +7,11 @@ import {
 import type { useMyChartAccounts } from "./use-mychart-accounts";
 
 type Props = Pick<ReturnType<typeof useMyChartAccounts>,
-  "totpSetupLoading" | "totpWarning" | "totpErrorMessage" | "handleTotpSetup" | "handleTotpSkip" | "handleTotpContinueAnyway" | "handleTotpRetry"
+  "passkeyPromptLoading" | "passkeyPromptWarning" | "passkeyPromptError" | "handlePasskeyPromptSetup" | "handlePasskeyPromptSkip" | "handlePasskeyPromptContinueAnyway" | "handlePasskeyPromptRetry"
 >;
 
-export function TotpSetupPrompt(props: Props) {
-  if (props.totpSetupLoading) {
+export function PasskeySetupPrompt(props: Props) {
+  if (props.passkeyPromptLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <Card className="w-full max-w-md">
@@ -20,24 +20,24 @@ export function TotpSetupPrompt(props: Props) {
           </CardHeader>
           <CardContent className="text-center py-8">
             <div className="inline-block w-8 h-8 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mb-4" />
-            <p className="text-muted-foreground">Configuring your MyChart account. This only takes a few seconds.</p>
+            <p className="text-muted-foreground">Configuring passkey for your MyChart account. This only takes a few seconds.</p>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (props.totpWarning) {
+  if (props.passkeyPromptWarning) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <Card className="w-full max-w-md border-amber-200">
           <CardHeader>
-            <CardTitle className="text-amber-700">2FA not configured</CardTitle>
+            <CardTitle className="text-amber-700">Passkey not configured</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {props.totpErrorMessage && (
+            {props.passkeyPromptError && (
               <p className="text-sm text-red-600 font-medium">
-                {props.totpErrorMessage}
+                {props.passkeyPromptError}
               </p>
             )}
             <p className="text-sm text-muted-foreground">
@@ -51,14 +51,14 @@ export function TotpSetupPrompt(props: Props) {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={props.handleTotpRetry}
+                onClick={props.handlePasskeyPromptRetry}
               >
                 Retry
               </Button>
               <Button
                 variant="destructive"
                 className="flex-1"
-                onClick={props.handleTotpContinueAnyway}
+                onClick={props.handlePasskeyPromptContinueAnyway}
               >
                 Continue anyway
               </Button>
@@ -78,24 +78,24 @@ export function TotpSetupPrompt(props: Props) {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             To access your MyChart account on your behalf, the AI agent needs to sign in
-            automatically. We&apos;ll set up a TOTP authenticator so the agent can log in
+            automatically. We&apos;ll set up a passkey so the agent can log in
             without requiring email codes each time.
           </p>
           <p className="text-sm text-muted-foreground">
-            This adds an authenticator app to your MyChart security settings.
-            You can disable it anytime from your MyChart account.
+            This registers a passkey on your MyChart account.
+            You can remove it anytime from your MyChart security settings.
           </p>
           <div className="flex gap-3">
             <Button
               variant="outline"
               className="flex-1"
-              onClick={props.handleTotpSkip}
+              onClick={props.handlePasskeyPromptSkip}
             >
               Skip
             </Button>
             <Button
               className="flex-1"
-              onClick={props.handleTotpSetup}
+              onClick={props.handlePasskeyPromptSetup}
             >
               Enable
             </Button>

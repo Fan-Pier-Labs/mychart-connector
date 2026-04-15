@@ -33,7 +33,7 @@ export async function connectInstanceApi(instanceId: string): Promise<ConnectRes
 }
 
 export type TwofaResult =
-  | { state: "logged_in"; sessionKey: string; instanceId?: string; offerTotpSetup?: boolean }
+  | { state: "logged_in"; sessionKey: string; instanceId?: string; offerPasskeySetup?: boolean }
   | { state: "invalid_2fa" }
   | { state: "error"; error?: string };
 
