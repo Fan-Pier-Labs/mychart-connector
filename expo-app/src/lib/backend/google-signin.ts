@@ -46,6 +46,7 @@ export async function signInWithGoogle(): Promise<BackendUser> {
 
   const response = await fetch(backendUrl("/api/auth/sign-in/social"), {
     method: "POST",
+    credentials: "omit",
     headers: {
       "Content-Type": "application/json",
       Origin: "openrecord://",
