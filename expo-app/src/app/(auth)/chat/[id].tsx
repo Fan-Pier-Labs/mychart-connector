@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
+  View,
+  Text,
+  Pressable,
   FlatList,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChatBubble, ToolCallIndicator } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
+import { LeftDrawer } from "@/components/LeftDrawer";
 import { sendMessage, type ChatMessage } from "@/lib/ai/claude-client";
 import { executeLocalTool } from "@/lib/ai/tool-executor";
 import {
@@ -24,10 +29,12 @@ type DisplayMessage = {
 };
 
 export default function ChatDetailScreen() {
+  const router = useRouter();
   const { id: chatId } = useLocalSearchParams<{ id: string }>();
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -116,36 +123,86 @@ export default function ChatDetailScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={90}
-    >
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ChatBubble
-            role={item.role}
-            content={item.content}
-            isStreaming={item.isStreaming}
-          />
-        )}
-        contentContainerStyle={styles.messageList}
-        ListFooterComponent={
-          activeTool ? <ToolCallIndicator toolName={activeTool} /> : null
-        }
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={90}
+      >
+        <View style={styles.header}>
+          <Pressable
+            accessibilityLabel="Open menu"
+            testID="open-drawer"
+            onPress={() => setDrawerOpen(true)}
+            hitSlop={10}
+          >
+            <Text style={styles.menuIcon}>≡</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Chat</Text>
+          <Pressable onPress={() => router.replace("/(auth)")} hitSlop={10}>
+            <Text style={styles.newChat}>New</Text>
+          </Pressable>
+        </View>
+
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <ChatBubble
+              role={item.role}
+              content={item.content}
+              isStreaming={item.isStreaming}
+            />
+          )}
+          contentContainerStyle={styles.messageList}
+          ListFooterComponent={
+            activeTool ? <ToolCallIndicator toolName={activeTool} /> : null
+          }
+        />
+        <ChatInput onSend={handleSend} disabled={isStreaming} />
+      </KeyboardAvoidingView>
+
+      <LeftDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        currentChatId={chatId}
       />
-      <ChatInput onSend={handleSend} disabled={isStreaming} />
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#fff" },
   container: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e5e5",
+  },
+  menuIcon: {
+    fontSize: 26,
+    color: "#000",
+    width: 40,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#000",
+  },
+  newChat: {
+    fontSize: 15,
+    color: "#007AFF",
+    fontWeight: "500",
+    width: 40,
+    textAlign: "right",
   },
   messageList: {
     paddingVertical: 12,

@@ -12,7 +12,7 @@ export function ChatBubble({ role, content, isStreaming }: Props) {
   const isUser = role === "user";
   const imageIds = !isUser ? extractImageIds(content) : [];
   const displayContent = imageIds.length
-    ? content.replace(/\[image:[a-zA-Z0-9_\-]+\]\s*/g, "").trim()
+    ? content.replace(/\[image:[a-zA-Z0-9_-]+\]\s*/g, "").trim()
     : content;
 
   return (

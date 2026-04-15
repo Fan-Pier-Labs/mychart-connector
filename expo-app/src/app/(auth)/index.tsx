@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ChatBubble, ToolCallIndicator } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
+import { LeftDrawer } from "@/components/LeftDrawer";
 import { sendMessage, type ChatMessage, type ToolCall } from "@/lib/ai/claude-client";
 import { executeLocalTool } from "@/lib/ai/tool-executor";
 import {
@@ -32,6 +33,7 @@ export default function ChatScreen() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [chatId, setChatId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -39,7 +41,6 @@ export default function ChatScreen() {
   }, []);
 
   async function handleSend(text: string) {
-    // Create chat on first message
     let currentChatId = chatId;
     if (!currentChatId) {
       const chat = await createChat("New Chat");
@@ -47,7 +48,6 @@ export default function ChatScreen() {
       setChatId(currentChatId);
     }
 
-    // Add user message
     const userMsg: DisplayMessage = {
       id: Date.now().toString(),
       role: "user",
@@ -57,7 +57,6 @@ export default function ChatScreen() {
     await addMessage(currentChatId, "user", text);
     scrollToBottom();
 
-    // Add placeholder assistant message
     const assistantId = (Date.now() + 1).toString();
     const assistantMsg: DisplayMessage = {
       id: assistantId,
@@ -69,7 +68,6 @@ export default function ChatScreen() {
     setIsStreaming(true);
     scrollToBottom();
 
-    // Build conversation history for Claude
     const conversationMessages: ChatMessage[] = messages
       .filter((m) => !m.isStreaming)
       .map((m) => ({ role: m.role, content: m.content }));
@@ -99,10 +97,8 @@ export default function ChatScreen() {
           setIsStreaming(false);
           setActiveTool(null);
 
-          // Persist assistant message
           await addMessage(currentChatId!, "assistant", finalText);
 
-          // Auto-title the chat from first exchange
           if (messages.length === 0) {
             const title = text.length > 50 ? text.slice(0, 47) + "..." : text;
             await updateChatTitle(currentChatId!, title);
@@ -137,15 +133,21 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={90}
       >
-        {/* Header */}
         <View style={styles.header}>
+          <Pressable
+            accessibilityLabel="Open menu"
+            testID="open-drawer"
+            onPress={() => setDrawerOpen(true)}
+            hitSlop={10}
+          >
+            <Text style={styles.menuIcon}>≡</Text>
+          </Pressable>
           <Text style={styles.headerTitle}>OpenRecord</Text>
-          <Pressable onPress={handleNewChat}>
-            <Text style={styles.newChat}>New Chat</Text>
+          <Pressable onPress={handleNewChat} hitSlop={10}>
+            <Text style={styles.newChat}>New</Text>
           </Pressable>
         </View>
 
-        {/* Messages */}
         {messages.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>OpenRecord</Text>
@@ -170,9 +172,15 @@ export default function ChatScreen() {
           />
         )}
 
-        {/* Input */}
         <ChatInput onSend={handleSend} disabled={isStreaming} />
       </KeyboardAvoidingView>
+
+      <LeftDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        currentChatId={chatId}
+        onNewChat={handleNewChat}
+      />
     </SafeAreaView>
   );
 }
@@ -194,6 +202,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e5e5",
   },
+  menuIcon: {
+    fontSize: 26,
+    color: "#000",
+    width: 40,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -203,6 +216,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#007AFF",
     fontWeight: "500",
+    width: 40,
+    textAlign: "right",
   },
   empty: {
     flex: 1,

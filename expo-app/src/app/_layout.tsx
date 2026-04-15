@@ -17,7 +17,7 @@ function RootLayoutNav() {
     if (!isAuthenticated && inAuthGroup) {
       router.replace("/onboarding");
     } else if (isAuthenticated && !inAuthGroup) {
-      router.replace("/(auth)/(tabs)/chat");
+      router.replace("/(auth)");
     }
   }, [isAuthenticated, segments, isLoading]);
 

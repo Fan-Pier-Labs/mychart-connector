@@ -20,7 +20,7 @@ import {
 import { signInWithGoogle } from "@/lib/backend/google-signin";
 import { getBackendSession } from "@/lib/backend/session";
 
-type Step = "welcome" | "faceid" | "google" | "account" | "done";
+type Step = "welcome" | "privacy" | "faceid" | "google" | "account" | "done";
 
 export default function OnboardingScreen() {
   const { setSetupComplete } = useAuth();
@@ -114,8 +114,29 @@ export default function OnboardingScreen() {
               everything locally on your phone. Use AI to understand and manage
               your health data.
             </Text>
-            <Pressable style={styles.primaryButton} onPress={() => setStep("faceid")}>
+            <Pressable style={styles.primaryButton} onPress={() => setStep("privacy")}>
               <Text style={styles.primaryButtonText}>Get Started</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {step === "privacy" && (
+          <View style={styles.center}>
+            <Text style={styles.title}>Privacy and Security</Text>
+            <Text style={styles.body}>
+              Privacy and security are our top priorities. Nothing is saved on
+              our servers, and most requests are made directly from this mobile
+              application to MyChart's servers. The only exception are the AI
+              calls, which are made to model providers.
+              {"\n\n"}
+              Our entire app is open source.
+            </Text>
+            <Pressable
+              testID="privacy-continue"
+              style={styles.primaryButton}
+              onPress={() => setStep("faceid")}
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
             </Pressable>
           </View>
         )}

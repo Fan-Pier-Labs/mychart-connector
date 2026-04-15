@@ -34,7 +34,7 @@ export function getImageAttachment(id: string): Attachment | undefined {
  */
 export function extractImageIds(text: string): string[] {
   const ids: string[] = [];
-  const re = /\[image:([a-zA-Z0-9_\-]+)\]/g;
+  const re = /\[image:([a-zA-Z0-9_-]+)\]/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) ids.push(m[1]);
   return ids;

@@ -132,7 +132,11 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.scroll}>
         <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={10}>
+            <Text style={styles.back}>‹ Back</Text>
+          </Pressable>
           <Text style={styles.headerTitle}>Settings</Text>
+          <View style={styles.backSpacer} />
         </View>
 
         {/* Account */}
@@ -279,12 +283,17 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#fff" },
   scroll: { flex: 1 },
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e5e5e5",
   },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
+  back: { fontSize: 15, color: "#007AFF", fontWeight: "500", minWidth: 60 },
+  backSpacer: { minWidth: 60 },
   section: {
     paddingHorizontal: 16,
     paddingVertical: 16,
