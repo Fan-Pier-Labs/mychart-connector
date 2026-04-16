@@ -169,7 +169,7 @@ export function LeftDrawer({ visible, onClose, currentChatId, onNewChat }: Props
             />
 
             <Pressable testID="drawer-settings" style={styles.settingsRow} onPress={handleSettings}>
-              <Text style={styles.settingsIcon}>@</Text>
+              <Text style={styles.settingsIcon}>⚙</Text>
               <Text style={styles.settingsText}>Settings</Text>
             </Pressable>
           </View>

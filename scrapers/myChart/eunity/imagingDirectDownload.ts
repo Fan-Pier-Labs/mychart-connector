@@ -17,44 +17,8 @@ import * as tough from 'tough-cookie';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MyChartRequest } from '../myChartRequest';
-
-// Polyfill for React Native / Hermes which lacks AbortSignal.timeout.
-function abortAfter(ms: number): AbortSignal {
-  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as unknown as { timeout?: unknown }).timeout === 'function') {
-    return (AbortSignal as unknown as { timeout: (ms: number) => AbortSignal }).timeout(ms);
-  }
-  const ctrl = new AbortController();
-  setTimeout(() => ctrl.abort(), ms);
-  return ctrl.signal;
-}
 import { FdiContext, followSamlChain, getImageViewerSamlUrl } from './imagingViewer';
-
-// Prefer `expo/fetch` on iOS; its Swift URLSessionDelegate actually
-// honors `redirect: "manual"`. Falls back to Node's built-in fetch
-// (undici) which passes the TLS fingerprinting that node-fetch fails.
-let fetchImpl: typeof globalThis.fetch = globalThis.fetch;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const expoFetch = require('expo/fetch') as { fetch?: typeof globalThis.fetch };
-  if (expoFetch?.fetch) fetchImpl = expoFetch.fetch;
-} catch { /* non-Expo runtime */ }
-
-async function fetchWithCookies(
-  jar: tough.CookieJar,
-  url: string,
-  opts: RequestInit & { headers?: Record<string, string> } = {}
-): Promise<Response> {
-  const cookies = await jar.getCookies(url);
-  const cookieHeader = cookies.map(c => `${c.key}=${c.value}`).join('; ');
-  const headers: Record<string, string> = { ...(opts.headers as Record<string, string> ?? {}) };
-  if (cookieHeader) headers['Cookie'] = cookieHeader;
-  const response = await fetchImpl(url, { ...opts, headers });
-  const setCookies = response.headers.getSetCookie?.() ?? [];
-  for (const sc of setCookies) {
-    try { await jar.setCookie(sc, url); } catch { /* ignore */ }
-  }
-  return response;
-}
+import { fetchWithCookies, abortAfter } from './fetch';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
