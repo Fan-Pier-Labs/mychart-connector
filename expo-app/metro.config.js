@@ -15,6 +15,8 @@ const emptyShim = path.resolve(__dirname, "shims/fs-empty.js");
 //    in RN — we only need them to bundle because scraper source imports them.
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
+  // Let scrapers/ resolve expo/fetch (for redirect:"manual" support).
+  expo: path.resolve(__dirname, "node_modules/expo"),
   zlib: path.resolve(__dirname, "shims/zlib-pako.js"),
   crypto: require.resolve("react-native-quick-crypto"),
   buffer: require.resolve("buffer/index.js"),

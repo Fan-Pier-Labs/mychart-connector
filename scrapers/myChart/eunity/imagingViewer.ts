@@ -168,24 +168,6 @@ export async function followSamlChain(
       maxSteps--;
       const res = await req(url, { method, body, contentType });
 
-      // Some runtimes (iOS fetch in particular) ignore `redirect: "manual"`
-      // and transparently follow 3xx responses. When that happens, the
-      // response status is 200 at the original URL but the body is already
-      // the viewer's HTML. Either detect the final URL on res.url or
-      // sniff viewer markers in the body.
-      if (res.status === 200) {
-        const finalUrl = res.url || url;
-        const looksLikeViewerUrl =
-          finalUrl.includes('/e/viewer') || finalUrl.includes('/eUnity/viewer');
-        if (looksLikeViewerUrl) {
-          return makeViewerResult(finalUrl, await res.text());
-        }
-        const peek = await res.clone().text();
-        if (peek.includes('eUnity Viewer') || peek.includes('viewer-config')) {
-          return makeViewerResult(finalUrl, peek);
-        }
-      }
-
       // HTTP redirect — follow it
       if ([301, 302, 303, 307].includes(res.status)) {
         const loc = res.headers.get('location');
