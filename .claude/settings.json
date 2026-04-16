@@ -1,3 +1,16 @@
 {
-  "autoMemoryEnabled": false
+  "autoMemoryEnabled": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command'); if printf '%s' \"$cmd\" | grep -qE '^[[:space:]]*git[[:space:]]+stash([^[:alnum:]_]|$)'; then printf '%s\\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"git stash is forbidden per project CLAUDE.md. Ask the user before using it.\"}}'; fi"
+          }
+        ]
+      }
+    ]
+  }
 }
