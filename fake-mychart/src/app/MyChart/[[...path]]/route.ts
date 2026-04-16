@@ -623,8 +623,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower.startsWith('extensibility/redirection/fdidata')) {
     const url = new URL(request.url);
     // Prefer x-forwarded-host, then Host; ignore localhost values that
-    // sneak in when Next.js runs behind a load balancer. Force https for
-    // any external host (iOS ATS blocks http).
+    // sneak in when Next.js runs behind a load balancer. Force https only
+    // for real external hostnames (dotted + non-localhost); Docker service
+    // names like "fake-mychart:3000" must stay http.
     const forwardedHost = request.headers.get('x-forwarded-host');
     const hostHeader = request.headers.get('host');
     const isLocalHost = (h: string | null) =>
@@ -633,9 +634,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       forwardedHost ||
       (hostHeader && !isLocalHost(hostHeader) ? hostHeader : null) ||
       url.host;
-    const proto = isLocalHost(host)
-      ? (request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', ''))
-      : 'https';
+    const hostName = host.split(':')[0];
+    const isExternal = !isLocalHost(host) && hostName.includes('.');
+    const proto = isExternal
+      ? 'https'
+      : (request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', ''));
     const origin = `${proto}://${host}`;
     // Determine which study based on the fdi parameter
     const fdi = url.searchParams.get('fdi') ?? '';

@@ -40,12 +40,15 @@ function externalOrigin(request: NextRequest): string {
     forwardedHost ||
     (hostHeader && !isLocalHost(hostHeader) ? hostHeader : null) ||
     url.host;
-  // Force https for any external (non-localhost) hostname. iOS ATS blocks
-  // http redirects, and load balancers sometimes drop x-forwarded-proto.
+  // Force https only for real external hostnames (must contain a dot and
+  // not be localhost). Docker service names like "fake-mychart:3000" have
+  // no dot and only serve http, so they must stay http.
   const forwardedProto = request.headers.get('x-forwarded-proto');
-  const proto = isLocalHost(pickedHost)
-    ? forwardedProto ?? url.protocol.replace(':', '')
-    : 'https';
+  const hostName = pickedHost.split(':')[0];
+  const isExternal = !isLocalHost(pickedHost) && hostName.includes('.');
+  const proto = isExternal
+    ? 'https'
+    : forwardedProto ?? url.protocol.replace(':', '');
   return `${proto}://${pickedHost}`;
 }
 
