@@ -108,6 +108,12 @@ The web app supports two deployment modes, auto-detected via the `DATABASE_URL` 
   - Sentry auth token for error monitoring and source map uploads
 - **GEMINI_API_KEY**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:GEMINI_API_KEY-GPbdf6`
   - Google Gemini API key for the AI proxy. Can also be set via `GEMINI_API_KEY` env var in env-var mode.
+- **EXPO_TOKEN**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:EXPO_TOKEN-XYwf9T`
+  - Expo access token for EAS CLI builds and TestFlight submissions. Used with `EXPO_TOKEN` env var.
+- **APPLE_CREDENTIALS**: `arn:aws:secretsmanager:us-east-2:555985150976:secret:APPLE_CREDENTIALS-GZhHoo`
+  - Apple Developer credentials (appleId, appleTeamId) for iOS builds and App Store submissions.
+- **APPLE_APP_SPECIFIC_PASSWORD** (ryanhughes624): `arn:aws:secretsmanager:us-east-2:066949051862:secret:APPLE_APP_SPECIFIC_PASSWORD-fZNTNC`
+  - Apple app-specific password for App Store Connect / TestFlight CLI uploads (ryan@fanpierlabs.com).
 
 ## App Authentication & 2FA
 

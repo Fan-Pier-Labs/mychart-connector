@@ -82,4 +82,12 @@ config.watchFolders = [
   path.resolve(__dirname, ".."),
 ];
 
+// Ensure files outside expo-app/ (e.g. scrapers/) can resolve packages
+// from the expo-app node_modules — critical for EAS local builds which
+// copy the project to a temp directory.
+config.resolver.nodeModulesPaths = [
+  ...(config.resolver.nodeModulesPaths ?? []),
+  path.resolve(__dirname, "node_modules"),
+];
+
 module.exports = config;

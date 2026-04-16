@@ -38,6 +38,7 @@ const config: ExpoConfig = {
     supportsTablet: true,
     bundleIdentifier: "com.fanpierlabs.openrecord",
     infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
       NSFaceIDUsageDescription: "OpenRecord uses Face ID to protect your health data.",
     },
   },
@@ -58,6 +59,9 @@ const config: ExpoConfig = {
     googleSigninPlugin,
   ],
   extra: {
+    eas: {
+      projectId: "6ed85fb8-688f-44c3-8ecb-e8019524f524",
+    },
     backendUrl:
       process.env.EXPO_PUBLIC_BACKEND_URL ??
       "https://openrecord.fanpierlabs.com",
