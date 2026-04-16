@@ -34,6 +34,7 @@ yarn.lock
 package-lock.json
 typescript
 .playwright-mcp/*.png
+.playwright-cli/
 .mcp.json
 
 .claude/worktrees/
