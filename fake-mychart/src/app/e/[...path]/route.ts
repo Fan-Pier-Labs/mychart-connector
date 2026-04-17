@@ -30,9 +30,26 @@ function getJsessionFromCookie(request: NextRequest): string | null {
  */
 function externalOrigin(request: NextRequest): string {
   const url = new URL(request.url);
-  const host = request.headers.get('host') ?? url.host;
-  const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '');
-  return `${proto}://${host}`;
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const hostHeader = request.headers.get('host');
+  // Prefer x-forwarded-host, then the Host header, ignoring localhost/bind
+  // values that sneak in when Next.js serves behind a load balancer.
+  const isLocalHost = (h: string | null) =>
+    !!h && /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/.test(h);
+  const pickedHost =
+    forwardedHost ||
+    (hostHeader && !isLocalHost(hostHeader) ? hostHeader : null) ||
+    url.host;
+  // Force https only for real external hostnames (must contain a dot and
+  // not be localhost). Docker service names like "fake-mychart:3000" have
+  // no dot and only serve http, so they must stay http.
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const hostName = pickedHost.split(':')[0];
+  const isExternal = !isLocalHost(pickedHost) && hostName.includes('.');
+  const proto = isExternal
+    ? 'https'
+    : forwardedProto ?? url.protocol.replace(':', '');
+  return `${proto}://${pickedHost}`;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -184,13 +201,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // ── SAML STS page ─────────────────────────────────────────────
   if (lower === 'saml-sts' || lower.startsWith('saml-sts?')) {
-    const origin = externalOrigin(request);
     const url = new URL(request.url);
     const studyType = url.searchParams.get('study') ?? 'xray';
-    // Return HTML with auto-submit form (like a real SAML STS)
+    // Return HTML with auto-submit form. Use a same-origin relative
+    // action so it works no matter which hostname the client hit us on.
     return html(`<!DOCTYPE html>
 <html><head><title>SAML STS</title></head><body>
-<form method="POST" action="${origin}/e/saml-acs?study=${studyType}">
+<form method="POST" action="/e/saml-acs?study=${studyType}">
   <input type="hidden" name="SAMLResponse" value="fake-saml-response-token" />
   <input type="hidden" name="RelayState" value="fake-relay-state" />
   <noscript><button type="submit">Continue</button></noscript>
