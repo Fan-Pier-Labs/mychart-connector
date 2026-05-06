@@ -227,7 +227,7 @@ export function LeftDrawer({ visible, onOpen, onClose, currentChatId, onNewChat 
           />
 
           <Pressable testID="drawer-settings" style={styles.settingsRow} onPress={handleSettings}>
-            <Text style={styles.settingsIcon}>⚙</Text>
+            <Text style={styles.settingsIcon}>⚙︎</Text>
             <Text style={styles.settingsText}>Settings</Text>
           </Pressable>
         </View>
@@ -338,8 +338,8 @@ const styles = StyleSheet.create({
     borderTopColor: "#eee",
   },
   settingsIcon: {
-    fontSize: 18,
-    width: 24,
+    fontSize: 24,
+    width: 30,
     color: "#444",
   },
   settingsText: {

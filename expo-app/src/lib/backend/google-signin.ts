@@ -47,6 +47,7 @@ export async function signInWithGoogle(): Promise<BackendUser> {
   const response = await fetch(backendUrl("/api/auth/sign-in/social"), {
     method: "POST",
     credentials: "omit",
+    redirect: "manual",
     headers: {
       "Content-Type": "application/json",
       Origin: "openrecord://",
@@ -54,10 +55,11 @@ export async function signInWithGoogle(): Promise<BackendUser> {
     body: JSON.stringify({
       provider: "google",
       idToken: { token: idToken },
+      disableRedirect: true,
     }),
   });
 
-  if (!response.ok) {
+  if (!response.ok && response.type !== "opaqueredirect") {
     const body = await response.text();
     throw new Error(`Backend sign-in failed (${response.status}): ${body}`);
   }
@@ -66,8 +68,19 @@ export async function signInWithGoogle(): Promise<BackendUser> {
     response.headers.get("set-auth-token") ??
     response.headers.get("Set-Auth-Token") ??
     "";
-  const data = await response.json();
-  const token: string = sessionToken || data?.token || data?.session?.token;
+
+  const rawBody = await response.text();
+  let data: { token?: string; session?: { token?: string }; user?: { id?: string; email?: string; name?: string } } = {};
+  if (rawBody) {
+    try {
+      data = JSON.parse(rawBody);
+    } catch {
+      // Server returned a non-JSON body (e.g. HTML redirect page). Fall back
+      // to the bearer-token header if present.
+    }
+  }
+
+  const token: string = sessionToken || data?.token || data?.session?.token || "";
   if (!token) {
     throw new Error("Backend did not return a session token.");
   }
