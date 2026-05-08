@@ -8,7 +8,7 @@ import { date2dte } from "./utils";
 // import '../../../util'
 import { BillingAccount, BillingDetails, BillingVisit, PaymentListResponse, StatementItem, StatementListResponse } from "./types";
 import { mkdirp } from 'mkdirp';
-import { MOCK_DATA } from '../../../shared/env';
+import { OPENRECORD_MOCK_DATA } from '../../../shared/env';
 
 
 
@@ -209,7 +209,7 @@ export async function getBillingStatementPDFs(mychartRequest: MyChartRequest, bi
 
     // Write the buffer to a file
     await mkdirp('pdfs')
-    if (MOCK_DATA) {
+    if (OPENRECORD_MOCK_DATA) {
       console.log("not saving xlxs", name, " to disk b/c its mock data mode")
     }
     else {
