@@ -65,7 +65,7 @@ export async function getTestSession(): Promise<MyChartRequest> {
 
   if (loginResult.state === 'need_2fa') {
     // Auto-retrieve 2FA code via Resend
-    const { get2FaCodeFromResend } = await import('../../../cli/resend/resend')
+    const { get2FaCodeFromResend } = await import('../../../npm-package/cli/resend/resend')
     const codes = await get2FaCodeFromResend(loginResult.twoFaSentTime! - 5000, TEST_HOSTNAME)
 
     if (!codes || codes.length === 0) {

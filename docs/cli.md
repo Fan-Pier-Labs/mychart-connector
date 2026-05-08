@@ -1,6 +1,6 @@
 # CLI Reference
 
-Headless CLI entry point at `cli/cli.ts`. Run with `bun run cli` or `NODE_ENV=development bun cli/cli.ts`.
+Headless CLI entry point at `npm-package/cli/cli.ts`. Run with `bun run cli` or `NODE_ENV=development bun npm-package/cli/cli.ts`.
 
 ## Cookie Caching
 
@@ -8,7 +8,7 @@ The CLI caches serialized MyChart sessions to `.cookie-cache/<hostname>.json` af
 
 - Cache dir: `.cookie-cache/` (gitignored, project root)
 - `--no-cache` flag: skips loading cached cookies (still saves after login)
-- Implementation: `tryLoadCachedSession()` / `saveCachedSession()` in `cli/cli.ts`
+- Implementation: `tryLoadCachedSession()` / `saveCachedSession()` in `npm-package/cli/cli.ts`
 - Uses `MyChartRequest.serialize()` / `unserialize()` from `scrapers/myChart/myChartRequest.ts`
 
 ## Credential Resolution
@@ -22,7 +22,7 @@ The CLI caches serialized MyChart sessions to `.cookie-cache/<hostname>.json` af
 
 When 2FA is required and no `--2fa` code is provided, the CLI automatically retrieves the 2FA code from Resend's inbound email API. The user's MyChart verification emails are forwarded to `healthapp@bocuedpo.resend.app`, and the CLI polls Resend's inbound email API (`resend.emails.receiving.list()` / `.get()`) for up to 60 seconds to find a 6-digit code.
 
-**How it works** (`cli/resend/resend.ts`):
+**How it works** (`npm-package/cli/resend/resend.ts`):
 1. Fetches the Resend API key from AWS Secrets Manager (`RESEND_API_KEY` ARN)
 2. Lists inbound emails via `resend.emails.receiving.list()`
 3. For each email newer than the cutoff time, fetches full body via `.get(id)`
@@ -31,10 +31,10 @@ When 2FA is required and no `--2fa` code is provided, the CLI automatically retr
 
 **Important**: The AWS Secrets Manager client uses the `fanpierlabs` profile only when `NODE_ENV=development`. When running the CLI locally, always set:
 ```bash
-NODE_ENV=development bun cli/cli.ts --host <hostname> --read-login-from-browser --action get-imaging
+NODE_ENV=development bun npm-package/cli/cli.ts --host <hostname> --read-login-from-browser --action get-imaging
 ```
 
-Implementation files: `cli/resend/resend.ts` (new, used by CLI) and `cli/resend/get2fa.ts` (legacy).
+Implementation files: `npm-package/cli/resend/resend.ts` (new, used by CLI) and `npm-package/cli/resend/get2fa.ts` (legacy).
 
 ## Subcommands
 

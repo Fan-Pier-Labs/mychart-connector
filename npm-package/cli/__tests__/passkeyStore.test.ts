@@ -1,10 +1,20 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, afterAll, afterEach } from 'bun:test';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
-import { savePasskeyCredential, loadPasskeyCredential } from '../passkeyStore';
-import type { PasskeyCredential } from '../../scrapers/myChart/softwareAuthenticator';
+import type { PasskeyCredential } from '../../../scrapers/myChart/softwareAuthenticator';
 
-const PASSKEY_DIR = path.join(__dirname, '..', '..', '.passkey-credentials');
+// Pin the storage dir to a unique tmpdir per test run so we don't pollute
+// the user's cwd's `.passkey-credentials/` and so the tests get a clean
+// slate. Must be set BEFORE importing `../passkeyStore` so the env-var-
+// driven dir resolution sees it.
+const PASSKEY_DIR = path.join(os.tmpdir(), `passkey-store-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+process.env.MYCHART_PASSKEY_DIR = PASSKEY_DIR;
+const { savePasskeyCredential, loadPasskeyCredential } = await import('../passkeyStore');
+
+afterAll(async () => {
+  await fs.promises.rm(PASSKEY_DIR, { recursive: true, force: true });
+});
 
 function makeCredential(overrides: Partial<PasskeyCredential> = {}): PasskeyCredential {
   return {

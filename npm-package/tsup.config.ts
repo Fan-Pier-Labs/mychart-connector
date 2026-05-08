@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 // Two builds:
 // 1. The library (`src/index.ts` → ESM + CJS + .d.ts).
-// 2. The CLI (`../cli/cli.ts` → CJS only, with #!/usr/bin/env node shebang
+// 2. The CLI (`./cli/cli.ts` → CJS only, with #!/usr/bin/env node shebang
 //    and the Resend / AWS SDK marked external — the CLI loads those lazily
 //    only when `--resend-2fa` is passed, which end-users won't ever do).
 export default defineConfig([
@@ -23,7 +23,7 @@ export default defineConfig([
     noExternal: [/scrapers[\\/]myChart/],
   },
   {
-    entry: { cli: '../cli/cli.ts' },
+    entry: { cli: './cli/cli.ts' },
     format: ['cjs'],
     outExtension: () => ({ js: '.cjs' }),
     dts: false,

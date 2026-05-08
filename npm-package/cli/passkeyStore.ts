@@ -1,20 +1,24 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { serializeCredential, deserializeCredential, type PasskeyCredential } from '../scrapers/myChart/softwareAuthenticator';
+import { serializeCredential, deserializeCredential, type PasskeyCredential } from '../../scrapers/myChart/softwareAuthenticator';
 
 // Stored relative to the user's current working directory so credentials
 // live in the user's project, not inside node_modules (which gets nuked
 // on reinstall). Override with `MYCHART_PASSKEY_DIR=/abs/path` if needed.
-const PASSKEY_DIR = process.env.MYCHART_PASSKEY_DIR
-  ? path.resolve(process.env.MYCHART_PASSKEY_DIR)
-  : path.join(process.cwd(), '.passkey-credentials');
+// Resolved lazily so tests can flip the env var per-case.
+function getPasskeyDir(): string {
+  return process.env.MYCHART_PASSKEY_DIR
+    ? path.resolve(process.env.MYCHART_PASSKEY_DIR)
+    : path.join(process.cwd(), '.passkey-credentials');
+}
 
 function getCredentialPath(hostname: string): string {
-  return path.join(PASSKEY_DIR, `${hostname}.json`);
+  return path.join(getPasskeyDir(), `${hostname}.json`);
 }
 
 export async function savePasskeyCredential(hostname: string, credential: PasskeyCredential): Promise<void> {
-  await fs.promises.mkdir(PASSKEY_DIR, { recursive: true });
+  const dir = getPasskeyDir();
+  await fs.promises.mkdir(dir, { recursive: true });
   const basePath = getCredentialPath(hostname);
 
   // Never overwrite an existing credential — archive it first
@@ -22,7 +26,7 @@ export async function savePasskeyCredential(hostname: string, credential: Passke
     await fs.promises.access(basePath);
     // File exists — rename to hostname.TIMESTAMP.json
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const archivePath = path.join(PASSKEY_DIR, `${hostname}.${ts}.json`);
+    const archivePath = path.join(dir, `${hostname}.${ts}.json`);
     await fs.promises.rename(basePath, archivePath);
     console.log(`  Archived previous passkey to ${hostname}.${ts}.json`);
   } catch {
