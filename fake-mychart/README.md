@@ -10,13 +10,28 @@ A standalone Next.js server that faithfully mimics Epic MyChart's web API surfac
 
 ## Credentials
 
-| Field    | Value        |
-|----------|--------------|
-| Username | `homer`      |
-| Password | `donuts123`  |
-| 2FA Code | `123456`     |
+| User    | Username | Password    | 2FA Required by Default |
+|---------|----------|-------------|-------------------------|
+| Homer   | `homer`  | `donuts123` | No                      |
+| Marge   | `marge`  | `donuts123` | Yes (TOTP enabled)      |
 
-Set `FAKE_MYCHART_ACCEPT_ANY=true` to accept any username/password.
+The 2FA code is always `123456`.
+
+- `homer` logs in directly.
+- `marge` exists for testing the 2FA path — her login always returns the secondary-validation page until you submit the code.
+- Toggling TOTP via the settings UI (or the `UpdateTwoFactorTotpOptInStatus` endpoint) only affects the per-user UI flag (`IsTotpEnabled` returned by `GetTwoFactorInfo`). It does NOT change whether login requires 2FA — that's a fixed per-user behavior (off for homer, on for marge). The CLI's `--set-up-totp` / `--disable-totp` flow can therefore keep using username+password without ever needing a 2FA code. Use `POST /reset` to restore both users to their seed state.
+
+Set `FAKE_MYCHART_ACCEPT_ANY=true` to accept any username/password (treated as homer).
+Set `FAKE_MYCHART_REQUIRE_2FA=true` to force every login (including homer's) through the 2FA flow.
+
+## Resetting In-Memory State
+
+Because all state lives in RAM, mutations during a session (sent messages, deleted contacts, TOTP toggles, registered passkeys, etc.) accumulate until the process exits. Two ways to reset without restarting:
+
+- **Browser**: visit [`/reset`](http://localhost:4000/reset) and click the **Reset Fake MyChart RAM** button.
+- **HTTP**: `curl -X POST http://localhost:4000/reset` — returns `{"ok":true}`.
+
+Reset clears all sessions, restores the seeded conversations and emergency contacts, disables every user's TOTP, removes all passkeys, and forgets booked appointments.
 
 ## Running
 

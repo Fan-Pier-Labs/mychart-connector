@@ -252,6 +252,58 @@ describe('softwareAuthenticator', () => {
     });
   });
 
+  describe('Hermes / react-native-quick-crypto ArrayBuffer compatibility', () => {
+    // On Hermes (Expo app), generateKeyPairSync returns ArrayBuffers instead
+    // of Buffers. ArrayBuffers don't support `[i]` byte indexing, which broke
+    // the SPKI scan in extractRawPublicKey. The fix normalizes inputs through
+    // toBuffer() so both runtimes produce the same output.
+    it('handles ArrayBuffer-style key output without throwing "SPKI DER" error', () => {
+      const real = crypto.generateKeyPairSync;
+      const patched = ((type: never, options: never) => {
+        const out = real.call(crypto, type, options) as { publicKey: Buffer; privateKey: Buffer };
+        const pubAb = out.publicKey.buffer.slice(
+          out.publicKey.byteOffset,
+          out.publicKey.byteOffset + out.publicKey.byteLength,
+        );
+        const privAb = out.privateKey.buffer.slice(
+          out.privateKey.byteOffset,
+          out.privateKey.byteOffset + out.privateKey.byteLength,
+        );
+        return {
+          publicKey: pubAb as unknown as Buffer,
+          privateKey: privAb as unknown as Buffer,
+        };
+      }) as typeof crypto.generateKeyPairSync;
+
+      (crypto as { generateKeyPairSync: typeof crypto.generateKeyPairSync }).generateKeyPairSync = patched;
+      try {
+        const options = makeCreationOptions();
+        const result = createCredential(options, TEST_ORIGIN);
+
+        // attestationObject must still parse and contain a valid COSE key
+        const attestationObject = cborDecode(
+          Buffer.from(result.serverResponse.attestationData, 'base64'),
+        );
+        const authData = Buffer.from(attestationObject.authData);
+        const credIdLen = authData.readUInt16BE(53);
+        const coseKeyBytes = authData.subarray(55 + credIdLen);
+        const coseKey = cborDecode(coseKeyBytes);
+        const getKey = (k: number) =>
+          coseKey instanceof Map ? coseKey.get(k) : coseKey[k];
+        expect(getKey(-2).length).toBe(32);
+        expect(getKey(-3).length).toBe(32);
+
+        // Round-trip through assertion to make sure the private key was
+        // persisted as parseable DER bytes.
+        const challenge = Buffer.from('hermes-challenge').toString('base64');
+        const assertion = createAssertion(result.credential, challenge, TEST_ORIGIN);
+        expect(assertion.authenticatorAssertion.signature.length).toBeGreaterThan(50);
+      } finally {
+        (crypto as { generateKeyPairSync: typeof crypto.generateKeyPairSync }).generateKeyPairSync = real;
+      }
+    });
+  });
+
   describe('serialization', () => {
     it('round-trips credential through serialize/deserialize', () => {
       const options = makeCreationOptions();

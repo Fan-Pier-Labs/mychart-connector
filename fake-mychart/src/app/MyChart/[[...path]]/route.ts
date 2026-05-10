@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, validateSession, sessionCookieHeader, hasAcceptedTerms, acceptTerms } from '@/lib/session';
+import { createSession, validateSession, sessionCookieHeader, hasAcceptedTerms, acceptTerms, getSessionUsername } from '@/lib/session';
 import {
   loginPage, loginPageControllerJs, doLoginSuccess, doLoginNeed2FA, doLoginFailed,
   secondaryValidationPage, homePage, csrfTokenPage, genericTokenPage, get2faMethods,
@@ -11,42 +11,18 @@ import {
   educationPage, emergencyContactsPage, profilePage, settingsPage,
 } from '@/lib/html';
 import * as homer from '@/data/homer';
+import { state, findUser, findUserByPasskey, type FakeUser } from '@/lib/state';
 
 import crypto from 'crypto';
 
-// ─── In-memory mutable state (seeded from homer.ts) ─────────────────
-// Deep-clone so mutations don't affect the seed module
-// eslint-disable-next-line prefer-const
-let conversationsState = JSON.parse(JSON.stringify(homer.conversations));
-let emergencyContactsState = JSON.parse(JSON.stringify(homer.emergencyContacts));
-let ecIdCounter = 100;
-let composeIdCounter = 1000;
-
-// TOTP state (mutable — tracks whether TOTP is enabled)
-let isTotpEnabled = false;
-
-// Passkey state
-let passkeyIdCounter = 0;
-let passkeysState: Array<{
-  rawId: string;
-  name: string;
-  createdOnDevice: string;
-  creationInstant: string;
-  lastUsedInstant: string | null;
-}> = [];
-
-// Booked appointments state
-const bookedAppointments: Array<{
-  confirmationNumber: string;
-  slotId: string;
-  provider: string;
-  department: string;
-  location: string;
-  visitType: string;
-  date: string;
-  time: string;
-  reason: string;
-}> = [];
+// Track which username is mid-2FA. Real MyChart uses a server-side flow state;
+// here we just remember the user attached to the temporary session created
+// during the password step so we know whose TOTP profile to mutate after they
+// verify.
+function currentUser(request: NextRequest): FakeUser | null {
+  const cookie = request.headers.get('cookie');
+  return findUser(getSessionUsername(cookie));
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function json(data: unknown, status = 200) {
@@ -308,7 +284,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (lower === 'settings') {
     const redirect = requireSession(request);
     if (redirect) return redirect;
-    return html(settingsPage(isTotpEnabled, passkeysState));
+    const user = currentUser(request);
+    return html(settingsPage(user?.totpEnabled ?? false, user?.passkeys ?? []));
   }
 
   // ── Generic token pages (for scrapers that GET a page to extract CSRF) ──
@@ -344,13 +321,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Handle passkey login (Type: "PasskeyLogin")
       if (loginInfo.Type === 'PasskeyLogin') {
         const creds = loginInfo.Credentials;
-        // Validate the passkey exists in our state
-        const matchedPasskey = passkeysState.find(pk => pk.rawId === creds.rawId);
-        if (matchedPasskey || acceptAny()) {
-          if (matchedPasskey) {
-            matchedPasskey.lastUsedInstant = new Date().toISOString();
+        const matchedUser = findUserByPasskey(creds.rawId);
+        if (matchedUser || acceptAny()) {
+          if (matchedUser) {
+            const pk = matchedUser.passkeys.find(p => p.rawId === creds.rawId);
+            if (pk) pk.lastUsedInstant = new Date().toISOString();
           }
-          const sessionId = createSession();
+          const sessionId = createSession(matchedUser?.username ?? null);
           const response = requireTerms()
             ? html(termsConditionsPage())
             : html(doLoginSuccess());
@@ -373,25 +350,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return html(doLoginFailed());
       }
 
-      const validCreds = acceptAny() ||
-        (user === homer.DEFAULT_USERNAME && pass === homer.DEFAULT_PASSWORD);
+      const matchedUser = findUser(user);
+      const validCreds = acceptAny()
+        ? matchedUser ?? state.users.homer
+        : (matchedUser && matchedUser.password === pass ? matchedUser : null);
 
       if (!validCreds) {
         return html(doLoginFailed());
       }
 
-      // Check if 2FA is required (opt-in via env var, off by default)
-      const require2fa = process.env.FAKE_MYCHART_REQUIRE_2FA === 'true';
+      // 2FA is required when the user is seeded to require it (e.g. marge)
+      // or when the env-var override is set. Toggling totpEnabled at runtime
+      // does NOT change login behavior — the CLI's --set-up-totp /
+      // --disable-totp round-trip keeps working with username+password.
+      const envRequire2fa = process.env.FAKE_MYCHART_REQUIRE_2FA === 'true';
+      const require2fa = validCreds.requires2faAtLogin || envRequire2fa;
       if (require2fa) {
-        // Return 2FA page — don't create session yet
-        const sessionId = createSession();
+        // Create a session bound to the user so the subsequent /Validate call
+        // knows whose TOTP profile to consult, but the front-end treats it
+        // as un-authenticated until 2FA succeeds.
+        const sessionId = createSession(validCreds.username);
         const response = html(doLoginNeed2FA());
         response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
         return response;
       }
 
       // Successful login without 2FA — create session and set cookie
-      const sessionId = createSession();
+      const sessionId = createSession(validCreds.username);
       // If terms are required, return the T&C page instead of the home page
       const response = requireTerms()
         ? html(termsConditionsPage())
@@ -425,7 +410,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower.startsWith('authentication/secondaryvalidation/validate')) {
     const body = await request.text();
     if (body.includes('123456') || acceptAny()) {
-      const sessionId = createSession();
+      // Preserve the username from the pending session so the post-2FA
+      // session continues to know who's logged in (matters for per-user
+      // TOTP/passkey state).
+      const username = getSessionUsername(request.headers.get('cookie'));
+      const sessionId = createSession(username);
       const response = json({ Success: true });
       response.headers.set('Set-Cookie', sessionCookieHeader(sessionId));
       return response;
@@ -520,20 +509,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Emergency Contacts
   if (lower === 'api/personalinformation/getrelationships') {
-    return json(emergencyContactsState);
+    return json(state.emergencyContacts);
   }
   if (lower === 'api/personalinformation/addrelationship') {
     try {
       const body = await request.json();
-      ecIdCounter++;
+      state.ecIdCounter++;
       const newContact = {
-        id: `EC-${ecIdCounter}`,
+        id: `EC-${state.ecIdCounter}`,
         name: body.name || '',
         relationshipType: body.relationshipType || '',
         phoneNumber: body.phoneNumber || '',
         isEmergencyContact: body.isEmergencyContact ?? true,
       };
-      emergencyContactsState.relationships.push(newContact);
+      state.emergencyContacts.relationships.push(newContact);
       return json({ success: true, id: newContact.id });
     } catch {
       return json({ error: 'Invalid request' }, 400);
@@ -542,12 +531,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/personalinformation/updaterelationship') {
     try {
       const body = await request.json();
-      const idx = emergencyContactsState.relationships.findIndex(
+      const idx = state.emergencyContacts.relationships.findIndex(
         (r: { id?: string; name?: string }) => r.id === body.id || r.name === body.id
       );
       if (idx === -1) return json({ error: 'Contact not found' }, 404);
-      const existing = emergencyContactsState.relationships[idx];
-      emergencyContactsState.relationships[idx] = { ...existing, ...body };
+      const existing = state.emergencyContacts.relationships[idx];
+      state.emergencyContacts.relationships[idx] = { ...existing, ...body };
       return json({ success: true });
     } catch {
       return json({ error: 'Invalid request' }, 400);
@@ -556,7 +545,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/personalinformation/removerelationship') {
     try {
       const body = await request.json();
-      emergencyContactsState.relationships = emergencyContactsState.relationships.filter(
+      state.emergencyContacts.relationships = state.emergencyContacts.relationships.filter(
         (r: { id?: string; name?: string }) => r.id !== body.id && r.name !== body.id
       );
       return json({ success: true });
@@ -660,12 +649,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── Messages / Conversations (mutable state) ──────────────────
   if (lower === 'api/conversations/getconversationlist') {
-    return json(conversationsState);
+    return json(state.conversations);
   }
   if (lower === 'api/conversations/getconversationmessages') {
     try {
       const body = await request.json();
-      const conv = conversationsState.conversations.find(
+      const conv = state.conversations.conversations.find(
         (c: { hthId: string }) => c.hthId === body.conversationId
       );
       if (conv) {
@@ -677,8 +666,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   }
   if (lower === 'api/conversations/getcomposeid') {
-    composeIdCounter++;
-    return json(`COMPOSE-${composeIdCounter}`);
+    state.composeIdCounter++;
+    return json(`COMPOSE-${state.composeIdCounter}`);
   }
   if (lower === 'api/conversations/removecomposeid') {
     return json({ success: true });
@@ -692,7 +681,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/conversations/deleteconversation') {
     try {
       const body = await request.json();
-      conversationsState.conversations = conversationsState.conversations.filter(
+      state.conversations.conversations = state.conversations.conversations.filter(
         (c: { hthId: string }) => c.hthId !== body.conversationId
       );
       return json({ success: true });
@@ -704,7 +693,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
       const body = await request.json();
       const convId = body.conversationId || '';
-      const conv = conversationsState.conversations.find(
+      const conv = state.conversations.conversations.find(
         (c: { hthId: string }) => c.hthId === convId
       );
       if (conv) {
@@ -740,7 +729,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const msgBody = Array.isArray(body.messageBody) ? body.messageBody[0] : (body.messageBody || '');
       const msgSubject = body.messageSubject || body.subject || 'New Message';
       const recipientName = body.recipient?.displayName || body.recipientName || 'Provider';
-      conversationsState.conversations.unshift({
+      state.conversations.conversations.unshift({
         hthId: newConvId,
         subject: msgSubject,
         previewText: msgBody,
@@ -767,13 +756,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── TOTP / 2FA Setup ──────────────────────────────────────────
   if (lower === 'api/secondary-validation/gettwofactorinfo') {
-    return json({ ...homer.totpInfo, IsTotpEnabled: isTotpEnabled });
+    const u = currentUser(request);
+    return json({ ...homer.totpInfo, IsTotpEnabled: u?.totpEnabled ?? false });
   }
   if (lower === 'api/secondary-validation/verifypasswordandupdatecontact') {
     try {
       const body = await request.json();
       const password = body.Password || body.password || '';
-      const valid = acceptAny() || password === homer.DEFAULT_PASSWORD;
+      const u = currentUser(request);
+      const valid = acceptAny() || (u != null && password === u.password);
       return json({ IsPasswordValid: valid });
     } catch {
       return json({ IsPasswordValid: true });
@@ -796,8 +787,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   }
   if (lower === 'api/secondary-validation/updatetwofactortotpoptinstatus') {
-    // Toggle TOTP status
-    isTotpEnabled = !isTotpEnabled;
+    // Toggle TOTP status for the logged-in user
+    const u = currentUser(request);
+    if (u) u.totpEnabled = !u.totpEnabled;
     return json({ Success: true });
   }
 
@@ -817,8 +809,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // ── Passkey Login Challenge ───────────────────────────────────
+  // Returns the union of all registered passkeys across users so the client
+  // can present any one of them; we identify the user during DoLogin by
+  // looking up the chosen credential's rawId.
   if (lower.startsWith('authentication/login/getpasskeygetparams')) {
     const challenge = crypto.randomBytes(32).toString('base64');
+    const allPasskeys = Object.values(state.users).flatMap(u => u.passkeys);
     return json({
       Success: true,
       PasskeyGetParams: {
@@ -828,41 +824,54 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         Timeout: 60000,
         UserVerification: 'preferred',
         ExpirationInstantIso: `/Date(${Date.now() + 60000})/`,
-        AllowCredentials: passkeysState.map(pk => ({ id: pk.rawId, type: 'public-key' })),
+        AllowCredentials: allPasskeys.map(pk => ({ id: pk.rawId, type: 'public-key' })),
       },
     });
   }
 
-  // ── Passkey Management ────────────────────────────────────────
+  // ── Passkey Management (per-user) ─────────────────────────────
   if (lower === 'api/passkey-management/loadpasskeyinfo') {
+    const u = currentUser(request);
     return json({
-      passkeys: passkeysState,
+      passkeys: u?.passkeys ?? [],
       lastAuthentication: undefined,
     });
   }
   if (lower === 'api/passkey-management/generatecreaterequest') {
     const challenge = crypto.randomBytes(32).toString('base64');
+    const u = currentUser(request);
     return json({
       success: true,
       data: {
         ...homer.passkeyCreationOptions,
         challenge,
-        excludeCredentials: passkeysState.map(pk => ({ id: pk.rawId, type: 'public-key' })),
+        // Use logged-in user's identity in the WebAuthn user handle so the
+        // resulting credential is bound to them.
+        user: u
+          ? {
+              id: Buffer.from(`${u.username}-user-id`).toString('base64'),
+              name: u.username,
+              displayName: u.displayName,
+            }
+          : homer.passkeyCreationOptions.user,
+        excludeCredentials: (u?.passkeys ?? []).map(pk => ({ id: pk.rawId, type: 'public-key' })),
       },
     });
   }
   if (lower === 'api/passkey-management/createpasskey') {
     try {
       const body = await request.json();
-      passkeyIdCounter++;
+      const u = currentUser(request);
+      if (!u) return json({ success: false, errors: ['Not logged in'] }, 401);
+      state.passkeyIdCounter++;
       const newPasskey = {
         rawId: body.rawId || crypto.randomBytes(32).toString('base64'),
-        name: `Passkey ${passkeyIdCounter}`,
+        name: `Passkey ${state.passkeyIdCounter}`,
         createdOnDevice: 'Software Authenticator',
         creationInstant: new Date().toISOString(),
         lastUsedInstant: null,
       };
-      passkeysState.push(newPasskey);
+      u.passkeys.push(newPasskey);
       return json({ success: true, data: newPasskey });
     } catch {
       return json({ success: false, errors: ['Invalid request'] }, 400);
@@ -871,7 +880,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/passkey-management/deletepasskey') {
     try {
       const body = await request.json();
-      passkeysState = passkeysState.filter(pk => pk.rawId !== body.rawId);
+      const u = currentUser(request);
+      if (u) u.passkeys = u.passkeys.filter(pk => pk.rawId !== body.rawId);
       return json({ success: true });
     } catch {
       return json({ success: false }, 400);
@@ -880,7 +890,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/passkey-management/renamepasskey') {
     try {
       const body = await request.json();
-      const pk = passkeysState.find(p => p.rawId === body.rawId);
+      const u = currentUser(request);
+      const pk = u?.passkeys.find(p => p.rawId === body.rawId);
       if (pk) pk.name = body.name || pk.name;
       return json({ success: true });
     } catch {
@@ -917,7 +928,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         time: foundSlot.time,
         reason: body.reason || 'Not specified',
       };
-      bookedAppointments.push(confirmation);
+      state.bookedAppointments.push(confirmation);
       return json({
         success: true,
         ...confirmation,
