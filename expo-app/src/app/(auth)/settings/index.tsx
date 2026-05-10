@@ -17,6 +17,7 @@ import {
   type StoredMyChartAccount,
   type AiProvider,
 } from "@/lib/storage/secure-store";
+import { deleteMemoryForAccount } from "@/lib/storage/database";
 import {
   getBackendSession,
   clearBackendSession,
@@ -91,6 +92,7 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             await removeMyChartAccount(account.id);
+            await deleteMemoryForAccount(account.id);
             await loadSettings();
           },
         },

@@ -71,10 +71,17 @@ const TOOLS: { name: string; description: string; args: Record<string, string> }
   { name: "request_refill", description: "Request a medication refill. Confirm with the user before submitting.", args: { instance: "optional", medication_name: "medication name (fuzzy match)" } },
 ];
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(memoryDigest?: string | null): string {
   const toolList = TOOLS.map(
     (t) => `- ${t.name}(${Object.keys(t.args).join(", ")}) — ${t.description}`,
   ).join("\n");
+  const memorySection = memoryDigest && memoryDigest.trim()
+    ? [
+        "Patient digest from prior sessions and MyChart records (use this so you don't have to refetch obvious info; verify with tools when the user asks for current data):",
+        memoryDigest.length > 4000 ? memoryDigest.slice(0, 4000) + "\n…(digest truncated)…" : memoryDigest,
+        "",
+      ].join("\n")
+    : "";
   return [
     "You are a health assistant with access to the user's MyChart medical records.",
     "Be genuinely helpful: explain the user's records in plain language, summarize information, and offer general educational guidance about conditions, medications, diet, exercise, and lifestyle when asked.",
@@ -120,6 +127,8 @@ function buildSystemPrompt(): string {
     '- Omit "instance" unless the user specifies a particular hostname.',
     "- After receiving a tool result, decide whether to call another tool or return the final answer.",
     "- Don't refuse a request just because you don't immediately know how — check the tools above first.",
+    "",
+    memorySection,
   ].join("\n");
 }
 
@@ -308,8 +317,9 @@ export async function sendMessage(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   executeLocalTool: ToolExecutor,
+  options?: { memoryDigest?: string | null },
 ): Promise<void> {
-  const system = buildSystemPrompt();
+  const system = buildSystemPrompt(options?.memoryDigest ?? null);
 
   let complete: CompleteFn;
   let model: string;

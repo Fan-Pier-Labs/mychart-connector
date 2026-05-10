@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   View,
   FlatList,
@@ -9,17 +9,21 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChatBubble, ToolCallIndicator } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
 import { LeftDrawer } from "@/components/LeftDrawer";
 import { sendMessage, type ChatMessage, type ToolCall } from "@/lib/ai/claude-client";
 import { executeLocalTool } from "@/lib/ai/tool-executor";
 import { generateChatTitle } from "@/lib/ai/title-generator";
+import { extractFactsFromTurn } from "@/lib/memory/chat-extractor";
+import { loadDigestForChat } from "@/lib/memory/builder";
 import {
   createChat,
   addMessage,
   updateChatTitle,
 } from "@/lib/storage/database";
+import { getMyChartAccounts } from "@/lib/storage/secure-store";
 
 type DisplayMessage = {
   id: string;
@@ -30,6 +34,8 @@ type DisplayMessage = {
 };
 
 export default function ChatScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ ask?: string }>();
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -37,10 +43,20 @@ export default function ChatScreen() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const titleSetRef = useRef(false);
   const flatListRef = useRef<FlatList>(null);
+  const handledAskRef = useRef<string | null>(null);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
+
+  // Insights screen deep-link: open with ?ask=<question>, auto-send once.
+  useEffect(() => {
+    const q = params.ask;
+    if (!q || handledAskRef.current === q) return;
+    handledAskRef.current = q;
+    handleSend(q);
+    router.setParams({ ask: undefined });
+  }, [params.ask]);
 
   async function handleSend(text: string) {
     let currentChatId = chatId;
@@ -74,6 +90,10 @@ export default function ChatScreen() {
       .filter((m) => !m.isStreaming)
       .map((m) => ({ role: m.role, content: m.content }));
     conversationMessages.push({ role: "user", content: text });
+
+    const accounts = await getMyChartAccounts();
+    const primaryAccountId = accounts[0]?.id;
+    const memoryDigest = primaryAccountId ? await loadDigestForChat(primaryAccountId) : null;
 
     let fullText = "";
 
@@ -115,6 +135,8 @@ export default function ChatScreen() {
               await updateChatTitle(currentChatId!, aiTitle);
             }
           }
+
+          extractFactsFromTurn(text, finalText, primaryAccountId).catch(() => {});
         },
         onError: (err) => {
           setMessages((prev) =>
@@ -128,7 +150,8 @@ export default function ChatScreen() {
           setActiveTool(null);
         },
       },
-      executeLocalTool
+      executeLocalTool,
+      { memoryDigest }
     );
   }
 

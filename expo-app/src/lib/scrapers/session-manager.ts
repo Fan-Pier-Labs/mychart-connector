@@ -65,6 +65,7 @@ import {
   type StoredMyChartAccount,
 } from "@/lib/storage/secure-store";
 import { deserializeCredential } from "../../../../scrapers/myChart/softwareAuthenticator";
+import { getMemorySummary } from "@/lib/storage/database";
 
 type SessionEntry = {
   account: StoredMyChartAccount;
@@ -77,6 +78,31 @@ const sessions = new Map<string, SessionEntry>();
 
 // Keepalive interval references
 const keepaliveTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+// Track which accounts already kicked off an initial-memory build this
+// process lifetime, so we don't fire it twice if the account reconnects.
+const initialMemoryStarted = new Set<string>();
+
+/**
+ * After a successful login, kick off the on-device memory build in the
+ * background if this account has no prior memory yet. Lazy-loaded to
+ * avoid pulling AI client + memory module into the initial bundle path.
+ */
+function maybeKickoffInitialMemory(accountId: string): void {
+  if (initialMemoryStarted.has(accountId)) return;
+  initialMemoryStarted.add(accountId);
+  (async () => {
+    try {
+      const existing = await getMemorySummary(accountId);
+      if (existing) return;
+      const { buildInitialMemory } = await import("@/lib/memory/builder");
+      await buildInitialMemory(accountId);
+    } catch (err) {
+      console.warn(`[memory] initial build failed for ${accountId}:`, (err as Error).message);
+      initialMemoryStarted.delete(accountId);
+    }
+  })();
+}
 
 export type ConnectResult = {
   state: "logged_in" | "need_2fa" | "invalid_login" | "error";
@@ -116,6 +142,7 @@ export async function connectAccount(account: StoredMyChartAccount): Promise<Con
         await updateMyChartAccount(account.id, {
           passkeyCredential: JSON.stringify(credential),
         });
+        maybeKickoffInitialMemory(account.id);
         return { state: "logged_in", accountId: account.id };
       }
 
@@ -166,6 +193,7 @@ export async function connectAccount(account: StoredMyChartAccount): Promise<Con
             status: "logged_in",
           });
           startKeepalive(account.id);
+          maybeKickoffInitialMemory(account.id);
           return { state: "logged_in", accountId: account.id };
         }
 
@@ -192,6 +220,7 @@ export async function connectAccount(account: StoredMyChartAccount): Promise<Con
       status: "logged_in",
     });
     startKeepalive(account.id);
+    maybeKickoffInitialMemory(account.id);
     return { state: "logged_in", accountId: account.id };
   } catch (err) {
     return { state: "error", accountId: account.id, error: (err as Error).message };
@@ -219,6 +248,7 @@ export async function complete2fa(
     entry.status = "logged_in";
     entry.request = result.mychartRequest;
     startKeepalive(accountId);
+    maybeKickoffInitialMemory(accountId);
     return { state: "logged_in" };
   }
 

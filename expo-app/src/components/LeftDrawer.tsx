@@ -124,6 +124,11 @@ export function LeftDrawer({ visible, onOpen, onClose, currentChatId, onNewChat 
     router.push("/(auth)/settings");
   }
 
+  function handleInsights() {
+    onClose();
+    router.push("/(auth)/insights");
+  }
+
   function handleDelete(chat: Chat) {
     Alert.alert("Delete Chat", `Delete "${chat.title}"?`, [
       { text: "Cancel", style: "cancel" },
@@ -226,6 +231,10 @@ export function LeftDrawer({ visible, onOpen, onClose, currentChatId, onNewChat 
             }
           />
 
+          <Pressable testID="drawer-insights" style={styles.settingsRow} onPress={handleInsights}>
+            <Text style={styles.settingsIcon}>✦</Text>
+            <Text style={styles.settingsText}>Insights</Text>
+          </Pressable>
           <Pressable testID="drawer-settings" style={styles.settingsRow} onPress={handleSettings}>
             <Text style={styles.settingsIcon}>⚙︎</Text>
             <Text style={styles.settingsText}>Settings</Text>

@@ -16,6 +16,8 @@ import { LeftDrawer } from "@/components/LeftDrawer";
 import { sendMessage, type ChatMessage } from "@/lib/ai/claude-client";
 import { executeLocalTool } from "@/lib/ai/tool-executor";
 import { generateChatTitle } from "@/lib/ai/title-generator";
+import { extractFactsFromTurn } from "@/lib/memory/chat-extractor";
+import { loadDigestForChat } from "@/lib/memory/builder";
 import {
   getMessages,
   getChat,
@@ -23,6 +25,7 @@ import {
   addMessage,
   type Message,
 } from "@/lib/storage/database";
+import { getMyChartAccounts } from "@/lib/storage/secure-store";
 
 type DisplayMessage = {
   id: string;
@@ -92,6 +95,10 @@ export default function ChatDetailScreen() {
       .map((m) => ({ role: m.role, content: m.content }));
     conversationMessages.push({ role: "user", content: text });
 
+    const accounts = await getMyChartAccounts();
+    const primaryAccountId = accounts[0]?.id;
+    const memoryDigest = primaryAccountId ? await loadDigestForChat(primaryAccountId) : null;
+
     let fullText = "";
 
     await sendMessage(
@@ -129,6 +136,10 @@ export default function ChatDetailScreen() {
               await updateChatTitle(chatId!, aiTitle);
             }
           }
+
+          // Best-effort: pull any new persistent facts from this turn
+          // into memory. Errors are logged inside the extractor.
+          extractFactsFromTurn(text, finalText, primaryAccountId).catch(() => {});
         },
         onError: (err) => {
           setMessages((prev) =>
@@ -142,7 +153,8 @@ export default function ChatDetailScreen() {
           setActiveTool(null);
         },
       },
-      executeLocalTool
+      executeLocalTool,
+      { memoryDigest }
     );
   }
 

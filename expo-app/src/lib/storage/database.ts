@@ -23,6 +23,35 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS memory_summary (
+      account_id TEXT PRIMARY KEY,
+      summary_md TEXT NOT NULL,
+      facts_json TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      generator_model TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS insights (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body_md TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      suggested_question TEXT,
+      source_refs TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_sync_state (
+      account_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      last_seen_at TEXT,
+      last_synced_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, category)
+    );
   `);
 }
 
@@ -120,5 +149,162 @@ export async function searchChats(query: string): Promise<Chat[]> {
      WHERE c.title LIKE ? OR m.content LIKE ?
      ORDER BY c.updated_at DESC`,
     pattern, pattern
+  );
+}
+
+// ─── Memory Summary ───
+
+export type MemorySummaryRow = {
+  account_id: string;
+  summary_md: string;
+  facts_json: string;
+  generated_at: string;
+  generator_model: string;
+};
+
+export async function getMemorySummary(accountId: string): Promise<MemorySummaryRow | null> {
+  return getDb().getFirstAsync<MemorySummaryRow>(
+    "SELECT * FROM memory_summary WHERE account_id = ?",
+    accountId,
+  );
+}
+
+export async function setMemorySummary(row: MemorySummaryRow): Promise<void> {
+  await getDb().runAsync(
+    `INSERT INTO memory_summary (account_id, summary_md, facts_json, generated_at, generator_model)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(account_id) DO UPDATE SET
+       summary_md = excluded.summary_md,
+       facts_json = excluded.facts_json,
+       generated_at = excluded.generated_at,
+       generator_model = excluded.generator_model`,
+    row.account_id, row.summary_md, row.facts_json, row.generated_at, row.generator_model,
+  );
+}
+
+export async function deleteMemoryForAccount(accountId: string): Promise<void> {
+  await getDb().runAsync("DELETE FROM memory_summary WHERE account_id = ?", accountId);
+  await getDb().runAsync("DELETE FROM insights WHERE account_id = ?", accountId);
+  await getDb().runAsync("DELETE FROM memory_sync_state WHERE account_id = ?", accountId);
+}
+
+// ─── Insights ───
+
+export type InsightRow = {
+  id: string;
+  account_id: string;
+  title: string;
+  body_md: string;
+  severity: "info" | "discuss" | "discuss_soon";
+  suggested_question: string | null;
+  source_refs: string | null;
+  status: "active" | "dismissed" | "snoozed";
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listInsights(
+  accountId: string,
+  status: InsightRow["status"] | "all" = "active",
+): Promise<InsightRow[]> {
+  if (status === "all") {
+    return getDb().getAllAsync<InsightRow>(
+      "SELECT * FROM insights WHERE account_id = ? ORDER BY created_at DESC",
+      accountId,
+    );
+  }
+  return getDb().getAllAsync<InsightRow>(
+    "SELECT * FROM insights WHERE account_id = ? AND status = ? ORDER BY created_at DESC",
+    accountId, status,
+  );
+}
+
+export type InsightInput = {
+  title: string;
+  body_md: string;
+  severity: InsightRow["severity"];
+  suggested_question?: string | null;
+  source_refs?: string | null;
+};
+
+export async function upsertInsightsForAccount(
+  accountId: string,
+  insights: InsightInput[],
+): Promise<void> {
+  // Title-based dedupe: if an insight with the same title exists for this
+  // account, update it (and reactivate if dismissed). Otherwise insert.
+  const now = new Date().toISOString();
+  for (const ins of insights) {
+    const existing = await getDb().getFirstAsync<InsightRow>(
+      "SELECT * FROM insights WHERE account_id = ? AND title = ? LIMIT 1",
+      accountId, ins.title,
+    );
+    if (existing) {
+      await getDb().runAsync(
+        `UPDATE insights SET body_md = ?, severity = ?, suggested_question = ?, source_refs = ?, status = 'active', updated_at = ?
+         WHERE id = ?`,
+        ins.body_md, ins.severity, ins.suggested_question ?? null, ins.source_refs ?? null, now, existing.id,
+      );
+    } else {
+      const id = `ins_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      await getDb().runAsync(
+        `INSERT INTO insights (id, account_id, title, body_md, severity, suggested_question, source_refs, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+        id, accountId, ins.title, ins.body_md, ins.severity, ins.suggested_question ?? null, ins.source_refs ?? null, now, now,
+      );
+    }
+  }
+}
+
+export async function setInsightStatus(
+  insightId: string,
+  status: InsightRow["status"],
+): Promise<void> {
+  const now = new Date().toISOString();
+  await getDb().runAsync(
+    "UPDATE insights SET status = ?, updated_at = ? WHERE id = ?",
+    status, now, insightId,
+  );
+}
+
+// ─── Memory Sync State ───
+
+export type SyncStateRow = {
+  account_id: string;
+  category: string;
+  last_seen_at: string | null;
+  last_synced_at: string;
+};
+
+export async function getSyncState(
+  accountId: string,
+  category: string,
+): Promise<SyncStateRow | null> {
+  return getDb().getFirstAsync<SyncStateRow>(
+    "SELECT * FROM memory_sync_state WHERE account_id = ? AND category = ?",
+    accountId, category,
+  );
+}
+
+export async function getAllSyncStates(accountId: string): Promise<SyncStateRow[]> {
+  return getDb().getAllAsync<SyncStateRow>(
+    "SELECT * FROM memory_sync_state WHERE account_id = ?",
+    accountId,
+  );
+}
+
+export async function setSyncState(
+  accountId: string,
+  category: string,
+  lastSeenAt: string | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await getDb().runAsync(
+    `INSERT INTO memory_sync_state (account_id, category, last_seen_at, last_synced_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(account_id, category) DO UPDATE SET
+       last_seen_at = excluded.last_seen_at,
+       last_synced_at = excluded.last_synced_at`,
+    accountId, category, lastSeenAt, now,
   );
 }
