@@ -243,7 +243,22 @@ maestro-cli launch / stop             # relaunch / terminate app
 maestro-cli reset-keychain            # wipe sim keychain (forgets logins/setup_complete)
 ```
 
-Env vars: `MAESTRO_APP_ID` (default `com.fanpierlabs.openrecord`), `MAESTRO_UDID` (default reads from xcrun).
+Env vars:
+- `MAESTRO_APP_ID` — bundle id (default `com.fanpierlabs.openrecord`).
+- `MAESTRO_UDID` — iOS simulator UDID. When unset, `maestro-cli` falls back to whatever it can find via xcrun, which is **non-deterministic when multiple sims are booted** — exactly what happens when multiple Claude sessions are running in parallel. Always set `MAESTRO_UDID` explicitly at the start of a session that touches the sim, so the agent only ever drives its own sim and never steps on another Claude's work.
+
+Find UDIDs with `xcrun simctl list devices booted`. Then either:
+
+```
+export MAESTRO_UDID=4C4A3949-7F06-4335-BFE4-DBBB8B183DFD  # session-wide
+maestro-cli tap "Get Started"
+```
+
+or pass per-command:
+
+```
+MAESTRO_UDID=4C4A3949-… maestro-cli tap "Get Started"
+```
 
 **Every interactive element in the Expo app MUST have a testID so `maestro-cli tap-id` works deterministically.**
 
