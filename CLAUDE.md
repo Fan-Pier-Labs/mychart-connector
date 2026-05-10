@@ -217,6 +217,22 @@ You maintain persistent memory in markdown files at `claude-memory/` in the repo
 - Keep MEMORY.md concise — use separate files for detailed notes
 - Organize by topic, not chronologically
 
+## iOS Simulator Debugging & UI Automation
+
+Use **Maestro** (`maestro` CLI) to drive the iOS simulator and the Expo app. Do NOT cobble together `cliclick` + AppleScript + pixel-coordinate math — that path is brittle and breaks on every window move or sim resize.
+
+- Install: `brew install maestro` (one-time, project-wide).
+- Inspect a running sim interactively: `maestro studio` opens a UI inspector where you can read every element's accessibility id/label and try taps live.
+- Drive a flow from a YAML script: `maestro test flow.yaml` — each step is a single tap/text/scroll operation that targets elements by `id` or `text`.
+- Capture state during a flow with `takeScreenshot`. Use this when you want to verify a screen rendered as expected.
+
+**Every interactive element in the Expo app MUST have an accessibility identifier so Maestro can target it deterministically.**
+
+- React Native: set `accessibilityLabel` AND `testID` on every `Pressable`, `Button`, `TextInput`, `Switch`, and tappable `View`. `testID` is the primary handle for Maestro; `accessibilityLabel` is what VoiceOver reads (also a fallback for Maestro by text match).
+- Use a stable, kebab-case `testID` that describes what the element does, not where it sits. Examples: `get-started-button`, `onboarding-continue`, `skill-bill_itemization`, `chat-input`, `send-message`.
+- For lists of items (chats, insights, skills), include the row id in the `testID` (e.g. `chat-row-${chatId}`) so flows can target a specific row.
+- When you add a new screen or button as part of a feature, add the `testID` in the same diff. PRs that introduce new untargetable UI should be rejected at review.
+
 ## Rules
 
 - **NEVER modify or delete anything from the macOS Keychain or the browser keychain.** Read-only access is OK.

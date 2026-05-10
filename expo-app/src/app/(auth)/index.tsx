@@ -202,6 +202,8 @@ export default function ChatScreen() {
             <Text style={styles.emptySubtitle}>Ask anything about your health data</Text>
             <Pressable
               testID="run-skill-button"
+              accessibilityLabel="Run a skill"
+              accessibilityRole="button"
               style={styles.runSkillButton}
               onPress={() => setShowSkills(true)}
             >

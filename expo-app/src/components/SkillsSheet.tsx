@@ -37,6 +37,9 @@ export function SkillsSheet({ visible, onClose, onPick }: Props) {
                 <Pressable
                   key={skill.id}
                   testID={`skill-${skill.id}`}
+                  accessibilityLabel={skill.title}
+                  accessibilityHint={skill.description}
+                  accessibilityRole="button"
                   style={styles.row}
                   onPress={() => {
                     onPick(skill);
@@ -53,7 +56,13 @@ export function SkillsSheet({ visible, onClose, onPick }: Props) {
                 </Pressable>
               ))}
             </ScrollView>
-            <Pressable style={styles.cancel} onPress={onClose}>
+            <Pressable
+              testID="skills-sheet-cancel"
+              accessibilityLabel="Cancel skills sheet"
+              accessibilityRole="button"
+              style={styles.cancel}
+              onPress={onClose}
+            >
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
           </SafeAreaView>
