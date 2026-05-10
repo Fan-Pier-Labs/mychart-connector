@@ -157,8 +157,22 @@ function base64ToBuffer(b64: string): Buffer {
 /**
  * Convert a Buffer to standard base64 string.
  */
-function bufferToBase64(buf: Buffer | Uint8Array): string {
-  return Buffer.from(buf).toString('base64');
+function bufferToBase64(buf: Buffer | Uint8Array | ArrayBuffer): string {
+  return Buffer.from(buf as ArrayBuffer).toString('base64');
+}
+
+/**
+ * Coerce whatever the runtime crypto returned (Node Buffer, Hermes
+ * ArrayBuffer, or a TypedArray view) into a real Buffer. react-native-quick-crypto
+ * hands back ArrayBuffers from generateKeyPairSync; the rest of this file
+ * assumes Buffer-style byte indexing (`b[i]`) and `subarray`, so we normalize.
+ */
+function toBuffer(input: Buffer | ArrayBuffer | Uint8Array): Buffer {
+  if (Buffer.isBuffer(input)) return input;
+  if (ArrayBuffer.isView(input)) {
+    return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  }
+  return Buffer.from(input);
 }
 
 /**
@@ -189,18 +203,25 @@ function buildCosePublicKey(publicKeyDer: Buffer): Buffer {
 
 /**
  * Extract the raw uncompressed public key (65 bytes: 04 || x || y) from a DER-encoded SPKI public key.
+ *
+ * Accepts any byte container (Buffer, Uint8Array, ArrayBuffer) because
+ * react-native-quick-crypto returns ArrayBuffers from generateKeyPairSync,
+ * which don't support `[i]` byte indexing.
  */
-function extractRawPublicKey(spkiDer: Buffer): Buffer {
+function extractRawPublicKey(spkiDer: Buffer | ArrayBuffer | Uint8Array): Buffer {
+  const bytes = toBuffer(spkiDer);
   // The uncompressed point is at the end of the SPKI structure.
   // For P-256, it's always 65 bytes (0x04 + 32 bytes x + 32 bytes y).
   // Find the 0x04 byte that starts the uncompressed point.
   // In SPKI format, it's preceded by a BIT STRING tag with a 0x00 unused-bits byte.
-  for (let i = spkiDer.length - 65; i >= 0; i--) {
-    if (spkiDer[i] === 0x04 && spkiDer.length - i >= 65) {
-      return spkiDer.subarray(i, i + 65);
+  for (let i = bytes.length - 65; i >= 0; i--) {
+    if (bytes[i] === 0x04 && bytes.length - i >= 65) {
+      return Buffer.from(bytes.subarray(i, i + 65));
     }
   }
-  throw new Error('Could not extract raw public key from SPKI DER');
+  throw new Error(
+    `Could not extract raw public key from SPKI DER (length=${bytes.length})`,
+  );
 }
 
 /**
@@ -293,12 +314,16 @@ export function createCredential(
   origin: string,
   indexForDefaultName: number = 0,
 ): RegistrationResult {
-  // Generate ECDSA P-256 key pair
+  // Generate ECDSA P-256 key pair. On Node these come back as Buffers;
+  // on Hermes / react-native-quick-crypto they come back as ArrayBuffers.
+  // Normalize once so the rest of the code can rely on Buffer semantics.
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
     namedCurve: 'P-256',
     publicKeyEncoding: { type: 'spki', format: 'der' },
     privateKeyEncoding: { type: 'pkcs8', format: 'der' },
   });
+  const publicKeyBuf = toBuffer(publicKey as unknown as Buffer | ArrayBuffer);
+  const privateKeyBuf = toBuffer(privateKey as unknown as Buffer | ArrayBuffer);
 
   // Generate a random credential ID (32 bytes)
   const credentialId = crypto.randomBytes(32);
@@ -310,7 +335,7 @@ export function createCredential(
   const clientDataJSON = buildClientDataJSON('webauthn.create', options.challenge, origin);
 
   // Build authenticator data with attested credential data
-  const authData = buildAuthDataForCreate(rpId, credentialId, publicKey as unknown as Buffer, 0);
+  const authData = buildAuthDataForCreate(rpId, credentialId, publicKeyBuf, 0);
 
   // Build attestation object (CBOR-encoded) with "none" format
   const attestationObject = cborEncodeAttestationObject(authData);
@@ -324,7 +349,7 @@ export function createCredential(
     },
     credential: {
       credentialId: bufferToBase64(credentialId),
-      privateKey: bufferToBase64(privateKey as unknown as Buffer),
+      privateKey: bufferToBase64(privateKeyBuf),
       rpId,
       userHandle: options.user.id,
       signCount: 0,
