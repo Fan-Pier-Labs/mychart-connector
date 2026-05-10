@@ -13,6 +13,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChatBubble, ToolCallIndicator } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
 import { LeftDrawer } from "@/components/LeftDrawer";
+import { SkillsSheet } from "@/components/SkillsSheet";
+import type { Skill } from "@/lib/skills/types";
 import { sendMessage, type ChatMessage, type ToolCall } from "@/lib/ai/claude-client";
 import { executeLocalTool } from "@/lib/ai/tool-executor";
 import { generateChatTitle } from "@/lib/ai/title-generator";
@@ -41,9 +43,13 @@ export default function ChatScreen() {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [chatId, setChatId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
   const titleSetRef = useRef(false);
   const flatListRef = useRef<FlatList>(null);
   const handledAskRef = useRef<string | null>(null);
+  // Once a skill is launched, its playbook stays in the system prompt
+  // for the rest of the chat. Cleared by handleNewChat.
+  const skillAdditionRef = useRef<string | null>(null);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -151,7 +157,7 @@ export default function ChatScreen() {
         },
       },
       executeLocalTool,
-      { memoryDigest }
+      { memoryDigest, skillAddition: skillAdditionRef.current }
     );
   }
 
@@ -160,6 +166,12 @@ export default function ChatScreen() {
     setChatId(null);
     setActiveTool(null);
     titleSetRef.current = false;
+    skillAdditionRef.current = null;
+  }
+
+  function handlePickSkill(skill: Skill) {
+    skillAdditionRef.current = skill.playbook;
+    handleSend(skill.kickoffMessage);
   }
 
   return (
@@ -188,6 +200,15 @@ export default function ChatScreen() {
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>OpenRecord</Text>
             <Text style={styles.emptySubtitle}>Ask anything about your health data</Text>
+            <Pressable
+              testID="run-skill-button"
+              accessibilityLabel="Run a skill"
+              accessibilityRole="button"
+              style={styles.runSkillButton}
+              onPress={() => setShowSkills(true)}
+            >
+              <Text style={styles.runSkillText}>Run a skill ›</Text>
+            </Pressable>
           </View>
         ) : (
           <FlatList
@@ -217,6 +238,12 @@ export default function ChatScreen() {
         onClose={() => setDrawerOpen(false)}
         currentChatId={chatId}
         onNewChat={handleNewChat}
+      />
+
+      <SkillsSheet
+        visible={showSkills}
+        onClose={() => setShowSkills(false)}
+        onPick={handlePickSkill}
       />
     </SafeAreaView>
   );
@@ -272,6 +299,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     textAlign: "center",
+  },
+  runSkillButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#000",
+  },
+  runSkillText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#000",
   },
   messageList: {
     paddingVertical: 12,

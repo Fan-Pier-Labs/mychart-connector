@@ -71,7 +71,10 @@ const TOOLS: { name: string; description: string; args: Record<string, string> }
   { name: "request_refill", description: "Request a medication refill. Confirm with the user before submitting.", args: { instance: "optional", medication_name: "medication name (fuzzy match)" } },
 ];
 
-function buildSystemPrompt(memoryDigest?: string | null): string {
+function buildSystemPrompt(
+  memoryDigest?: string | null,
+  skillAddition?: string | null,
+): string {
   const toolList = TOOLS.map(
     (t) => `- ${t.name}(${Object.keys(t.args).join(", ")}) — ${t.description}`,
   ).join("\n");
@@ -79,6 +82,13 @@ function buildSystemPrompt(memoryDigest?: string | null): string {
     ? [
         "Patient digest from prior sessions and MyChart records (use this so you don't have to refetch obvious info; verify with tools when the user asks for current data):",
         memoryDigest.length > 4000 ? memoryDigest.slice(0, 4000) + "\n…(digest truncated)…" : memoryDigest,
+        "",
+      ].join("\n")
+    : "";
+  const skillSection = skillAddition && skillAddition.trim()
+    ? [
+        "The user invoked a specific skill. Follow this playbook for the rest of the conversation — it overrides the generic guidance above when there's a conflict, but the JSON output protocol and write-confirmation rules still apply:",
+        skillAddition,
         "",
       ].join("\n")
     : "";
@@ -129,6 +139,7 @@ function buildSystemPrompt(memoryDigest?: string | null): string {
     "- Don't refuse a request just because you don't immediately know how — check the tools above first.",
     "",
     memorySection,
+    skillSection,
   ].join("\n");
 }
 
@@ -317,9 +328,12 @@ export async function sendMessage(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   executeLocalTool: ToolExecutor,
-  options?: { memoryDigest?: string | null },
+  options?: { memoryDigest?: string | null; skillAddition?: string | null },
 ): Promise<void> {
-  const system = buildSystemPrompt(options?.memoryDigest ?? null);
+  const system = buildSystemPrompt(
+    options?.memoryDigest ?? null,
+    options?.skillAddition ?? null,
+  );
 
   let complete: CompleteFn;
   let model: string;
