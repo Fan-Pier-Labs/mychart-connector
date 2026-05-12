@@ -21,13 +21,10 @@ export async function upcomingVisits(myChartRequest: MyChartRequest) {
     "headers": {
       __requestverificationtoken: requestVerificationToken
     },
-    "body": '',
     "method": "POST",
   })
 
   const json = await result.json() as VisitListContainer
-
-  console.log(json)
 
   return json
 }
@@ -46,19 +43,27 @@ export async function pastVisits(myChartRequest: MyChartRequest, oldestRenderedD
   }
 
 
+  // Match LoadUpcoming's request shape: no body, no Content-Type header.
+  // The original implementation used application/x-www-form-urlencoded + body
+  // 'serializedIndex=', which trips F5 Volterra WAF rules on some MyChart
+  // deployments. The WAF returns 200 OK with a text/html "Request Rejected"
+  // page (served by 'volt-adc'), which makes the JSON parse throw
+  // 'Unexpected token <' rather than surface as an auth failure.
+  //
+  // Important: omit body entirely (not `body: ''`). On Node's undici fetch,
+  // an empty-string body still triggers an auto-added
+  // 'Content-Type: text/plain;charset=UTF-8'. Omitting body sends no
+  // Content-Type at all on both Bun and Node, which is the shape the WAF
+  // accepts and matches what upcomingVisits has always done.
   const result = await myChartRequest.makeRequest({
     path: '/Visits/VisitsList/LoadPast?loadpast=1&searchString=&oldestRenderedDate=' + oldestRenderedDate.toISOString() + '&ComponentNumber=7&noCache=' + Math.random(),
     "headers": {
       __requestverificationtoken: requestVerificationToken,
-      'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
     },
-    "body": 'serializedIndex=',
     "method": "POST",
   })
 
   const json = await result.json() as PastVisitsContainer
-
-  console.log(json)
 
   return json
 }
