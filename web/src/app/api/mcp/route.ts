@@ -3,8 +3,15 @@ import { createMcpServer } from '@/lib/mcp/server';
 import { validateApiKey } from '@/lib/mcp/api-keys';
 import { sendTelemetryEvent } from '../../../../../shared/telemetry';
 
-async function authenticateRequest(url: URL): Promise<{ userId: string } | null> {
-  const key = url.searchParams.get('key');
+async function authenticateRequest(req: Request): Promise<{ userId: string } | null> {
+  const url = new URL(req.url);
+  let key = url.searchParams.get('key');
+  if (!key) {
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      key = authHeader.slice(7).trim();
+    }
+  }
   if (!key) return null;
   return validateApiKey(key);
 }
@@ -13,10 +20,12 @@ export async function POST(req: Request) {
   sendTelemetryEvent('api_mcp_request');
   const url = new URL(req.url);
 
-  const auth = await authenticateRequest(url);
+  const auth = await authenticateRequest(req);
   if (!auth) {
-    console.log(`[mcp-route] POST: auth failed (key=${url.searchParams.has('key') ? 'present' : 'missing'})`);
-    return new Response(JSON.stringify({ error: 'Missing or invalid API key. Use ?key={apiKey}' }), {
+    const hasKey = url.searchParams.has('key');
+    const hasBearer = !!req.headers.get('authorization') || !!req.headers.get('Authorization');
+    console.log(`[mcp-route] POST: auth failed (queryKey=${hasKey} bearer=${hasBearer})`);
+    return new Response(JSON.stringify({ error: 'Missing or invalid API key. Use ?key={apiKey} or Authorization: Bearer <key>' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
