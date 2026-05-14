@@ -97,6 +97,29 @@ export function createDemoMcpServer(): McpServer {
     }
   );
 
+  // Clinical notes attached to a past visit
+  reg('get_visit_notes',
+    async (_args: { csn: string; instance?: string }): Promise<CallToolResult> => {
+      return jsonResult(demo.demoVisitNotes);
+    }
+  );
+
+  // Rendered HTML content of a single clinical note (looked up by hno_id)
+  reg('get_note_content',
+    async (args: { csn: string; lrp_id: string; hno_id: string; hno_dat: string; instance?: string }): Promise<CallToolResult> => {
+      const content = demo.demoNoteContentByHnoId[args.hno_id]
+        ?? Object.values(demo.demoNoteContentByHnoId)[0];
+      return jsonResult(content);
+    }
+  );
+
+  // After Visit Summary HTML
+  reg('get_visit_avs',
+    async (_args: { csn: string; instance?: string }): Promise<CallToolResult> => {
+      return jsonResult(demo.demoVisitAVS);
+    }
+  );
+
   // Lab results — paginated
   reg('get_lab_results',
     async (args: { instance?: string; limit?: number; offset?: number }): Promise<CallToolResult> => {
