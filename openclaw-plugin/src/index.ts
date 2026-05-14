@@ -32,6 +32,7 @@ import { getAllergies } from '../../scrapers/myChart/allergies';
 import { getHealthIssues } from '../../scrapers/myChart/healthIssues';
 import { getVitals } from '../../scrapers/myChart/vitals';
 import { upcomingVisits, pastVisits } from '../../scrapers/myChart/visits/visits';
+import { getVisitNotes, getNoteContent, getVisitAVS } from '../../scrapers/myChart/notes/notes';
 import { listLabResults, getImagingResults } from '../../scrapers/myChart/labs_and_procedure_results/labResults';
 import { listConversations } from '../../scrapers/myChart/messages/conversations';
 import { getConversationMessages } from '../../scrapers/myChart/messages/messageThreads';
@@ -510,6 +511,24 @@ export default function register(api: any) {
       oldest.setFullYear(oldest.getFullYear() - yearsBack);
       return pastVisits(req, oldest);
     }, { type: 'object', properties: { years_back: { type: 'number', description: 'Years to look back (default 2)' } }, required: [] }),
+    makeTool('mychart_get_visit_notes', 'Visit Notes', 'List clinical notes attached to a past visit (operative, anesthesia, progress, etc.). Returns each note\'s hnoId/hnoDat plus shared lrpId for use with mychart_get_note_content.', async (req, params) => {
+      const csn = params?.csn as string;
+      if (!csn) throw new Error('csn is required');
+      return getVisitNotes(req, csn);
+    }, { type: 'object', properties: { csn: { type: 'string', description: 'Visit CSN (encounter ID) from mychart_get_past_visits' } }, required: ['csn'] }),
+    makeTool('mychart_get_note_content', 'Note Content', 'Fetch the rendered HTML content of a single clinical note. Requires csn, lrp_id, hno_id, hno_dat from mychart_get_visit_notes.', async (req, params) => {
+      const csn = params?.csn as string;
+      const lrpId = params?.lrp_id as string;
+      const hnoId = params?.hno_id as string;
+      const hnoDat = params?.hno_dat as string;
+      if (!csn || !lrpId || !hnoId || !hnoDat) throw new Error('csn, lrp_id, hno_id, and hno_dat are all required');
+      return getNoteContent(req, { csn, lrpId, hnoId, hnoDat });
+    }, { type: 'object', properties: { csn: { type: 'string', description: 'Visit CSN' }, lrp_id: { type: 'string', description: 'Linked report pointer ID (shared by all notes in the visit)' }, hno_id: { type: 'string', description: 'Specific note ID' }, hno_dat: { type: 'string', description: 'Note date token' } }, required: ['csn', 'lrp_id', 'hno_id', 'hno_dat'] }),
+    makeTool('mychart_get_visit_avs', 'After Visit Summary', 'Fetch the After Visit Summary (AVS) HTML for a past visit. Returns the full discharge/visit summary with instructions, medications, and follow-up info.', async (req, params) => {
+      const csn = params?.csn as string;
+      if (!csn) throw new Error('csn is required');
+      return getVisitAVS(req, csn);
+    }, { type: 'object', properties: { csn: { type: 'string', description: 'Visit CSN from mychart_get_past_visits' } }, required: ['csn'] }),
     makeTool('mychart_get_lab_results', 'Lab Results', 'Get lab results and test details', (req) => listLabResults(req)),
     makeTool('mychart_get_imaging_results', 'Imaging Results', 'Get imaging results (X-ray, MRI, CT, etc.)', (req) => getImagingResults(req)),
 
