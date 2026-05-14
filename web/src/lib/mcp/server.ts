@@ -24,6 +24,7 @@ import { getPreventiveCare } from '../mychart/preventiveCare';
 import { getReferrals } from '../mychart/referrals';
 import { getMedicalHistory } from '../mychart/medicalHistory';
 import { getLetters } from '../mychart/letters';
+import { getVisitNotes, getNoteContent, getVisitAVS } from '../mychart/notes/notes';
 import { getVitals } from '../mychart/vitals';
 import { getEmergencyContacts, addEmergencyContact, updateEmergencyContact, removeEmergencyContact } from '../mychart/emergencyContacts';
 import { getDocuments } from '../mychart/documents';
@@ -369,6 +370,68 @@ export function createMcpServer(userId: string): McpServer {
         const error = err as Error;
         console.error(`[mcp] get_past_visits: error -`, error.message, error.stack);
         return errorResult(`Error fetching past visits: ${error.message}`);
+      }
+    }
+  );
+
+  // List clinical notes attached to a past visit
+  reg('get_visit_notes',
+    async (args: { csn: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_visit_notes' });
+      // Don't log the CSN - it's a clinical encounter identifier.
+      console.log(`[mcp] Tool call: get_visit_notes (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await getVisitNotes(result.mychartRequest, args.csn);
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_visit_notes: error -`, error.message, error.stack);
+        return errorResult(`Error fetching visit notes: ${error.message}`);
+      }
+    }
+  );
+
+  // Fetch the rendered HTML content of a single clinical note
+  reg('get_note_content',
+    async (args: { csn: string; lrp_id: string; hno_id: string; hno_dat: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_note_content' });
+      // Don't log the CSN or HNO ID - they're clinical encounter/note identifiers.
+      console.log(`[mcp] Tool call: get_note_content (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await getNoteContent(result.mychartRequest, {
+          csn: args.csn,
+          lrpId: args.lrp_id,
+          hnoId: args.hno_id,
+          hnoDat: args.hno_dat,
+        });
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_note_content: error -`, error.message, error.stack);
+        return errorResult(`Error fetching note content: ${error.message}`);
+      }
+    }
+  );
+
+  // Fetch the After Visit Summary (AVS) HTML for a past visit
+  reg('get_visit_avs',
+    async (args: { csn: string; instance?: string }): Promise<CallToolResult> => {
+      sendTelemetryEvent('mcp_tool_called', { tool_name: 'get_visit_avs' });
+      // Don't log the CSN - it's a clinical encounter identifier.
+      console.log(`[mcp] Tool call: get_visit_avs (user=${userId}, instance=${args.instance || 'auto'})`);
+      try {
+        const result = await resolveRequest(userId, args.instance);
+        if ('error' in result) return errorResult(result.error);
+        const data = await getVisitAVS(result.mychartRequest, args.csn);
+        return jsonResult(data);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`[mcp] get_visit_avs: error -`, error.message, error.stack);
+        return errorResult(`Error fetching visit AVS: ${error.message}`);
       }
     }
   );

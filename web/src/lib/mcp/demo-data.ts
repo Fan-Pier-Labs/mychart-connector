@@ -315,6 +315,56 @@ export const demoMedicalHistory = {
   ],
 };
 
+export const demoVisitNotes = {
+  csn: 'WP-demo-csn-er-visit-2025-09-14',
+  lrpId: 'WP-demo-lrp-er-visit-2025-09-14',
+  depPhoneNumber: '555-555-0142',
+  isAtLeastOneNoteSensitive: false,
+  notes: [
+    {
+      hnoId: 'WP-demo-hno-ed-attending',
+      hnoDat: 'WP-demo-hnodat-1',
+      displayName: 'ED Attending Note',
+      iso: '2025-09-14T22:18:00-04:00',
+      isAddendum: false,
+      isNoteSensitive: false,
+      providerName: 'Nick Riviera, MD',
+      providerMagicId: 'WP-demo-mid-riviera',
+    },
+    {
+      hnoId: 'WP-demo-hno-triage',
+      hnoDat: 'WP-demo-hnodat-2',
+      displayName: 'ED Triage Note',
+      iso: '2025-09-14T21:42:00-04:00',
+      isAddendum: false,
+      isNoteSensitive: false,
+      providerName: 'Selma Bouvier, RN',
+      providerMagicId: 'WP-demo-mid-bouvier',
+    },
+  ],
+};
+
+/**
+ * Per-note demo content keyed by hnoId. The demo server picks the right body
+ * for the requested note so callers see different content for different notes.
+ * Falls back to the first entry for unknown hnoIds.
+ */
+export const demoNoteContentByHnoId: Record<string, { contentHtml: string; contentCss: string }> = {
+  'WP-demo-hno-ed-attending': {
+    contentHtml: '<div class="fmtConv1"><h3>ED Attending Note</h3><p><strong>Chief Complaint:</strong> Chest pain after dinner.</p><p><strong>HPI:</strong> 38yo male presents with substernal chest discomfort beginning ~45 minutes after large meal (12 donuts, beer). Pain reproducible with palpation. No diaphoresis, no radiation, no shortness of breath.</p><p><strong>Workup:</strong> EKG sinus rhythm, no ST changes. Troponin x2 negative.</p><p><strong>Assessment:</strong> Musculoskeletal chest pain + GERD exacerbation.</p><p><strong>Plan:</strong> Discharge with omeprazole 20mg daily x14 days. Follow up with PCP. Counseled on portion sizes.</p></div>',
+    contentCss: '.fmtConv1 { font-family: Arial, sans-serif; }',
+  },
+  'WP-demo-hno-triage': {
+    contentHtml: '<div class="fmtConv1"><h3>ED Triage Note</h3><p><strong>Vitals on arrival:</strong> BP 152/94, HR 102, RR 18, SpO2 98% RA, Temp 98.4°F.</p><p><strong>Triage:</strong> Patient arrived ambulatory at 21:42, complaining of "crushing" mid-chest pain x 30 minutes. Pain 6/10, worse with deep breath. Denies SOB, nausea, diaphoresis. Last meal: dozen donuts + beer 1 hour prior.</p><p><strong>ESI Level:</strong> 2 (high acuity, possible cardiac).</p><p>— Selma Bouvier, RN</p></div>',
+    contentCss: '.fmtConv1 { font-family: Arial, sans-serif; }',
+  },
+};
+
+export const demoVisitAVS = {
+  contentHtml: '<div class="avs"><header><h2>After Visit Summary</h2><p>Springfield General Hospital — Emergency Department</p><p>Visit Date: September 14, 2025</p></header><section><h3>Reason for Visit</h3><p>Chest pain — ruled out cardiac event.</p></section><section><h3>Diagnoses</h3><ul><li>GERD exacerbation</li><li>Musculoskeletal chest pain</li></ul></section><section><h3>Discharge Instructions</h3><ul><li>Take omeprazole 20mg by mouth daily for 14 days.</li><li>Avoid lying down for 2 hours after eating.</li><li>Reduce portion sizes; consider smaller, more frequent meals.</li><li>Return to ER for: worsening chest pain, shortness of breath, sweating, pain radiating to arm or jaw.</li></ul></section><section><h3>Follow-up</h3><p>Schedule a visit with Dr. Julius Hibbert (Internal Medicine) within 1-2 weeks.</p></section></div>',
+  contentCss: '.avs { font-family: Georgia, serif; max-width: 720px; }',
+};
+
 export const demoLetters = [
   {
     title: 'After Visit Summary — Annual Physical',

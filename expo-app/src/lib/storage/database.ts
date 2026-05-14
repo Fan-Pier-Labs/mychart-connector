@@ -24,6 +24,22 @@ export async function initDatabase(): Promise<void> {
       FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
     );
 
+    DROP TABLE IF EXISTS alerts;
+    CREATE TABLE alerts (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      cta_label TEXT NOT NULL,
+      uses_ai INTEGER NOT NULL DEFAULT 0,
+      action_kind TEXT NOT NULL,
+      action_payload TEXT NOT NULL DEFAULT '{}',
+      dedup_key TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      dismissed_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS memory_summary (
       account_id TEXT PRIMARY KEY,
       summary_md TEXT NOT NULL,
@@ -53,6 +69,7 @@ export async function initDatabase(): Promise<void> {
       PRIMARY KEY (account_id, category)
     );
   `);
+
 }
 
 function getDb(): SQLite.SQLiteDatabase {
@@ -139,6 +156,87 @@ export async function getMessages(chatId: string): Promise<Message[]> {
     "SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at ASC",
     chatId
   );
+}
+
+// ─── Alerts ───
+
+export type AlertType = "bill" | "refill" | "message" | "lab" | "appointment";
+export type AlertActionKind = "open_url" | "request_refill" | "ai_chat";
+
+export type Alert = {
+  id: string;
+  type: AlertType;
+  title: string;
+  description: string;
+  metadata: string;
+  cta_label: string;
+  uses_ai: number;
+  action_kind: AlertActionKind;
+  action_payload: string;
+  dedup_key: string;
+  created_at: string;
+  dismissed_at: string | null;
+};
+
+export type AlertInput = {
+  type: AlertType;
+  title: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  cta_label: string;
+  uses_ai: boolean;
+  action_kind: AlertActionKind;
+  action_payload: Record<string, unknown>;
+  dedup_key: string;
+};
+
+export async function getActiveAlerts(): Promise<Alert[]> {
+  return getDb().getAllAsync<Alert>(
+    "SELECT * FROM alerts WHERE dismissed_at IS NULL ORDER BY created_at DESC"
+  );
+}
+
+export async function dismissAlert(id: string): Promise<void> {
+  const now = new Date().toISOString();
+  await getDb().runAsync(
+    "UPDATE alerts SET dismissed_at = ? WHERE id = ?",
+    now, id
+  );
+}
+
+export async function upsertAlerts(inputs: AlertInput[]): Promise<{
+  added: number;
+  skipped: number;
+}> {
+  let added = 0;
+  let skipped = 0;
+  for (const a of inputs) {
+    const existing = await getDb().getFirstAsync<{ id: string }>(
+      "SELECT id FROM alerts WHERE dedup_key = ?",
+      a.dedup_key,
+    );
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+    const id = `alert_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    await getDb().runAsync(
+      `INSERT INTO alerts (id, type, title, description, metadata, cta_label, uses_ai, action_kind, action_payload, dedup_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      a.type,
+      a.title,
+      a.description,
+      JSON.stringify(a.metadata),
+      a.cta_label,
+      a.uses_ai ? 1 : 0,
+      a.action_kind,
+      JSON.stringify(a.action_payload),
+      a.dedup_key,
+    );
+    added += 1;
+  }
+  return { added, skipped };
 }
 
 export async function searchChats(query: string): Promise<Chat[]> {
