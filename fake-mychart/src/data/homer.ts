@@ -1029,10 +1029,14 @@ export const billingPayments = {
 };
 
 // ─── Letters ────────────────────────────────────────────────────────
+// Intentionally NOT in date order so getLetters can prove its newest-first
+// sort actually fires. The empty-dateISO entry exercises the
+// MISSING_DATE-sorts-last contract in scrapers/myChart/util.ts.
 export const letters = {
   letters: [
-    { dateISO: '2026-01-10T16:00:00Z', reason: 'After Visit Summary - Annual Physical', viewed: false, empId: 'PROV-HIBBERT', hnoId: 'LTR-001', csn: 'CSN-HOMER-002' },
     { dateISO: '2025-11-20T16:00:00Z', reason: 'After Visit Summary - ER Visit', viewed: true, empId: 'PROV-NICK', hnoId: 'LTR-002', csn: 'CSN-HOMER-003' },
+    { dateISO: '', reason: 'Sector 7G Safety Notice', viewed: false, empId: 'PROV-HIBBERT', hnoId: 'LTR-003', csn: 'CSN-HOMER-004' },
+    { dateISO: '2026-01-10T16:00:00Z', reason: 'After Visit Summary - Annual Physical', viewed: false, empId: 'PROV-HIBBERT', hnoId: 'LTR-001', csn: 'CSN-HOMER-002' },
   ],
   users: {
     'PROV-HIBBERT': { name: 'Julius Hibbert, MD', photoUrl: '', empId: 'PROV-HIBBERT' },
@@ -1046,6 +1050,9 @@ export const letterDetails: Record<string, { bodyHTML: string }> = {
   },
   'LTR-002': {
     bodyHTML: '<h2>After Visit Summary</h2><p>Patient: Homer Simpson</p><p>Date: November 20, 2025</p><p>Provider: Dr. Nick Riviera</p><p>Reason: ER Visit - Donut Incident</p><p>Assessment: Patient presented with abdominal distress after consuming 48 donuts in a single sitting.</p><p>Plan: Gastric lavage performed. Patient discharged with instructions to limit donut intake. Follow up with PCP.</p>',
+  },
+  'LTR-003': {
+    bodyHTML: '<h2>Sector 7G Safety Notice</h2><p>Reminder: do not consume donuts found near the reactor core. Report any glowing pastries to the safety inspector immediately.</p>',
   },
 };
 

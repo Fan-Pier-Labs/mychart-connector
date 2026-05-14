@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    // tsup's DTS step hard-codes `baseUrl: "."` (see node_modules/tsup/dist/rollup.js),
+    // which trips TS 6's deprecation error. Remove this once tsup ships a fix.
+    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",

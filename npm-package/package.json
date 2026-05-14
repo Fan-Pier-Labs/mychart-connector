@@ -51,17 +51,17 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "cheerio": "^1.0.0",
+    "cheerio": "^1.2.0",
     "date-fns": "^4.1.0",
     "fzstd": "^0.1.1",
     "mkdirp": "^3.0.1",
     "sharp": "^0.34.5",
     "totp-generator": "^2.0.1",
-    "tough-cookie": "^5.1.2"
+    "tough-cookie": "^6.0.1"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.8.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.6.0"
+    "typescript": "^6.0.3"
   }
 }

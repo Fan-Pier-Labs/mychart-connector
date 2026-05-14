@@ -236,9 +236,9 @@ export function loginPage(): string {
     <div class="subtitle">Springfield General Hospital</div>
     <div class="demo-creds">
       <div class="demo-title">Demo Credentials</div>
-      Username: <code>homer</code><br>
-      Password: <code>donuts123</code>
-      <div class="demo-note">This is a fake MyChart server with fictional Homer Simpson data for testing and development.</div>
+      Username: <code>homer</code> &nbsp; Password: <code>donuts123</code><br>
+      Username: <code>marge</code> &nbsp; Password: <code>donuts123</code> &nbsp; 2FA: <code>123456</code>
+      <div class="demo-note">This is a fake MyChart server with fictional Simpson family data for testing and development. The <code>marge</code> account has TOTP enabled; use the 2FA code above. Visit <code>/reset</code> to wipe all in-memory state (sessions, sent messages, booked appointments, etc.) back to the seed.</div>
     </div>
     <div class="error" id="errorMsg">Invalid username or password.</div>
     <form autocomplete="off" method="post" action="#" id="loginForm">

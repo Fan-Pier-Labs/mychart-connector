@@ -25,7 +25,6 @@
     "strictNullChecks": true,
     "noUnusedParameters": true,
     "noUnusedLocals": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["web/src/*"],
       "@/components/*": ["web/src/components/*"],

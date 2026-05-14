@@ -4,6 +4,6 @@
   "private": true,
   "dependencies": {
     "cheerio": "^1.0.0",
-    "googleapis": "^144.0.0"
+    "googleapis": "^171.4.0"
   }
 }

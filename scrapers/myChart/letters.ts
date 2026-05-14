@@ -1,5 +1,5 @@
 import { MyChartRequest } from "./myChartRequest";
-import { getRequestVerificationTokenFromBody } from "./util";
+import { getRequestVerificationTokenFromBody, parseMyChartDate, sortNewestFirstByDate } from "./util";
 
 export type Letter = {
   dateISO: string;
@@ -55,7 +55,7 @@ export async function getLetters(mychartRequest: MyChartRequest): Promise<Letter
 
   const users = json.users || {};
 
-  return (json.letters || []).map((letter: LetterResponse) => {
+  const letters: Letter[] = (json.letters || []).map((letter: LetterResponse) => {
     const provider = users[letter.empId || ''] || {};
     return {
       dateISO: letter.dateISO || '',
@@ -67,6 +67,9 @@ export async function getLetters(mychartRequest: MyChartRequest): Promise<Letter
       csn: letter.csn || '',
     };
   });
+
+  // Sort newest-first by dateISO. Letters with missing/unparseable dates go last.
+  return sortNewestFirstByDate(letters, l => parseMyChartDate(l.dateISO));
 }
 
 export type LetterDetailsResponse = {
