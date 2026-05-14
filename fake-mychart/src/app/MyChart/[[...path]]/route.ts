@@ -116,7 +116,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
     const termsRedirect = requireTermsRedirect(request);
     if (termsRedirect) return termsRedirect;
-    return html(homePage(homer.profile.name, homer.profile.dob, homer.profile.mrn, homer.profile.pcp));
+    // Use the logged-in user's profile so two accounts on the same hostname
+    // return distinguishable data. Falls back to homer if the session somehow
+    // lacks a username.
+    const user = currentUser(request);
+    const profile = user?.profile ?? homer.profile;
+    return html(homePage(profile.name, profile.dob, profile.mrn, profile.pcp));
   }
 
   if (lower.startsWith('home/csrftoken')) {

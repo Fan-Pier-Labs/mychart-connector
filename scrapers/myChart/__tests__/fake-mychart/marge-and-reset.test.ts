@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'bun:test'
-import { myChartUserPassLogin } from '../../login'
+import { myChartUserPassLogin, complete2faFlow } from '../../login'
+import { getMyChartProfile } from '../../profile'
 
 const HOST = process.env.FAKE_MYCHART_HOST ?? 'localhost:4000'
 const BASE = `http://${HOST}`
@@ -53,6 +54,44 @@ describe('fake-mychart marge user + /reset', () => {
     })
     expect(result.state).toBe('logged_in')
   }, 15_000)
+
+  it('homer and marge get distinct profiles when scraped on the same hostname', async () => {
+    const homerLogin = await myChartUserPassLogin({
+      hostname: HOST,
+      user: 'homer',
+      pass: 'donuts123',
+      protocol: 'http',
+    })
+    expect(homerLogin.state).toBe('logged_in')
+    if (homerLogin.state !== 'logged_in') return
+    const homerProfile = await getMyChartProfile(homerLogin.mychartRequest)
+    expect(homerProfile?.name).toContain('Homer')
+    expect(homerProfile?.mrn).toBe('742')
+
+    // Marge requires 2FA. complete2faFlow with the fixed-in-fake-mychart code.
+    const margeLogin = await myChartUserPassLogin({
+      hostname: HOST,
+      user: 'marge',
+      pass: 'donuts123',
+      protocol: 'http',
+    })
+    expect(margeLogin.state).toBe('need_2fa')
+    if (margeLogin.state !== 'need_2fa') return
+    const margeFinish = await complete2faFlow({
+      mychartRequest: margeLogin.mychartRequest,
+      code: '123456',
+      isTOTP: true,
+    })
+    expect(margeFinish.state).toBe('logged_in')
+    if (margeFinish.state !== 'logged_in') return
+    const margeProfile = await getMyChartProfile(margeFinish.mychartRequest)
+    expect(margeProfile?.name).toContain('Marge')
+    expect(margeProfile?.mrn).toBe('743')
+
+    // Crucially, the two scrapes return distinct MRNs even though they hit
+    // the same fake-mychart hostname.
+    expect(homerProfile?.mrn).not.toBe(margeProfile?.mrn)
+  }, 20_000)
 
   it('marge login requires 2FA (TOTP enabled by default)', async () => {
     const result = await myChartUserPassLogin({
