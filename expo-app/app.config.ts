@@ -23,6 +23,7 @@ const googleSigninPlugin: [string, { iosUrlScheme: string }] = [
 const config: ExpoConfig = {
   name: "OpenRecord",
   slug: "openrecord",
+  owner: "fanpierlabs",
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/icon.png",

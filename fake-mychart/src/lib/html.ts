@@ -243,11 +243,14 @@ export function loginPage(): string {
     <div class="error" id="errorMsg">Invalid username or password.</div>
     <form autocomplete="off" method="post" action="#" id="loginForm">
       <label for="Login">Username</label>
-      <input type="text" id="Login" name="Login" maxlength="128" autocomplete="username" placeholder="Enter your username">
+      <input type="text" id="Login" name="Login" maxlength="128" autocomplete="username webauthn" placeholder="Enter your username">
       <label for="Password">Password</label>
-      <input type="password" id="Password" name="Password" autocomplete="current-password" placeholder="Enter your password">
+      <input type="password" id="Password" name="Password" autocomplete="current-password webauthn" placeholder="Enter your password">
       <button type="submit" id="submit">Sign In</button>
     </form>
+    <div style="text-align:center; margin: 14px 0 0 0; color:#888; font-size:12px;">— or —</div>
+    <button id="passkeyBtn" type="button" style="width:100%; padding:11px; margin-top:10px; background:#fff; color:#1a5276; border:1px solid #1a5276; border-radius:6px; font-size:15px; font-weight:600; cursor:pointer;">Sign in with Passkey</button>
+    <div id="passkeyStatus" style="margin-top:10px; font-size:13px; color:#c0392b; display:none;"></div>
     <form class="hidden" style="display:none" action="/${FIRST_PATH}/Authentication/Login/DoLogin" autocomplete="off" id="actualLogin" method="post">
       <input name="__RequestVerificationToken" type="hidden" value="${token}" />
     </form>
@@ -261,6 +264,32 @@ export function loginPage(): string {
   </div>
   <script src="/${FIRST_PATH}/areas/authentication/scripts/controllers/loginpagecontroller.min.js" type="text/javascript"></script>
   <script>
+    function b64ToBytes(b64) {
+      b64 = String(b64).replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      var bin = atob(b64);
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    function bytesToB64(buf) {
+      var bin = '';
+      var arr = new Uint8Array(buf);
+      for (var i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+      return btoa(bin);
+    }
+
+    function routeAfterLogin(html) {
+      if (html.indexOf('md_home_index') !== -1) {
+        window.location.href = '/${FIRST_PATH}/Home';
+      } else if (html.indexOf('secondaryvalidationcontroller') !== -1) {
+        window.location.href = '/${FIRST_PATH}/Authentication/SecondaryValidation';
+      } else {
+        return false;
+      }
+      return true;
+    }
+
     document.getElementById('loginForm').addEventListener('submit', function(e) {
       e.preventDefault();
       var user = document.getElementById('Login').value;
@@ -272,14 +301,80 @@ export function loginPage(): string {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body, credentials: 'same-origin'
       }).then(function(r) { return r.text(); }).then(function(html) {
-        if (html.indexOf('md_home_index') !== -1) {
-          window.location.href = '/${FIRST_PATH}/Home';
-        } else if (html.indexOf('secondaryvalidationcontroller') !== -1) {
-          window.location.href = '/${FIRST_PATH}/Authentication/SecondaryValidation';
-        } else {
+        if (!routeAfterLogin(html)) {
           document.getElementById('errorMsg').style.display = 'block';
         }
       });
+    });
+
+    document.getElementById('passkeyBtn').addEventListener('click', async function() {
+      var statusEl = document.getElementById('passkeyStatus');
+      statusEl.style.display = 'none';
+      statusEl.textContent = '';
+      if (!window.PublicKeyCredential || !navigator.credentials) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = 'WebAuthn is not available in this browser.';
+        return;
+      }
+      try {
+        var paramsResp = await fetch('/${FIRST_PATH}/Authentication/Login/GetPasskeyGetParams?force=true&noCache=' + Math.random(), {
+          method: 'POST', credentials: 'same-origin', body: ''
+        }).then(function(r) { return r.json(); });
+        if (!paramsResp.Success || !paramsResp.PasskeyGetParams) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = 'No passkeys are registered yet. Sign in with a password and add one in Settings.';
+          return;
+        }
+        var get = paramsResp.PasskeyGetParams;
+        if (!get.AllowCredentials || get.AllowCredentials.length === 0) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = 'No passkeys are registered yet. Sign in with a password and add one in Settings.';
+          return;
+        }
+        var publicKey = {
+          challenge: b64ToBytes(get.Challenge),
+          timeout: get.Timeout || 60000,
+          rpId: get.RpId || window.location.hostname,
+          userVerification: (get.UserVerification || 'preferred').toLowerCase(),
+          allowCredentials: get.AllowCredentials.map(function(c) {
+            return { type: c.type, id: b64ToBytes(c.id) };
+          })
+        };
+        var assertion = await navigator.credentials.get({ publicKey: publicKey });
+        if (!assertion) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = 'Passkey sign-in was cancelled.';
+          return;
+        }
+        var loginInfo = JSON.stringify({
+          Type: 'PasskeyLogin',
+          Credentials: {
+            id: assertion.id,
+            type: 'public-key',
+            rawId: bytesToB64(assertion.rawId),
+            authenticatorAssertion: {
+              clientDataJSON: bytesToB64(assertion.response.clientDataJSON),
+              authenticatorData: bytesToB64(assertion.response.authenticatorData),
+              signature: bytesToB64(assertion.response.signature),
+              userHandle: assertion.response.userHandle ? bytesToB64(assertion.response.userHandle) : ''
+            }
+          }
+        });
+        var token = document.querySelector('#__CSRFContainer input[name=__RequestVerificationToken]').value;
+        var body = '__RequestVerificationToken=' + encodeURIComponent(token) + '&LoginInfo=' + encodeURIComponent(loginInfo);
+        var html = await fetch('/${FIRST_PATH}/Authentication/Login/DoLogin', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body
+        }).then(function(r) { return r.text(); });
+        if (!routeAfterLogin(html)) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = 'Passkey sign-in was rejected by the server.';
+        }
+      } catch (e) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = 'Passkey sign-in failed: ' + (e && e.message ? e.message : e);
+      }
     });
   </script>
 </body>
@@ -1231,6 +1326,7 @@ export function settingsPage(isTotpEnabled: boolean, passkeys: Array<{ rawId: st
       <div style="margin-top: 12px;">
         <button class="btn" onclick="addPasskey()">Add Passkey</button>
       </div>
+      <div id="passkey-status" style="margin-top: 10px; font-size: 13px; color: #1a5276;"></div>
     </div>
 
     <style>
@@ -1286,14 +1382,76 @@ export function settingsPage(isTotpEnabled: boolean, passkeys: Array<{ rawId: st
         }).then(function() { location.reload(); });
       }
 
-      function addPasskey() {
-        fetch('/${FIRST_PATH}/api/passkey-management/GenerateCreateRequest', {
-          method: 'POST', credentials: 'same-origin', headers: headers, body: '{}'
-        }).then(function(r) { return r.json(); }).then(function(data) {
-          // In a real browser this would call navigator.credentials.create()
-          // For the fake UI we just show the challenge was generated
-          alert('Passkey creation challenge generated. Use the CLI --set-up-passkey to register a software passkey.');
-        });
+      function b64ToBytes(b64) {
+        // Tolerate base64url too
+        b64 = String(b64).replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        var bin = atob(b64);
+        var out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+
+      function bytesToB64(buf) {
+        var bin = '';
+        var arr = new Uint8Array(buf);
+        for (var i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+        return btoa(bin);
+      }
+
+      async function addPasskey() {
+        var statusEl = document.getElementById('passkey-status');
+        statusEl.textContent = '';
+        if (!window.PublicKeyCredential || !navigator.credentials) {
+          statusEl.textContent = 'WebAuthn is not available in this browser.';
+          return;
+        }
+        try {
+          var optsResp = await fetch('/${FIRST_PATH}/api/passkey-management/GenerateCreateRequest', {
+            method: 'POST', credentials: 'same-origin', headers: headers, body: '{}'
+          }).then(function(r) { return r.json(); });
+          if (!optsResp.success && !optsResp.Success) {
+            statusEl.textContent = 'Failed to start registration.';
+            return;
+          }
+          var opts = optsResp.data || optsResp.Data;
+          var publicKey = {
+            rp: { id: window.location.hostname, name: opts.rp.name },
+            user: {
+              id: b64ToBytes(opts.user.id),
+              name: opts.user.name,
+              displayName: opts.user.displayName
+            },
+            challenge: b64ToBytes(opts.challenge),
+            pubKeyCredParams: opts.pubKeyCredParams,
+            timeout: opts.timeout || 60000,
+            attestation: opts.attestation || 'none',
+            authenticatorSelection: opts.authenticatorSelection || {},
+            excludeCredentials: (opts.excludeCredentials || []).map(function(c) {
+              return { type: c.type, id: b64ToBytes(c.id) };
+            })
+          };
+          statusEl.textContent = 'Follow your browser prompt to create the passkey…';
+          var cred = await navigator.credentials.create({ publicKey: publicKey });
+          if (!cred) { statusEl.textContent = 'No credential returned.'; return; }
+          var payload = {
+            rawId: bytesToB64(cred.rawId),
+            attestationData: bytesToB64(cred.response.attestationObject),
+            clientDataJSON: bytesToB64(cred.response.clientDataJSON),
+            indexForDefaultName: (opts.excludeCredentials || []).length + 1
+          };
+          var saveResp = await fetch('/${FIRST_PATH}/api/passkey-management/CreatePasskey', {
+            method: 'POST', credentials: 'same-origin', headers: headers,
+            body: JSON.stringify(payload)
+          }).then(function(r) { return r.json(); });
+          if (saveResp.success || saveResp.Success || saveResp.rawId) {
+            location.reload();
+          } else {
+            statusEl.textContent = 'Server rejected the passkey: ' + (saveResp.errors ? saveResp.errors.join(', ') : 'unknown error');
+          }
+        } catch (e) {
+          statusEl.textContent = 'Passkey registration failed: ' + (e && e.message ? e.message : e);
+        }
       }
 
       function deletePasskey(rawId) {
