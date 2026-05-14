@@ -5,6 +5,11 @@
  * result arrays, empty metadata fields, and UI-specific flags that an AI
  * consumer will never use. These transforms strip each response down to only
  * the fields an AI would act on, cutting response sizes by 80-90%.
+ *
+ * Transforms also sort results newest-first by their primary timestamp. The
+ * MyChart APIs return results grouped by category, not by date, so a caller
+ * doing `paginate(trimmed, 10)` on an unsorted list can miss results from
+ * today entirely. Newest-first matches what every caller actually wants.
  */
 
 import type { LabTestResultWithHistory } from '../../../../scrapers/myChart/labs_and_procedure_results/labtestresulttype';
@@ -12,6 +17,7 @@ import type { BillingAccount } from '../../../../scrapers/myChart/bills/types';
 import type { ConversationListResponse } from '../../../../scrapers/myChart/messages/conversations';
 import type { ImagingResult } from '../../../../scrapers/myChart/labs_and_procedure_results/labtestresulttype';
 import type { LinkedMyChart } from '../../../../scrapers/myChart/other_mycharts/other_mycharts';
+import { MISSING_DATE, parseMyChartDate, sortNewestFirstByDate } from '../../../../scrapers/myChart/util';
 
 // ---------------------------------------------------------------------------
 // Lab Results
@@ -36,39 +42,48 @@ export interface TrimmedLabResult {
 }
 
 export function trimLabResults(raw: LabTestResultWithHistory[]): TrimmedLabResult[] {
-  const results: TrimmedLabResult[] = [];
+  const results: { trimmed: TrimmedLabResult; sortKey: number }[] = [];
 
   for (const order of raw) {
     for (const result of order.results ?? []) {
+      // Prefer the ISO timestamp for sorting; the human display string parses too but
+      // is more brittle. Use `||` not `??` so an empty-string ISO falls through to display.
+      const sortKey = parseMyChartDate(
+        result.orderMetadata?.prioritizedInstantISO || result.orderMetadata?.resultTimestampDisplay
+      );
       results.push({
-        orderName: order.orderName,
-        date: result.orderMetadata?.resultTimestampDisplay ?? '',
-        status: result.orderMetadata?.resultStatus ?? '',
-        provider: result.orderMetadata?.orderProviderName ?? '',
-        isAbnormal: result.isAbnormal ?? false,
-        components: (result.resultComponents ?? []).map(c => ({
-          name: c.componentInfo?.name ?? c.componentInfo?.commonName ?? '',
-          value: c.componentResultInfo?.value ?? '',
-          units: c.componentInfo?.units ?? '',
-          range: c.componentResultInfo?.referenceRange?.formattedReferenceRange ?? '',
-          abnormal: c.componentResultInfo?.abnormalFlagCategoryValue !== 0 &&
-                    c.componentResultInfo?.abnormalFlagCategoryValue !== '0' &&
-                    c.componentResultInfo?.abnormalFlagCategoryValue !== '',
-        })),
-        ...(result.studyResult?.narrative?.hasContent
-          ? { narrative: result.studyResult.narrative.contentAsString }
-          : {}),
-        ...(result.studyResult?.impression?.hasContent
-          ? { impression: result.studyResult.impression.contentAsString }
-          : {}),
-        ...(result.resultNote?.hasContent
-          ? { note: result.resultNote.contentAsString }
-          : {}),
+        sortKey,
+        trimmed: {
+          orderName: order.orderName,
+          date: result.orderMetadata?.resultTimestampDisplay ?? '',
+          status: result.orderMetadata?.resultStatus ?? '',
+          provider: result.orderMetadata?.orderProviderName ?? '',
+          isAbnormal: result.isAbnormal ?? false,
+          components: (result.resultComponents ?? []).map(c => ({
+            name: c.componentInfo?.name ?? c.componentInfo?.commonName ?? '',
+            value: c.componentResultInfo?.value ?? '',
+            units: c.componentInfo?.units ?? '',
+            range: c.componentResultInfo?.referenceRange?.formattedReferenceRange ?? '',
+            abnormal: c.componentResultInfo?.abnormalFlagCategoryValue !== 0 &&
+                      c.componentResultInfo?.abnormalFlagCategoryValue !== '0' &&
+                      c.componentResultInfo?.abnormalFlagCategoryValue !== '',
+          })),
+          ...(result.studyResult?.narrative?.hasContent
+            ? { narrative: result.studyResult.narrative.contentAsString }
+            : {}),
+          ...(result.studyResult?.impression?.hasContent
+            ? { impression: result.studyResult.impression.contentAsString }
+            : {}),
+          ...(result.resultNote?.hasContent
+            ? { note: result.resultNote.contentAsString }
+            : {}),
+        },
       });
     }
   }
 
-  return results;
+  sortNewestFirstByDate(results, r => r.sortKey);
+  return results.map(r => r.trimmed);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,17 +265,53 @@ export function trimMessages(raw: ConversationListResponse | null): TrimmedConve
     ...(raw.threads ?? []),
   ];
 
-  return conversations.map(conv => ({
-    subject: conv.subject,
-    lastMessageDate: conv.lastMessageDateDisplay,
-    senderName: conv.senderName,
-    previewText: conv.previewText ?? conv.preview,
-    messages: (conv.messages ?? []).map(msg => ({
-      ...(msg.author?.displayName ? { author: msg.author.displayName } : {}),
-      ...(msg.deliveryInstantISO ? { date: msg.deliveryInstantISO } : {}),
-      body: msg.body ? stripHtml(msg.body) : '',
-    })),
-  }));
+  const trimmed = conversations.map(conv => {
+    // Sort messages within the thread ascending (oldest-first) so the LLM
+    // reads the narrative chronologically: patient -> doctor -> patient.
+    // MyChart's API currently returns them this way, but we lock in the
+    // invariant explicitly rather than depending on it. Undated messages
+    // (sortKey=0) sort to the tail to match sortNewestFirstByDate's convention
+    // and avoid putting an unparseable entry at the top of the thread.
+    const rawMessages = [...(conv.messages ?? [])].sort((a, b) => {
+      const aMs = parseMyChartDate(a.deliveryInstantISO);
+      const bMs = parseMyChartDate(b.deliveryInstantISO);
+      // Send undated (MISSING_DATE) to the tail of an ascending sort.
+      if (aMs === MISSING_DATE) return bMs === MISSING_DATE ? 0 : 1;
+      if (bMs === MISSING_DATE) return -1;
+      return aMs - bMs;
+    });
+    // Conversation-level sort key: max of (newest dated message in the
+    // thread, the conversation-level lastMessageDateDisplay). Taking the max
+    // handles two edge cases: (1) the latest message lacks an ISO but older
+    // messages have them — without the lastMessageDateDisplay floor, the
+    // conversation would sort by the older message's date and get missed on
+    // the first paginated page; (2) some MyCharts only set the convo-level
+    // field. MISSING_DATE is -Infinity so Math.max correctly ignores it.
+    let newestDatedMs = MISSING_DATE;
+    for (const msg of rawMessages) {
+      const ms = parseMyChartDate(msg.deliveryInstantISO);
+      if (ms > newestDatedMs) newestDatedMs = ms;
+    }
+    const convoDisplayMs = parseMyChartDate(conv.lastMessageDateDisplay);
+    const sortKey = Math.max(newestDatedMs, convoDisplayMs);
+
+    const trimmedConv: TrimmedConversation = {
+      subject: conv.subject,
+      lastMessageDate: conv.lastMessageDateDisplay,
+      senderName: conv.senderName,
+      previewText: conv.previewText ?? conv.preview,
+      messages: rawMessages.map(msg => ({
+        ...(msg.author?.displayName ? { author: msg.author.displayName } : {}),
+        ...(msg.deliveryInstantISO ? { date: msg.deliveryInstantISO } : {}),
+        body: msg.body ? stripHtml(msg.body) : '',
+      })),
+    };
+
+    return { sortKey, trimmed: trimmedConv };
+  });
+
+  sortNewestFirstByDate(trimmed, r => r.sortKey);
+  return trimmed.map(r => r.trimmed);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +329,7 @@ export interface TrimmedImagingResult {
 }
 
 export function trimImagingResults(raw: ImagingResult[]): TrimmedImagingResult[] {
-  return raw.map(img => {
+  const trimmed = raw.map(img => {
     const firstResult = img.results?.[0];
     const narrativeParts: string[] = [];
     const impressionParts: string[] = [];
@@ -292,7 +343,13 @@ export function trimImagingResults(raw: ImagingResult[]): TrimmedImagingResult[]
       }
     }
 
-    return {
+    // Use `||` not `??` so an empty-string ISO falls through to display.
+    const sortKey = parseMyChartDate(
+      firstResult?.orderMetadata?.prioritizedInstantISO
+        || firstResult?.orderMetadata?.resultTimestampDisplay
+    );
+
+    const trimmedResult: TrimmedImagingResult = {
       orderName: img.orderName,
       date: firstResult?.orderMetadata?.resultTimestampDisplay ?? '',
       provider: firstResult?.orderMetadata?.orderProviderName ?? '',
@@ -304,7 +361,12 @@ export function trimImagingResults(raw: ImagingResult[]): TrimmedImagingResult[]
         (r.scans && r.scans.length > 0)
       ) ?? false,
     };
+
+    return { sortKey, trimmed: trimmedResult };
   });
+
+  sortNewestFirstByDate(trimmed, r => r.sortKey);
+  return trimmed.map(r => r.trimmed);
 }
 
 // ---------------------------------------------------------------------------

@@ -130,6 +130,172 @@ describe('trimLabResults', () => {
     expect(trimmed[0].narrative).toBe('No acute findings.');
     expect(trimmed[0].impression).toBe('Normal chest X-ray.');
   });
+
+  it('sorts results newest-first by prioritizedInstantISO', () => {
+    const raw = [
+      {
+        orderName: 'A1C JULY',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2025-07-30T22:37:00-04:00',
+            resultTimestampDisplay: 'Jul 30, 2025 10:37 PM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+      {
+        orderName: 'A1C TODAY',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2026-05-12T20:56:00-04:00',
+            resultTimestampDisplay: 'May 12, 2026 8:56 PM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+      {
+        orderName: 'A1C MAY 2025',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2025-05-01T01:49:00-04:00',
+            resultTimestampDisplay: 'May 01, 2025 1:49 AM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any;
+
+    const trimmed = trimLabResults(raw);
+    expect(trimmed.map(r => r.orderName)).toEqual([
+      'A1C TODAY',
+      'A1C JULY',
+      'A1C MAY 2025',
+    ]);
+  });
+
+  it('falls back to resultTimestampDisplay when ISO is missing', () => {
+    const raw = [
+      {
+        orderName: 'OLDER',
+        results: [{
+          orderMetadata: {
+            resultTimestampDisplay: 'May 01, 2025 1:49 AM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+      {
+        orderName: 'NEWER',
+        results: [{
+          orderMetadata: {
+            resultTimestampDisplay: 'Jul 30, 2025 10:37 PM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any;
+
+    const trimmed = trimLabResults(raw);
+    expect(trimmed.map(r => r.orderName)).toEqual(['NEWER', 'OLDER']);
+  });
+
+  it('places undated results last', () => {
+    const raw = [
+      {
+        orderName: 'UNDATED',
+        results: [{
+          orderMetadata: { resultStatus: 'Final' },
+          resultComponents: [],
+        }],
+      },
+      {
+        orderName: 'DATED',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2026-05-12T20:56:00-04:00',
+            resultTimestampDisplay: 'May 12, 2026 8:56 PM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any;
+
+    const trimmed = trimLabResults(raw);
+    expect(trimmed.map(r => r.orderName)).toEqual(['DATED', 'UNDATED']);
+  });
+
+  it('treats empty-string ISO as missing and falls back to display', () => {
+    // Some MyChart deployments return prioritizedInstantISO as '' alongside a
+    // valid resultTimestampDisplay. Test that we fall through.
+    const raw = [
+      {
+        orderName: 'OLDER',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '',
+            resultTimestampDisplay: 'May 01, 2025 1:49 AM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+      {
+        orderName: 'NEWER',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '',
+            resultTimestampDisplay: 'Jul 30, 2025 10:37 PM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any;
+
+    const trimmed = trimLabResults(raw);
+    expect(trimmed.map(r => r.orderName)).toEqual(['NEWER', 'OLDER']);
+  });
+
+  it('treats unparseable date strings as missing (places them last)', () => {
+    const raw = [
+      {
+        orderName: 'PENDING',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: 'pending',
+            resultTimestampDisplay: 'pending',
+            resultStatus: 'Pending',
+          },
+          resultComponents: [],
+        }],
+      },
+      {
+        orderName: 'REAL',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2026-05-12T20:56:00-04:00',
+            resultTimestampDisplay: 'May 12, 2026 8:56 PM',
+            resultStatus: 'Final',
+          },
+          resultComponents: [],
+        }],
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any;
+
+    const trimmed = trimLabResults(raw);
+    expect(trimmed.map(r => r.orderName)).toEqual(['REAL', 'PENDING']);
+  });
 });
 
 describe('trimBilling', () => {
@@ -365,6 +531,144 @@ describe('trimMessages', () => {
     expect(JSON.stringify(trimmed)).not.toContain('enc-viewer-1');
   });
 
+  it('sorts conversations newest-first by newest message', () => {
+    const raw = {
+      conversations: [
+        {
+          hthId: 'h1',
+          subject: 'Old conversation',
+          messages: [{
+            wmgId: 'm1',
+            body: 'old',
+            deliveryInstantISO: '2025-12-01T10:00:00Z',
+          }],
+        },
+        {
+          hthId: 'h2',
+          subject: 'Newest conversation',
+          messages: [{
+            wmgId: 'm2',
+            body: 'new',
+            deliveryInstantISO: '2026-05-12T10:00:00Z',
+          }],
+        },
+        {
+          hthId: 'h3',
+          subject: 'Middle conversation',
+          messages: [{
+            wmgId: 'm3',
+            body: 'middle',
+            deliveryInstantISO: '2026-01-15T10:00:00Z',
+          }],
+        },
+      ],
+      threads: [],
+    };
+
+    const trimmed = trimMessages(raw);
+    expect(trimmed.map(c => c.subject)).toEqual([
+      'Newest conversation',
+      'Middle conversation',
+      'Old conversation',
+    ]);
+  });
+
+  it('sorts messages within a conversation oldest-first (chronological narrative)', () => {
+    // LLMs reading a thread want chronological order (patient -> doctor -> patient).
+    // Source messages are intentionally shuffled to prove we sort, not just preserve.
+    const raw = {
+      conversations: [{
+        hthId: 'h1',
+        subject: 'Thread',
+        messages: [
+          { wmgId: 'm3', body: 'third', deliveryInstantISO: '2026-05-01T10:00:00Z', author: { displayName: 'Dr. A' } },
+          { wmgId: 'm1', body: 'first', deliveryInstantISO: '2026-03-01T10:00:00Z', author: { displayName: 'Patient' } },
+          { wmgId: 'm2', body: 'second', deliveryInstantISO: '2026-04-01T10:00:00Z', author: { displayName: 'Dr. A' } },
+        ],
+      }],
+      threads: [],
+    };
+
+    const trimmed = trimMessages(raw);
+    expect(trimmed[0].messages.map(m => m.body)).toEqual(['first', 'second', 'third']);
+  });
+
+  it('sorts undated thread messages to the tail (not the head)', () => {
+    const raw = {
+      conversations: [{
+        hthId: 'h1',
+        subject: 'Thread',
+        messages: [
+          { wmgId: 'm1', body: 'undated', author: { displayName: 'Sys' } },
+          { wmgId: 'm2', body: 'older', deliveryInstantISO: '2026-03-01T10:00:00Z', author: { displayName: 'Patient' } },
+          { wmgId: 'm3', body: 'newer', deliveryInstantISO: '2026-04-01T10:00:00Z', author: { displayName: 'Doctor' } },
+        ],
+      }],
+      threads: [],
+    };
+
+    const trimmed = trimMessages(raw);
+    // Chronological (oldest-first), undated at the end (not at the head).
+    expect(trimmed[0].messages.map(m => m.body)).toEqual(['older', 'newer', 'undated']);
+  });
+
+  it('uses lastMessageDateDisplay when the most recent message lacks an ISO', () => {
+    // Edge case: a thread where the latest message is undated but older ones
+    // have ISOs. Without the fallback walk we would sort this conversation
+    // by the older dated message and miss it on the first paginated page.
+    const raw = {
+      conversations: [
+        {
+          hthId: 'h1',
+          subject: 'Mixed-date thread (today, per display)',
+          lastMessageDateDisplay: '2026-05-12T15:00:00Z',
+          messages: [
+            { wmgId: 'm1', body: 'old dated', deliveryInstantISO: '2025-01-01T10:00:00Z' },
+            { wmgId: 'm2', body: 'recent undated' },
+          ],
+        },
+        {
+          hthId: 'h2',
+          subject: 'Older thread',
+          lastMessageDateDisplay: '2026-01-01T10:00:00Z',
+          messages: [
+            { wmgId: 'm3', body: 'older dated', deliveryInstantISO: '2026-01-01T10:00:00Z' },
+          ],
+        },
+      ],
+      threads: [],
+    };
+
+    const trimmed = trimMessages(raw);
+    expect(trimmed.map(c => c.subject)).toEqual([
+      'Mixed-date thread (today, per display)',
+      'Older thread',
+    ]);
+  });
+
+  it('falls back to lastMessageDateDisplay when ISO dates missing', () => {
+    const raw = {
+      conversations: [
+        {
+          hthId: 'h1',
+          subject: 'Old',
+          lastMessageDateDisplay: '01/15/2025',
+          messages: [],
+        },
+        {
+          hthId: 'h2',
+          subject: 'New',
+          lastMessageDateDisplay: '05/12/2026',
+          messages: [],
+        },
+      ],
+      threads: [],
+    };
+
+    const trimmed = trimMessages(raw);
+    expect(trimmed.map(c => c.subject)).toEqual(['New', 'Old']);
+  });
+
   it('returns empty array for null input', () => {
     expect(trimMessages(null)).toEqual([]);
   });
@@ -415,6 +719,33 @@ describe('trimImagingResults', () => {
     expect(JSON.stringify(trimmed)).not.toContain('reportContent');
     expect(JSON.stringify(trimmed)).not.toContain('enc-report');
     expect(JSON.stringify(trimmed)).not.toContain('.css{}');
+  });
+
+  it('sorts imaging results newest-first by prioritizedInstantISO', () => {
+    const raw = [
+      {
+        orderName: 'OLD MRI',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2025-08-14T19:06:00-04:00',
+            resultTimestampDisplay: 'Aug 14, 2025 7:06 PM',
+          },
+        }],
+      },
+      {
+        orderName: 'NEW CT',
+        results: [{
+          orderMetadata: {
+            prioritizedInstantISO: '2026-05-03T21:37:00-04:00',
+            resultTimestampDisplay: 'May 03, 2026 9:37 PM',
+          },
+        }],
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any;
+
+    const trimmed = trimImagingResults(raw);
+    expect(trimmed.map(r => r.orderName)).toEqual(['NEW CT', 'OLD MRI']);
   });
 });
 

@@ -164,10 +164,19 @@ describe('fake-mychart integration', () => {
     expect(result.length).toBeGreaterThan(0)
   }, 10_000)
 
-  it('getLetters returns letters', async () => {
+  it('getLetters returns letters sorted newest-first with undated last', async () => {
     const result = await getLetters(session)
     expect(Array.isArray(result)).toBe(true)
-    expect(result.length).toBeGreaterThan(0)
+    expect(result.length).toBe(3)
+
+    // Fake-mychart serves these in [Nov-2025, undated, Jan-2026] order.
+    // The scraper must reorder them: newest first, undated tail.
+    expect(result[0].dateISO).toBe('2026-01-10T16:00:00Z')
+    expect(result[0].reason).toContain('Annual Physical')
+    expect(result[1].dateISO).toBe('2025-11-20T16:00:00Z')
+    expect(result[1].reason).toContain('ER Visit')
+    expect(result[2].dateISO).toBe('')
+    expect(result[2].reason).toContain('Sector 7G')
   }, 10_000)
 
   it('getEmergencyContacts returns contacts', async () => {

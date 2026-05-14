@@ -19,7 +19,7 @@ describe('getLetters', () => {
     expect(await getLetters(req)).toEqual([])
   })
 
-  it('parses letters with provider info from users map', async () => {
+  it('parses letters with provider info, sorted newest-first', async () => {
     const req = mockRequest([
       { body: '<input name="__RequestVerificationToken" value="t" />' },
       {
@@ -29,6 +29,7 @@ describe('getLetters', () => {
             'E200': { name: 'Dr. Bob Jones', photoUrl: '/photos/bob.jpg' },
           },
           letters: [
+            // Intentionally not sorted in the source response
             { dateISO: '2024-01-15', reason: 'Annual Physical', viewed: true, empId: 'E100', hnoId: 'H1', csn: 'C1' },
             { dateISO: '2024-03-20', reason: 'Follow-up', viewed: false, empId: 'E200', hnoId: 'H2', csn: 'C2' },
           ],
@@ -38,16 +39,35 @@ describe('getLetters', () => {
 
     const result = await getLetters(req)
     expect(result).toHaveLength(2)
+    // Newest first
     expect(result[0]).toEqual({
-      dateISO: '2024-01-15',
-      reason: 'Annual Physical',
-      viewed: true,
-      providerName: 'Dr. Alice Smith',
-      providerPhotoUrl: '/photos/alice.jpg',
-      hnoId: 'H1',
-      csn: 'C1',
+      dateISO: '2024-03-20',
+      reason: 'Follow-up',
+      viewed: false,
+      providerName: 'Dr. Bob Jones',
+      providerPhotoUrl: '/photos/bob.jpg',
+      hnoId: 'H2',
+      csn: 'C2',
     })
-    expect(result[1].providerName).toBe('Dr. Bob Jones')
+    expect(result[1].providerName).toBe('Dr. Alice Smith')
+  })
+
+  it('places letters with missing dateISO last', async () => {
+    const req = mockRequest([
+      { body: '<input name="__RequestVerificationToken" value="t" />' },
+      {
+        body: JSON.stringify({
+          users: {},
+          letters: [
+            { dateISO: '', reason: 'Undated', viewed: false, empId: '', hnoId: 'H1', csn: 'C1' },
+            { dateISO: '2024-03-20', reason: 'Dated', viewed: false, empId: '', hnoId: 'H2', csn: 'C2' },
+          ],
+        }),
+      },
+    ])
+
+    const result = await getLetters(req)
+    expect(result.map(l => l.reason)).toEqual(['Dated', 'Undated'])
   })
 
   it('handles letter with unknown empId', async () => {

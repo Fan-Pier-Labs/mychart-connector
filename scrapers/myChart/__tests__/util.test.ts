@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { getRequestVerificationTokenFromBody } from '../util'
+import { MISSING_DATE, getRequestVerificationTokenFromBody, parseMyChartDate, sortNewestFirstByDate } from '../util'
 
 describe('getRequestVerificationTokenFromBody', () => {
   it('extracts token from a standard hidden input', () => {
@@ -118,5 +118,90 @@ describe('getRequestVerificationTokenFromBody', () => {
       </html>
     `
     expect(getRequestVerificationTokenFromBody(html)).toBe('CfDJ8Nzj4kHs2JKxMqR7vL9pW3bY6tA5fE1dG0cB8iH')
+  })
+})
+
+describe('parseMyChartDate', () => {
+  it('returns MISSING_DATE for null', () => {
+    expect(parseMyChartDate(null)).toBe(MISSING_DATE)
+  })
+  it('returns MISSING_DATE for undefined', () => {
+    expect(parseMyChartDate(undefined)).toBe(MISSING_DATE)
+  })
+  it('returns MISSING_DATE for empty string', () => {
+    expect(parseMyChartDate('')).toBe(MISSING_DATE)
+  })
+  it('returns MISSING_DATE for unparseable garbage', () => {
+    expect(parseMyChartDate('pending')).toBe(MISSING_DATE)
+    expect(parseMyChartDate('not a date')).toBe(MISSING_DATE)
+  })
+  it('MISSING_DATE sorts before any real date in newest-first', () => {
+    // Pre-1970 negative timestamp must still sort newer than undated.
+    const epoch = Date.parse('1969-01-01T00:00:00Z')
+    expect(epoch).toBeLessThan(0)
+    expect(epoch).toBeGreaterThan(MISSING_DATE)
+  })
+  it('parses ISO 8601 with timezone offset', () => {
+    expect(parseMyChartDate('2026-05-12T20:56:00-04:00')).toBe(Date.parse('2026-05-12T20:56:00-04:00'))
+  })
+  it('parses ISO 8601 UTC', () => {
+    expect(parseMyChartDate('2026-05-12T20:56:00Z')).toBe(Date.parse('2026-05-12T20:56:00Z'))
+  })
+  it('parses MyChart human display format', () => {
+    // V8/JSC accept this; ECMA-262 does not require it but the runtime does.
+    const ms = parseMyChartDate('May 12, 2026 8:56 PM')
+    expect(ms).toBeGreaterThan(0)
+    expect(ms).toBe(Date.parse('May 12, 2026 8:56 PM'))
+  })
+  it('parses MM/DD/YYYY display format', () => {
+    expect(parseMyChartDate('05/12/2026')).toBeGreaterThan(0)
+  })
+})
+
+describe('sortNewestFirstByDate', () => {
+  it('sorts items newest-first by key fn', () => {
+    const items = [
+      { id: 'a', t: 1000 },
+      { id: 'b', t: 3000 },
+      { id: 'c', t: 2000 },
+    ]
+    sortNewestFirstByDate(items, x => x.t)
+    expect(items.map(x => x.id)).toEqual(['b', 'c', 'a'])
+  })
+  it('places MISSING_DATE items last', () => {
+    const items = [
+      { id: 'undated', t: MISSING_DATE },
+      { id: 'newest', t: 2000 },
+      { id: 'older', t: 1000 },
+    ]
+    sortNewestFirstByDate(items, x => x.t)
+    expect(items.map(x => x.id)).toEqual(['newest', 'older', 'undated'])
+  })
+  it('places MISSING_DATE items after pre-1970 negative timestamps', () => {
+    const items = [
+      { id: 'undated', t: MISSING_DATE },
+      { id: 'pre-epoch', t: Date.parse('1969-01-01T00:00:00Z') },
+      { id: 'recent', t: Date.parse('2026-05-12T00:00:00Z') },
+    ]
+    sortNewestFirstByDate(items, x => x.t)
+    expect(items.map(x => x.id)).toEqual(['recent', 'pre-epoch', 'undated'])
+  })
+  it('mutates the input array in place and returns it', () => {
+    const items = [
+      { id: 'a', t: 1 },
+      { id: 'b', t: 2 },
+    ]
+    const result = sortNewestFirstByDate(items, x => x.t)
+    expect(result).toBe(items)
+    expect(items.map(x => x.id)).toEqual(['b', 'a'])
+  })
+  it('preserves stable order for ties', () => {
+    const items = [
+      { id: 'a', t: 100 },
+      { id: 'b', t: 100 },
+      { id: 'c', t: 100 },
+    ]
+    sortNewestFirstByDate(items, x => x.t)
+    expect(items.map(x => x.id)).toEqual(['a', 'b', 'c'])
   })
 })
