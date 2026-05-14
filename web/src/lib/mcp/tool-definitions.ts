@@ -98,6 +98,33 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: 'get_visit_notes',
+    description: 'List clinical notes (operative notes, anesthesia notes, progress notes, etc.) attached to a past visit. Returns each note\'s hnoId/hnoDat plus a shared lrpId used to fetch individual note content with get_note_content. Use get_past_visits first to get the CSN.',
+    inputSchema: {
+      ...instanceParam,
+      csn: z.string().describe('Visit CSN (encounter ID) from get_past_visits'),
+    },
+  },
+  {
+    name: 'get_note_content',
+    description: 'Fetch the rendered HTML content of a single clinical note. Requires the csn, lrpId, hnoId, and hnoDat from get_visit_notes.',
+    inputSchema: {
+      ...instanceParam,
+      csn: z.string().describe('Visit CSN (encounter ID)'),
+      lrp_id: z.string().describe('Linked report pointer ID from get_visit_notes (shared by all notes in the visit)'),
+      hno_id: z.string().describe('Specific note ID from get_visit_notes'),
+      hno_dat: z.string().describe('Note date token from get_visit_notes'),
+    },
+  },
+  {
+    name: 'get_visit_avs',
+    description: 'Fetch the After Visit Summary (AVS) HTML for a past visit. Returns the full discharge/visit summary with instructions, medications, and follow-up info. Use get_past_visits first to get the CSN.',
+    inputSchema: {
+      ...instanceParam,
+      csn: z.string().describe('Visit CSN (encounter ID) from get_past_visits'),
+    },
+  },
+  {
     name: 'get_lab_results',
     description: 'Get lab results. Returns trimmed results with component name, value, units, range, and abnormal flag. Supports pagination (default limit 10).',
     inputSchema: paginatedParams,

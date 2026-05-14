@@ -20,6 +20,9 @@ You have access to tools that retrieve health data from the user's Epic MyChart 
 ### Visits
 - `mychart_get_upcoming_visits` — Scheduled appointments
 - `mychart_get_past_visits` — Visit history (param: `years_back`, default 2)
+- `mychart_get_visit_notes` — List clinical notes attached to a past visit (param: `csn` from past visits)
+- `mychart_get_note_content` — Get the body of a single clinical note (params: `csn`, `lrp_id`, `hno_id`, `hno_dat` from visit notes)
+- `mychart_get_visit_avs` — After Visit Summary HTML for a past visit (param: `csn`)
 
 ### Results
 - `mychart_get_lab_results` — Blood work, urinalysis, and other test results with reference ranges
