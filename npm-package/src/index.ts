@@ -1,5 +1,5 @@
 /**
- * mychart-connector — programmatic access to Epic MyChart patient portals.
+ * mychart-cli — programmatic access to Epic MyChart patient portals.
  *
  * Two ways to use this package:
  *

@@ -1,4 +1,4 @@
-# mychart-connector
+# mychart-cli
 
 Programmatic access to Epic MyChart patient portals from Node.js. Log in,
 fetch every section of a patient's chart, and act on it (request refills,
@@ -16,11 +16,11 @@ return shapes.
 ## Install
 
 ```bash
-npm install mychart-connector
+npm install mychart-cli
 ```
 
-The package installs a CLI binary at `node_modules/.bin/mychart-connector`
-(use it via `npx mychart-connector …`). You only run the CLI once, to set
+The package installs a CLI binary at `node_modules/.bin/mychart-cli`
+(use it via `npx mychart-cli …`). You only run the CLI once, to set
 up a passkey — see Quick start.
 
 ## Quick start
@@ -34,7 +34,7 @@ prompts.
 Run the bundled CLI once:
 
 ```bash
-npx mychart-connector --set-up-passkey --host mychart.example.org
+npx mychart-cli --set-up-passkey --host mychart.example.org
 ```
 
 The CLI walks you through username + password + 2FA, registers a new
@@ -60,7 +60,7 @@ import {
   MyChartClient,
   deserializeCredential,
   serializeCredential,
-} from 'mychart-connector';
+} from 'mychart-cli';
 import * as fs from 'node:fs/promises';
 
 const path = './.passkey-credentials/mychart.example.org.json';
@@ -133,7 +133,7 @@ a saved TOTP secret, so prefer passkeys for unattended automation. See
 ## CLI reference
 
 ```
-npx mychart-connector --host <hostname> [flags]
+npx mychart-cli --host <hostname> [flags]
 ```
 
 | Flag | Purpose |
@@ -151,7 +151,6 @@ npx mychart-connector --host <hostname> [flags]
 | `--disable-totp` | Disable TOTP on the account. |
 | `--no-cache` | Don't reuse cached cookies; force a fresh login. |
 | `--action <name>` | Run a one-shot action: `send-message`, `send-reply`, `get-imaging`. |
-| `--resend-2fa` | Pull the 2FA code from a Resend mailbox (Fan Pier Labs internal — requires `resend` and `@aws-sdk/client-secrets-manager` to be installed). |
 
 The default invocation (no flags besides `--host`) logs in interactively
 and dumps every scrape category to stdout. Useful as a smoke test.
@@ -195,7 +194,7 @@ What is collected:
 - OS platform, architecture, OS version, and runtime version (e.g.
   `bun 1.3.9` or `node v22.11.0`).
 - A stable random UUID generated once per project install and cached
-  at `<your-project>/node_modules/.cache/mychart-connector/anonymous-id`
+  at `<your-project>/node_modules/.cache/mychart-cli/anonymous-id`
   (same convention Babel / ESLint / Webpack use). Used purely for
   dedupe. Never written outside `node_modules`. Cleared whenever you
   reinstall.
@@ -207,7 +206,7 @@ chart.
 To disable telemetry entirely, set:
 
 ```bash
-export MYCHART_CONNECTOR_TELEMETRY_DISABLED=1
+export MYCHART_CLI_TELEMETRY_DISABLED=1
 ```
 
 ## License

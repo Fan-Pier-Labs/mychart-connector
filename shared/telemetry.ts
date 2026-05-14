@@ -2,12 +2,12 @@
  * Anonymous usage telemetry, modelled after Next.js / Vercel CLI:
  *
  * - One stable random UUID per project install, stored in the consumer's
- *   `node_modules/.cache/mychart-connector/anonymous-id` (the same
+ *   `node_modules/.cache/mychart-cli/anonymous-id` (the same
  *   convention Babel / ESLint / Webpack use for tooling cache). Never
  *   derived from identifying information.
  * - Event payload is event name + properties + OS platform/arch +
  *   runtime version. No public IP, no OS hostname, no git config.
- * - Opt out by setting `MYCHART_CONNECTOR_TELEMETRY_DISABLED` to any
+ * - Opt out by setting `MYCHART_CLI_TELEMETRY_DISABLED` to any
  *   truthy value.
  *
  * Fire-and-forget. Never throws, never blocks the caller.
@@ -22,7 +22,7 @@ const AMPLITUDE_API_KEY = 'a7d8557f623f24012e62edc61bbc0fd6';
 const AMPLITUDE_HTTP_API = 'https://api2.amplitude.com/2/httpapi';
 
 function isTelemetryDisabled(): boolean {
-  return Boolean(process.env.MYCHART_CONNECTOR_TELEMETRY_DISABLED);
+  return Boolean(process.env.MYCHART_CLI_TELEMETRY_DISABLED);
 }
 
 /**
@@ -36,7 +36,7 @@ function findNodeModulesCacheDir(): string | null {
   while (dir !== path.dirname(dir)) {
     const nm = path.join(dir, 'node_modules');
     if (fs.existsSync(nm)) {
-      return path.join(nm, '.cache', 'mychart-connector');
+      return path.join(nm, '.cache', 'mychart-cli');
     }
     dir = path.dirname(dir);
   }
@@ -93,7 +93,7 @@ export function gatherEnvInfo(): EnvInfo {
 /**
  * Send a telemetry event to Amplitude via the HTTP API.
  * Fire-and-forget. Never throws. Returns immediately when telemetry is
- * disabled via `MYCHART_CONNECTOR_TELEMETRY_DISABLED`.
+ * disabled via `MYCHART_CLI_TELEMETRY_DISABLED`.
  */
 export function sendTelemetryEvent(
   eventType: string,

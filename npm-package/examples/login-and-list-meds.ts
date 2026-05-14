@@ -4,7 +4,7 @@
  * Run against the hosted fake-mychart for a quick smoke test:
  *   bun examples/login-and-list-meds.ts
  */
-import { MyChartClient } from 'mychart-connector';
+import { MyChartClient } from 'mychart-cli';
 
 const HOSTNAME = process.env.MYCHART_HOSTNAME ?? 'fake-mychart.fanpierlabs.com';
 const USER     = process.env.MYCHART_USER     ?? 'homer';

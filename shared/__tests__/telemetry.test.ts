@@ -29,16 +29,16 @@ describe('telemetry', () => {
 
     beforeEach(() => {
       originalFetch = globalThis.fetch;
-      originalDisable = process.env.MYCHART_CONNECTOR_TELEMETRY_DISABLED;
-      delete process.env.MYCHART_CONNECTOR_TELEMETRY_DISABLED;
+      originalDisable = process.env.MYCHART_CLI_TELEMETRY_DISABLED;
+      delete process.env.MYCHART_CLI_TELEMETRY_DISABLED;
     });
 
     afterEach(() => {
       globalThis.fetch = originalFetch;
       if (originalDisable === undefined) {
-        delete process.env.MYCHART_CONNECTOR_TELEMETRY_DISABLED;
+        delete process.env.MYCHART_CLI_TELEMETRY_DISABLED;
       } else {
-        process.env.MYCHART_CONNECTOR_TELEMETRY_DISABLED = originalDisable;
+        process.env.MYCHART_CLI_TELEMETRY_DISABLED = originalDisable;
       }
     });
 
@@ -86,8 +86,8 @@ describe('telemetry', () => {
       }
     });
 
-    test('does not fetch when MYCHART_CONNECTOR_TELEMETRY_DISABLED is set', async () => {
-      process.env.MYCHART_CONNECTOR_TELEMETRY_DISABLED = '1';
+    test('does not fetch when MYCHART_CLI_TELEMETRY_DISABLED is set', async () => {
+      process.env.MYCHART_CLI_TELEMETRY_DISABLED = '1';
       const fetchMock = mock(() =>
         Promise.resolve(new Response('{}', { status: 200 }))
       );

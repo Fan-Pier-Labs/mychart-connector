@@ -3,7 +3,7 @@
  * `ConnectResult` and the `pending.complete()` step.
  */
 import readline from 'node:readline/promises';
-import { MyChartClient } from 'mychart-connector';
+import { MyChartClient } from 'mychart-cli';
 
 const result = await MyChartClient.connect({
   hostname: process.env.MYCHART_HOSTNAME!,

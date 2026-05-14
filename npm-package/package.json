@@ -1,5 +1,5 @@
 {
-  "name": "mychart-connector",
+  "name": "mychart-cli",
   "version": "0.1.0",
   "description": "Programmatic access to Epic MyChart patient portals: login, scrape every section of a patient's chart, and act on it.",
   "license": "SEE LICENSE IN LICENSE",
@@ -34,7 +34,7 @@
     }
   },
   "bin": {
-    "mychart-connector": "./dist/cli.cjs"
+    "mychart-cli": "./dist/cli.cjs"
   },
   "sideEffects": false,
   "files": [

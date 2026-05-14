@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { serializeCredential, deserializeCredential, type PasskeyCredential } from '../scrapers/myChart/softwareAuthenticator';
+import { serializeCredential, deserializeCredential, type PasskeyCredential } from '../../scrapers/myChart/softwareAuthenticator';
 
 // Stored relative to the user's current working directory so credentials
 // live in the user's project, not inside node_modules (which gets nuked

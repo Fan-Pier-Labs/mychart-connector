@@ -61,7 +61,6 @@ scrapers/<scraper_name>/
 ### Login Pattern 
 - Handle password encryption if the site does client-side encryption
 - Support 2FA — use `sendTokenToEmail: true` or equivalent if available
-- Use `get2FaCodeFromResend` from `../../cli/resend/resend` for automatic 2FA code retrieval
 - Return `{ accessToken, clientSessionId, refreshToken, loginResponse }`
 
 ### Scraper Functions Pattern (see any `get*.ts` file)
@@ -78,12 +77,12 @@ scrapers/<scraper_name>/
 
 ## Phase 3: CLI Integration
 
-1. **Create `cli/<scraper_name>.ts`** following the existing CLI pattern:
+1. **Create `npm-package/cli/<scraper_name>.ts`** following the existing CLI pattern:
    - Parse `--user` and `--pass` flags
    - Call `scrapeAll(user, pass)`
    - Output JSON results
 
-2. **Update `cli/entry.ts`** to add the new subcommand:
+2. **Update `npm-package/cli/entry.ts`** to add the new subcommand:
    ```typescript
    if (subcommand === '<scraper_name>') {
      import('./<scraper_name>').then(m => m.main()).catch(...)
@@ -126,7 +125,7 @@ Do NOT move on to documentation until the CLI scrape works end-to-end.
    - Add the scraper to the project overview
    - Add CLI usage to Key Commands
    - Add docs link to Reference Docs
-   - Update `cli/entry.ts` subcommand docs
+   - Update `npm-package/cli/entry.ts` subcommand docs
 
 ## Critical Rules
 

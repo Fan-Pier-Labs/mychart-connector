@@ -164,12 +164,12 @@ bun run fix                  # ESLint auto-fix
 
 ## Telemetry
 
-The CLI, web app, and `mychart-connector` npm package send anonymous
+The CLI, web app, and `mychart-cli` npm package send anonymous
 usage events (event name, MyChart portal hostname, OS platform / arch /
 version, runtime version, plus a per-machine random UUID for dedupe).
 No public IP, OS hostname, OS username, git identity, or scraped chart
 content is ever collected. Set
-`MYCHART_CONNECTOR_TELEMETRY_DISABLED=1` to opt out.
+`MYCHART_CLI_TELEMETRY_DISABLED=1` to opt out.
 
 A separate dev-mode env var, `OPENRECORD_MOCK_DATA=1`, switches the
 scrapers' HTTP layer over to canned mock responses (was previously

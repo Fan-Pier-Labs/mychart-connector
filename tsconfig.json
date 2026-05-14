@@ -37,7 +37,7 @@
   "include": [
     "index.d.ts",
     "scrapers/**/*.ts",
-    "cli/**/*.ts",
+    "npm-package/cli/**/*.ts",
     "shared/**/*.ts",
     "web/src/**/*.ts",
     "web/src/**/*.tsx",

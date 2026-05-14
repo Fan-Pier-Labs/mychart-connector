@@ -1,4 +1,5 @@
 src/
+cli/
 examples/
 tsup.config.ts
 tsconfig.json

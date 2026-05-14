@@ -4,14 +4,18 @@
  *
  * Session loading priority:
  * 1. Load from .cookie-cache/mychart.example.org.json
- * 2. If expired/missing, log in with credentials from browser keystore + Resend 2FA
+ * 2. If expired/missing, log in with a saved passkey from .passkey-credentials/mychart.example.org.json
  * 3. Save new session to cache for subsequent runs
+ *
+ * To set up the passkey, run:
+ *   bun run cli mychart --host mychart.example.org --set-up-passkey
  */
 
 import * as fs from 'fs'
 import * as path from 'path'
 import { MyChartRequest } from '../myChartRequest'
-import { myChartUserPassLogin, complete2faFlow, areCookiesValid } from '../login'
+import { myChartPasskeyLogin, areCookiesValid } from '../login'
+import { loadPasskeyCredential } from '../../../npm-package/cli/passkeyStore'
 
 const TEST_HOSTNAME = 'mychart.example.org'
 const COOKIE_CACHE_DIR = path.resolve(__dirname, '../../../.cookie-cache')
@@ -19,12 +23,10 @@ const COOKIE_CACHE_DIR = path.resolve(__dirname, '../../../.cookie-cache')
 let cachedSession: MyChartRequest | null = null
 
 export async function getTestSession(): Promise<MyChartRequest> {
-  // Return in-memory cached session if still valid
   if (cachedSession) {
     return cachedSession
   }
 
-  // Try loading from disk cache
   const cachePath = path.join(COOKIE_CACHE_DIR, `${TEST_HOSTNAME}.json`)
   try {
     const data = await fs.promises.readFile(cachePath, 'utf-8')
@@ -40,21 +42,16 @@ export async function getTestSession(): Promise<MyChartRequest> {
     // No cache file, proceed to login
   }
 
-  // Login with credentials from browser keystore
-  const { getMyChartAccounts } = await import('../../../read-local-passwords/index')
-  const accounts = await getMyChartAccounts()
-  const match = accounts.find(a => {
-    try { return new URL(a.url).hostname === TEST_HOSTNAME } catch { return false }
-  })
-
-  if (!match || !match.user || !match.pass) {
-    throw new Error(`No credentials found for ${TEST_HOSTNAME} in browser password stores`)
+  const credential = await loadPasskeyCredential(TEST_HOSTNAME)
+  if (!credential) {
+    throw new Error(
+      `No saved passkey for ${TEST_HOSTNAME}. Run: bun run cli mychart --host ${TEST_HOSTNAME} --set-up-passkey`
+    )
   }
 
-  const loginResult = await myChartUserPassLogin({
+  const loginResult = await myChartPasskeyLogin({
     hostname: TEST_HOSTNAME,
-    user: match.user,
-    pass: match.pass,
+    credential,
   })
 
   if (loginResult.state === 'logged_in') {
@@ -63,30 +60,7 @@ export async function getTestSession(): Promise<MyChartRequest> {
     return loginResult.mychartRequest
   }
 
-  if (loginResult.state === 'need_2fa') {
-    // Auto-retrieve 2FA code via Resend
-    const { get2FaCodeFromResend } = await import('../../../cli/resend/resend')
-    const codes = await get2FaCodeFromResend(loginResult.twoFaSentTime! - 5000, TEST_HOSTNAME)
-
-    if (!codes || codes.length === 0) {
-      throw new Error('Could not retrieve 2FA code from Resend')
-    }
-
-    const twoFaResult = await complete2faFlow({
-      mychartRequest: loginResult.mychartRequest,
-      twofaCodeArray: codes,
-    })
-
-    if (twoFaResult.state === 'logged_in') {
-      cachedSession = twoFaResult.mychartRequest
-      await saveCachedSession(twoFaResult.mychartRequest)
-      return twoFaResult.mychartRequest
-    }
-
-    throw new Error(`2FA failed: ${twoFaResult.state}`)
-  }
-
-  throw new Error(`Login failed: ${loginResult.state} - ${loginResult.error}`)
+  throw new Error(`Passkey login failed: ${loginResult.state}${loginResult.error ? ` - ${loginResult.error}` : ''}`)
 }
 
 async function saveCachedSession(req: MyChartRequest): Promise<void> {

@@ -2,9 +2,9 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { savePasskeyCredential, loadPasskeyCredential } from '../passkeyStore';
-import type { PasskeyCredential } from '../../scrapers/myChart/softwareAuthenticator';
+import type { PasskeyCredential } from '../../../scrapers/myChart/softwareAuthenticator';
 
-const PASSKEY_DIR = path.join(__dirname, '..', '..', '.passkey-credentials');
+const PASSKEY_DIR = path.join(process.cwd(), '.passkey-credentials');
 
 function makeCredential(overrides: Partial<PasskeyCredential> = {}): PasskeyCredential {
   return {

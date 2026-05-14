@@ -1,62 +1,59 @@
 import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
-import { myChartUserPassLogin, complete2faFlow, areCookiesValid } from '../scrapers/myChart/login';
-import { getMyChartProfile, getEmail } from '../scrapers/myChart/profile';
-import { getBillingHistory } from '../scrapers/myChart/bills/bills';
-import { upcomingVisits, pastVisits } from '../scrapers/myChart/visits/visits';
-import { listLabResults } from '../scrapers/myChart/labs_and_procedure_results/labResults';
-import { listConversations } from '../scrapers/myChart/messages/conversations';
-import { getMedications } from '../scrapers/myChart/medications';
-import { getAllergies } from '../scrapers/myChart/allergies';
-import { getHealthIssues } from '../scrapers/myChart/healthIssues';
-import { getImmunizations } from '../scrapers/myChart/immunizations';
-import { getHealthSummary } from '../scrapers/myChart/healthSummary';
-import { getCareTeam } from '../scrapers/myChart/careTeam';
-import { getPreventiveCare } from '../scrapers/myChart/preventiveCare';
-import { getInsurance } from '../scrapers/myChart/insurance';
-import { getReferrals } from '../scrapers/myChart/referrals';
-import { getMedicalHistory } from '../scrapers/myChart/medicalHistory';
-import { getLetters } from '../scrapers/myChart/letters';
-import { MyChartRequest } from '../scrapers/myChart/myChartRequest';
-import { dte2date } from '../scrapers/myChart/bills/utils';
-import { getMyChartAccounts } from '../read-local-passwords/index';
-import { PasswordStoreEntryWithKey } from '../read-local-passwords/types';
-// `./resend/resend` pulls in the Resend SDK + AWS Secrets Manager. Loaded
-// lazily inside the 2FA flow only when `--resend-2fa` is set, so the
-// bundled CLI doesn't need those deps installed unless that path is used.
-import { sendNewMessage, getMessageTopics, getMessageRecipients, getVerificationToken } from '../scrapers/myChart/messages/sendMessage';
-import { sendReply } from '../scrapers/myChart/messages/sendReply';
-import { getVitals } from '../scrapers/myChart/vitals';
-import { getEmergencyContacts } from '../scrapers/myChart/emergencyContacts';
-import { getDocuments } from '../scrapers/myChart/documents';
-import { getGoals } from '../scrapers/myChart/goals';
-import { getUpcomingOrders } from '../scrapers/myChart/upcomingOrders';
-import { getQuestionnaires } from '../scrapers/myChart/questionnaires';
-import { getCareJourneys } from '../scrapers/myChart/careJourneys';
-import { getActivityFeed } from '../scrapers/myChart/activityFeed';
-import { getEducationMaterials } from '../scrapers/myChart/educationMaterials';
-import { getEhiExportTemplates } from '../scrapers/myChart/ehiExport';
-import { getLinkedMyChartAccounts } from '../scrapers/myChart/other_mycharts/other_mycharts';
-import { getConversationMessages } from '../scrapers/myChart/messages/messageThreads';
-import { getImagingResults } from '../scrapers/myChart/labs_and_procedure_results/labResults';
-import { downloadImagingStudyDirect } from '../scrapers/myChart/eunity/imagingDirectDownload';
-import { convertCloToJpg } from '../scrapers/myChart/clo-image-parser/clo_to_jpg';
-import { AMF3Reader } from '../scrapers/myChart/clo-image-parser/clo_to_bitmap';
+import { myChartUserPassLogin, complete2faFlow, areCookiesValid } from '../../scrapers/myChart/login';
+import { getMyChartProfile, getEmail } from '../../scrapers/myChart/profile';
+import { getBillingHistory } from '../../scrapers/myChart/bills/bills';
+import { upcomingVisits, pastVisits } from '../../scrapers/myChart/visits/visits';
+import { listLabResults } from '../../scrapers/myChart/labs_and_procedure_results/labResults';
+import { listConversations } from '../../scrapers/myChart/messages/conversations';
+import { getMedications } from '../../scrapers/myChart/medications';
+import { getAllergies } from '../../scrapers/myChart/allergies';
+import { getHealthIssues } from '../../scrapers/myChart/healthIssues';
+import { getImmunizations } from '../../scrapers/myChart/immunizations';
+import { getHealthSummary } from '../../scrapers/myChart/healthSummary';
+import { getCareTeam } from '../../scrapers/myChart/careTeam';
+import { getPreventiveCare } from '../../scrapers/myChart/preventiveCare';
+import { getInsurance } from '../../scrapers/myChart/insurance';
+import { getReferrals } from '../../scrapers/myChart/referrals';
+import { getMedicalHistory } from '../../scrapers/myChart/medicalHistory';
+import { getLetters } from '../../scrapers/myChart/letters';
+import { MyChartRequest } from '../../scrapers/myChart/myChartRequest';
+import { dte2date } from '../../scrapers/myChart/bills/utils';
+import { getMyChartAccounts } from '../../read-local-passwords/index';
+import { PasswordStoreEntryWithKey } from '../../read-local-passwords/types';
+import { sendNewMessage, getMessageTopics, getMessageRecipients, getVerificationToken } from '../../scrapers/myChart/messages/sendMessage';
+import { sendReply } from '../../scrapers/myChart/messages/sendReply';
+import { getVitals } from '../../scrapers/myChart/vitals';
+import { getEmergencyContacts } from '../../scrapers/myChart/emergencyContacts';
+import { getDocuments } from '../../scrapers/myChart/documents';
+import { getGoals } from '../../scrapers/myChart/goals';
+import { getUpcomingOrders } from '../../scrapers/myChart/upcomingOrders';
+import { getQuestionnaires } from '../../scrapers/myChart/questionnaires';
+import { getCareJourneys } from '../../scrapers/myChart/careJourneys';
+import { getActivityFeed } from '../../scrapers/myChart/activityFeed';
+import { getEducationMaterials } from '../../scrapers/myChart/educationMaterials';
+import { getEhiExportTemplates } from '../../scrapers/myChart/ehiExport';
+import { getLinkedMyChartAccounts } from '../../scrapers/myChart/other_mycharts/other_mycharts';
+import { getConversationMessages } from '../../scrapers/myChart/messages/messageThreads';
+import { getImagingResults } from '../../scrapers/myChart/labs_and_procedure_results/labResults';
+import { downloadImagingStudyDirect } from '../../scrapers/myChart/eunity/imagingDirectDownload';
+import { convertCloToJpg } from '../../scrapers/myChart/clo-image-parser/clo_to_jpg';
+import { AMF3Reader } from '../../scrapers/myChart/clo-image-parser/clo_to_bitmap';
 import { inflateSync } from 'zlib';
-import { deleteMessage } from '../scrapers/myChart/messages/deleteMessage';
-import { requestMedicationRefill } from '../scrapers/myChart/medicationRefill';
-import { sessionStore } from '../scrapers/myChart/sessionStore';
-import { generateTotpCode } from '../scrapers/myChart/totp';
-import { setupTotp, disableTotp } from '../scrapers/myChart/setupTotp';
+import { deleteMessage } from '../../scrapers/myChart/messages/deleteMessage';
+import { requestMedicationRefill } from '../../scrapers/myChart/medicationRefill';
+import { sessionStore } from '../../scrapers/myChart/sessionStore';
+import { generateTotpCode } from '../../scrapers/myChart/totp';
+import { setupTotp, disableTotp } from '../../scrapers/myChart/setupTotp';
 import { saveTotpSecret, loadTotpSecret } from './totpStore';
-import { myChartPasskeyLogin } from '../scrapers/myChart/login';
-import { setupPasskey, listPasskeys, deletePasskey } from '../scrapers/myChart/setupPasskey';
+import { myChartPasskeyLogin } from '../../scrapers/myChart/login';
+import { setupPasskey, listPasskeys, deletePasskey } from '../../scrapers/myChart/setupPasskey';
 import { savePasskeyCredential, loadPasskeyCredential } from './passkeyStore';
-import type { PasskeyCredential } from '../scrapers/myChart/softwareAuthenticator';
-import { sendTelemetryEvent } from '../shared/telemetry';
-import { checkForUpdate } from '../shared/updateCheck';
-import { isBlockedInstance } from '../scrapers/myChart/blockedInstances';
+import type { PasskeyCredential } from '../../scrapers/myChart/softwareAuthenticator';
+import { sendTelemetryEvent } from '../../shared/telemetry';
+import { checkForUpdate } from '../../shared/updateCheck';
+import { isBlockedInstance } from '../../scrapers/myChart/blockedInstances';
 
 // Note: We NEVER modify or delete macOS Keychain entries. Read-only via browser password extraction.
 
@@ -102,7 +99,6 @@ interface CliArgs {
   setupTotp?: boolean; useSavedTotp?: boolean; disableTotp?: boolean;
   setupPasskey?: boolean; usePasskey?: boolean; listPasskeys?: boolean;
   deletePasskey?: boolean; local?: boolean; saveClo?: boolean;
-  resend2fa?: boolean;
 }
 
 function parseArgs(): CliArgs {
@@ -128,7 +124,6 @@ function parseArgs(): CliArgs {
     else if (args[i] === '--delete-passkey') parsed.deletePasskey = true;
     else if (args[i] === '--local') parsed.local = true;
     else if (args[i] === '--save-clo') parsed.saveClo = true;
-    else if (args[i] === '--resend-2fa') parsed.resend2fa = true;
   }
   return parsed as CliArgs;
 }
@@ -380,25 +375,6 @@ async function login(creds: LoginCredentials): Promise<MyChartRequest | null> {
       } else if (cliArgs.twofa) {
         console.log('  Using 2FA code from --2fa arg');
         twofaCodeArray = [{ code: cliArgs.twofa, score: 1 }];
-      } else if (cliArgs.resend2fa) {
-        // Opt-in: pull the code from a Resend-managed mailbox. Used by the
-        // FPL CI / fake-mychart loop. Requires `resend` and
-        // `@aws-sdk/client-secrets-manager` to be installed.
-        console.log('  Waiting for 2FA code via Resend...');
-        let get2FaCodeFromResend: (since: number, host: string) => Promise<{ code: string; score: number }[]>;
-        try {
-          ({ get2FaCodeFromResend } = await import('./resend/resend'));
-        } catch (err) {
-          console.log(`  --resend-2fa requires resend + @aws-sdk/client-secrets-manager: ${(err as Error).message}`);
-          return null;
-        }
-        const resendCodes = await get2FaCodeFromResend(Date.now(), creds.hostname);
-        if (resendCodes.length === 0) {
-          console.log('  No 2FA code found via Resend after 60s. Skipping this account.');
-          return null;
-        }
-        console.log(`  Found ${resendCodes.length} candidate code(s) via Resend (best: ${resendCodes[0].code}, score: ${resendCodes[0].score})`);
-        twofaCodeArray = resendCodes;
       } else {
         // Default: prompt the user for the code from their phone / email.
         const code = (await ask('  Enter 2FA code: ')).trim();
