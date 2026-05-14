@@ -4,7 +4,7 @@ Headless CLI entry point at `npm-package/cli/cli.ts`. Run with `bun run cli` or 
 
 ## Global install
 
-`npm i -g mychart-connector` installs the CLI as `mychart-cli` on PATH. After install, run e.g. `mychart-cli --host <hostname>`.
+`npm i -g mychart-cli` installs the CLI as `mychart-cli` on PATH. After install, run e.g. `mychart-cli --host <hostname>`.
 
 ## Cookie Caching
 

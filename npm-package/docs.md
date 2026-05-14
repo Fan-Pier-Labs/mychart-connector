@@ -1,9 +1,9 @@
 # API reference
 
-Full method-level reference for the `mychart-connector` package. For the
+Full method-level reference for the `mychart-cli` package. For the
 high-level "how do I use this" guide, see [README.md](./README.md).
 
-All shapes are TypeScript-first; importing from `mychart-connector` gives
+All shapes are TypeScript-first; importing from `mychart-cli` gives
 you full `.d.ts` autocomplete. The reference below is grouped by domain.
 
 ## `MyChartClient` — high-level wrapper
@@ -89,7 +89,7 @@ via the **CLO image conversion** functions below.
 ### CLO image conversion
 
 ```ts
-import { convertCloToJpg, convertCloToBitmap16 } from 'mychart-connector';
+import { convertCloToJpg, convertCloToBitmap16 } from 'mychart-cli';
 ```
 
 | Function | Signature |
@@ -194,7 +194,7 @@ import {
   deletePasskey,       // (req, rawId: string) => Promise<boolean>     — revoke one by rawId
   serializeCredential, // (cred) => string                             — JSON-serialize for persistence
   deserializeCredential, // (json) => PasskeyCredential
-} from 'mychart-connector';
+} from 'mychart-cli';
 
 // `req` comes from any successful login — e.g. `client.request` or the
 // `mychartRequest` field on a `LoginResult`.
@@ -210,7 +210,7 @@ import {
   disableTotp,      // (req, password: string, totpSecret: string) => Promise<boolean>
   generateTotpCode, // (secret: string, timestamp?: number) => Promise<string> — derive a 6-digit code locally
   parseTotpUri,     // (uri) => { secret, issuer, account }
-} from 'mychart-connector';
+} from 'mychart-cli';
 ```
 
 ## Lower-level: raw scraper functions
@@ -241,7 +241,7 @@ import {
   getEmergencyContacts, addEmergencyContact, updateEmergencyContact, removeEmergencyContact,
   getLinkedMyChartAccounts, getEhiExportTemplates,
   MyChartRequest,
-} from 'mychart-connector';
+} from 'mychart-cli';
 
 const result = await myChartUserPassLogin({ hostname, user, pass });
 if (result.state === 'logged_in') {

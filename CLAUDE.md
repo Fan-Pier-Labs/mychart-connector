@@ -11,7 +11,7 @@ Proprietary source-available license (see `LICENSE`). Viewing and personal/educa
 ## Architecture
 
 - **Scrapers** (`scrapers/`): Shared scraper code for MyChart
-- **CLI** (`npm-package/cli/cli.ts`): Headless CLI entry point — bundled into the published `mychart-connector` npm package as the `mychart-cli` bin. `npm i -g mychart-connector` puts `mychart-cli` on PATH. Great for Claude code to use for testing changes in the cli or scrapers.
+- **CLI** (`npm-package/cli/cli.ts`): Headless CLI entry point — bundled into the published `mychart-cli` npm package as the `mychart-cli` bin. `npm i -g mychart-cli` puts `mychart-cli` on PATH. Great for Claude code to use for testing changes in the cli or scrapers.
 - **Shared types** (`shared/`): Common types and enums shared across packages
 - **Read local passwords** (`read-local-passwords/`): Browser password store extraction (Chrome, Arc, Firefox)
 - **CLO image parser** (`scrapers/myChart/clo-image-parser/`): eUnity CLO image format decoder and encoder

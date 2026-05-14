@@ -1,5 +1,5 @@
 /**
- * End-to-end integration test for the published `mychart-connector` package.
+ * End-to-end integration test for the published `mychart-cli` package.
  *
  * Imports from the BUILT artifact (`../../dist/index.js`) so the test
  * exercises the same code consumers will run after `npm install`.
