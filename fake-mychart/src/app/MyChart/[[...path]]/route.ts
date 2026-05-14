@@ -116,12 +116,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
     const termsRedirect = requireTermsRedirect(request);
     if (termsRedirect) return termsRedirect;
-    // Use the logged-in user's profile so two accounts on the same hostname
-    // return distinguishable data. Falls back to homer if the session somehow
-    // lacks a username.
     const user = currentUser(request);
-    const profile = user?.profile ?? homer.profile;
-    return html(homePage(profile.name, profile.dob, profile.mrn, profile.pcp));
+    if (!user) {
+      return new NextResponse('Session is missing username', { status: 500 });
+    }
+    return html(homePage(user.profile.name, user.profile.dob, user.profile.mrn, user.profile.pcp));
   }
 
   if (lower.startsWith('home/csrftoken')) {
