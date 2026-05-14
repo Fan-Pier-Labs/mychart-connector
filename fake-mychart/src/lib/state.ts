@@ -16,10 +16,21 @@ export type Passkey = {
   lastUsedInstant: string | null;
 };
 
+export type FakeUserProfile = {
+  name: string;
+  dob: string;
+  mrn: string;
+  pcp: string;
+};
+
 export type FakeUser = {
   username: string;
   password: string;
   displayName: string;
+  // Profile data rendered on /Home and parsed by the profile scraper.
+  // Each user gets a distinct name/dob/mrn so integration tests can verify
+  // which session was actually hit when multiple accounts share a hostname.
+  profile: FakeUserProfile;
   // Whether the login flow itself demands the 2FA step. Seeded per user and
   // never mutated by the TOTP toggle endpoint — that endpoint only flips the
   // UI-visible totpEnabled flag, matching the prior fake-mychart behavior so
@@ -38,6 +49,12 @@ function seedUsers(): Record<string, FakeUser> {
       username: 'homer',
       password: 'donuts123',
       displayName: 'Homer Jay Simpson',
+      profile: {
+        name: homer.profile.name,
+        dob: homer.profile.dob,
+        mrn: homer.profile.mrn,
+        pcp: homer.profile.pcp,
+      },
       requires2faAtLogin: false,
       totpEnabled: false,
       passkeys: [],
@@ -46,6 +63,12 @@ function seedUsers(): Record<string, FakeUser> {
       username: 'marge',
       password: 'donuts123',
       displayName: 'Marge Simpson',
+      profile: {
+        name: 'Marge Bouvier Simpson',
+        dob: '03/19/1956',
+        mrn: '743',
+        pcp: 'Dr. Julius Hibbert, MD',
+      },
       requires2faAtLogin: true,
       totpEnabled: true,
       passkeys: [],

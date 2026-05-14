@@ -575,6 +575,39 @@ describe('MCP API key lifecycle', () => {
     expect(body.hasKey).toBe(true);
   });
 
+  it('authenticates MCP via Authorization: Bearer header', async () => {
+    const keyRes = await authedFetch('/api/mcp-key', { method: 'POST' });
+    expect(keyRes.status).toBe(200);
+    const { key } = await keyRes.json();
+
+    const res = await fetch(`${BASE_URL}/api/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(res.status).not.toBe(401);
+    const body = await res.text();
+    expect(body).not.toContain('Missing or invalid API key');
+  });
+
+  it('rejects MCP request with no key in query or header', async () => {
+    const res = await fetch(`${BASE_URL}/api/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toContain('Authorization: Bearer');
+  });
+
   it('revokes the API key', async () => {
     const res = await authedFetch('/api/mcp-key', { method: 'DELETE' });
     expect(res.status).toBe(200);
@@ -1207,6 +1240,162 @@ describe('AI Proxy', () => {
     expect(typeof body.remainingCents).toBe('number');
     expect(typeof body.period).toBe('string');
     expect(body.limitCents).toBe(5000); // $50.00
+  });
+});
+
+// ===================================================================
+// 12.5 Hostname:username disambiguation (multi-account same host)
+// ===================================================================
+//
+// Verifies that when a user has two MyChart accounts on the same hostname
+// (e.g. proxy access for a family member), MCP tools can target a specific
+// account via 'hostname:username'. fake-mychart's /Home page renders the
+// logged-in user's profile, so the response distinguishes which session was
+// actually hit.
+
+describe('hostname:username disambiguation', () => {
+  let margeInstanceId = '';
+  let disambigApiKey = '';
+
+  async function callMcpTool(toolName: string, args: Record<string, unknown>) {
+    const res = await fetch(`${BASE_URL}/api/mcp?key=${disambigApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: toolName, arguments: args },
+      }),
+    });
+    const raw = await res.text();
+    // Server may return either plain JSON or SSE. Pick the JSON payload either way.
+    const dataLine = raw.split('\n').find(l => l.startsWith('data: '));
+    const json = JSON.parse(dataLine ? dataLine.slice(6) : raw);
+    const content = json.result?.content?.[0]?.text ?? '';
+    return { text: content, isError: !!json.result?.isError };
+  }
+
+  it('creates a second instance for marge on the same hostname', async () => {
+    const res = await authedFetch('/api/mychart-instances', {
+      method: 'POST',
+      body: JSON.stringify({
+        hostname: FAKE_MYCHART_HOSTNAME,
+        username: 'marge',
+        password: 'donuts123',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    // Capture the id first so the Cleanup section can still delete the row
+    // even if a later assertion in this describe block fails.
+    margeInstanceId = body.id;
+    expect(body.hostname).toBe(FAKE_MYCHART_HOSTNAME);
+    expect(body.username).toBe('marge');
+    expect(margeInstanceId).toBeTruthy();
+  });
+
+  it('connects marge via login + TOTP', async () => {
+    const loginRes = await authedFetch('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ myChartInstanceId: margeInstanceId }),
+    });
+    expect(loginRes.status).toBe(200);
+    const loginBody = await loginRes.json();
+    expect(loginBody.state).toBe('need_2fa');
+
+    const twofaRes = await authedFetch('/api/twofa', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey: loginBody.sessionKey, code: '123456' }),
+    });
+    expect(twofaRes.status).toBe(200);
+    const twofaBody = await twofaRes.json();
+    expect(twofaBody.state).toBe('logged_in');
+  }, 30_000);
+
+  it('lists both connected instances', async () => {
+    const res = await authedFetch('/api/mychart-instances');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const homer = body.find((i: { username: string }) => i.username === 'homer');
+    const marge = body.find((i: { username: string }) => i.username === 'marge');
+    expect(homer).toBeDefined();
+    expect(marge).toBeDefined();
+    expect(homer.hostname).toBe(FAKE_MYCHART_HOSTNAME);
+    expect(marge.hostname).toBe(FAKE_MYCHART_HOSTNAME);
+    expect(homer.connected).toBe(true);
+    expect(marge.connected).toBe(true);
+  });
+
+  it('generates an MCP API key', async () => {
+    const res = await authedFetch('/api/mcp-key', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    disambigApiKey = body.key;
+    expect(disambigApiKey).toBeTruthy();
+  });
+
+  it('list_accounts shows both accounts with usernames', async () => {
+    const result = await callMcpTool('list_accounts', {});
+    expect(result.isError).toBe(false);
+    const accounts = JSON.parse(result.text);
+    expect(Array.isArray(accounts)).toBe(true);
+    expect(accounts.length).toBe(2);
+    const usernames = accounts.map((a: { username: string }) => a.username).sort();
+    expect(usernames).toEqual(['homer', 'marge']);
+    for (const a of accounts) {
+      expect(a.hostname).toBe(FAKE_MYCHART_HOSTNAME);
+    }
+  });
+
+  it('hostname only (no username) returns a disambiguation error', async () => {
+    const result = await callMcpTool('get_profile', { instance: FAKE_MYCHART_HOSTNAME });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Multiple accounts');
+    expect(result.text).toContain(`${FAKE_MYCHART_HOSTNAME}:homer`);
+    expect(result.text).toContain(`${FAKE_MYCHART_HOSTNAME}:marge`);
+  });
+
+  it('hostname:homer returns Homer\'s profile', async () => {
+    const result = await callMcpTool('get_profile', {
+      instance: `${FAKE_MYCHART_HOSTNAME}:homer`,
+    });
+    expect(result.isError).toBe(false);
+    const profile = JSON.parse(result.text);
+    expect(profile.name).toContain('Homer');
+    expect(profile.mrn).toBe('742');
+  });
+
+  it('hostname:marge returns Marge\'s profile', async () => {
+    const result = await callMcpTool('get_profile', {
+      instance: `${FAKE_MYCHART_HOSTNAME}:marge`,
+    });
+    expect(result.isError).toBe(false);
+    const profile = JSON.parse(result.text);
+    expect(profile.name).toContain('Marge');
+    expect(profile.mrn).toBe('743');
+  });
+
+  it('hostname:unknown returns a not-found error listing available accounts', async () => {
+    const result = await callMcpTool('get_profile', {
+      instance: `${FAKE_MYCHART_HOSTNAME}:ghost`,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/not found|not connected/i);
+    expect(result.text).toContain(`${FAKE_MYCHART_HOSTNAME}:homer`);
+    expect(result.text).toContain(`${FAKE_MYCHART_HOSTNAME}:marge`);
+  });
+
+  it('revokes the API key and deletes the marge instance', async () => {
+    const revokeRes = await authedFetch('/api/mcp-key', { method: 'DELETE' });
+    expect(revokeRes.status).toBe(200);
+    const delRes = await authedFetch(`/api/mychart-instances/${margeInstanceId}`, {
+      method: 'DELETE',
+    });
+    expect(delRes.status).toBe(200);
   });
 });
 

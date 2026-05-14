@@ -8,6 +8,7 @@ function jsonResult(data: unknown): CallToolResult {
 }
 
 const DEMO_HOSTNAME = 'mychart.springfieldmed.example.org';
+const DEMO_USERNAME = 'homersimpson742';
 
 /** Maps tool name → demo data for simple scraper tools (instance-only param) */
 const scraperToolData: Record<string, unknown> = {
@@ -61,7 +62,7 @@ export function createDemoMcpServer(): McpServer {
       return jsonResult([
         {
           hostname: DEMO_HOSTNAME,
-          username: 'homersimpson742',
+          username: DEMO_USERNAME,
           connected: true,
           hasTotpSecret: true,
           hasPasskeyCredential: true,
@@ -72,19 +73,19 @@ export function createDemoMcpServer(): McpServer {
 
   reg('connect_instance',
     async (_args: { instance: string }): Promise<CallToolResult> => {
-      return jsonResult({ status: 'logged_in', hostname: DEMO_HOSTNAME });
+      return jsonResult({ status: 'logged_in', hostname: DEMO_HOSTNAME, username: DEMO_USERNAME });
     }
   );
 
   reg('check_session',
     async (_args: { instance?: string }): Promise<CallToolResult> => {
-      return jsonResult({ hostname: DEMO_HOSTNAME, connected: true, cookiesValid: true });
+      return jsonResult({ hostname: DEMO_HOSTNAME, username: DEMO_USERNAME, connected: true, cookiesValid: true });
     }
   );
 
   reg('complete_2fa',
     async (_args: { code: string; instance: string }): Promise<CallToolResult> => {
-      return jsonResult({ status: 'logged_in', message: '2FA completed successfully' });
+      return jsonResult({ status: 'logged_in', message: '2FA completed successfully', hostname: DEMO_HOSTNAME, username: DEMO_USERNAME });
     }
   );
 

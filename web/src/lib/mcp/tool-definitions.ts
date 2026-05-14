@@ -9,7 +9,10 @@ export interface ToolDefinition {
 // ── Reusable schema fragments ──
 
 const instanceParam = {
-  instance: z.string().optional().describe('MyChart hostname (required if multiple accounts connected)'),
+  instance: z.string().optional().describe(
+    'MyChart hostname, or "hostname:username" when multiple accounts share a hostname. ' +
+    'Required if multiple accounts are connected.'
+  ),
 };
 
 const paginatedParams = {
@@ -29,22 +32,33 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'connect_instance',
-    description: 'Connect to a MyChart instance by hostname. Auto-completes 2FA if TOTP is configured.',
-    inputSchema: { instance: z.string().describe('MyChart hostname to connect to') },
+    description: 'Connect to a MyChart instance. Auto-completes 2FA if TOTP is configured. Pass "hostname:username" to disambiguate when multiple accounts share a hostname.',
+    inputSchema: {
+      instance: z.string().describe(
+        'MyChart hostname to connect to, or "hostname:username" if multiple accounts share a hostname.'
+      ),
+    },
   },
   {
     name: 'check_session',
-    description: 'Check current session status and hostname for a MyChart instance',
-    inputSchema: { instance: z.string().optional().describe('MyChart hostname (checks all if omitted)') },
+    description: 'Check current session status for a MyChart instance. Pass "hostname:username" to disambiguate when multiple accounts share a hostname.',
+    inputSchema: {
+      instance: z.string().optional().describe(
+        'MyChart hostname, or "hostname:username" when multiple accounts share a hostname. ' +
+        'Checks all accounts if omitted.'
+      ),
+    },
   },
 
   // Auth tools
   {
     name: 'complete_2fa',
-    description: 'Complete 2FA verification for a MyChart instance. Pass the 2FA code and instance hostname.',
+    description: 'Complete 2FA verification for a MyChart instance. Pass the 2FA code and instance hostname (or "hostname:username" to disambiguate when multiple accounts share a hostname).',
     inputSchema: {
       code: z.string(),
-      instance: z.string().describe('MyChart hostname requiring 2FA'),
+      instance: z.string().describe(
+        'MyChart hostname requiring 2FA, or "hostname:username" if multiple accounts share a hostname.'
+      ),
     },
   },
 

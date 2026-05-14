@@ -116,7 +116,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
     const termsRedirect = requireTermsRedirect(request);
     if (termsRedirect) return termsRedirect;
-    return html(homePage(homer.profile.name, homer.profile.dob, homer.profile.mrn, homer.profile.pcp));
+    const user = currentUser(request);
+    if (!user) {
+      return new NextResponse('Session is missing username', { status: 500 });
+    }
+    return html(homePage(user.profile.name, user.profile.dob, user.profile.mrn, user.profile.pcp));
   }
 
   if (lower.startsWith('home/csrftoken')) {

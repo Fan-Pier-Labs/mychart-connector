@@ -95,15 +95,17 @@ async function resolveRequest(
   console.log(`[mcp] resolveRequest: ${connected.length} connected instance(s)`);
 
   // If a 2FA flow is in progress, don't auto-connect (which would wipe the pending session).
-  // The user must call complete_2fa first.
+  // The user must call complete_2fa first. List ALL pending instances with hostname:username
+  // so the caller can target the right account when multiple accounts share a hostname.
   if (connected.length === 0) {
-    const pending2fa = instances.find(inst => {
+    const pending2fa = instances.filter(inst => {
       const entry = sessionStore.getEntry(`${userId}:${inst.id}`);
       return entry?.status === 'need_2fa';
     });
-    if (pending2fa) {
-      console.log(`[mcp] resolveRequest: ${pending2fa.hostname} has pending 2FA — skipping auto-connect`);
-      return { error: `MyChart is waiting for 2FA on ${pending2fa.hostname}. Use the complete_2fa tool to enter your code.` };
+    if (pending2fa.length > 0) {
+      const labels = pending2fa.map(i => `${i.hostname}:${i.username}`);
+      console.log(`[mcp] resolveRequest: ${labels.join(', ')} pending 2FA — skipping auto-connect`);
+      return { error: `MyChart is waiting for 2FA on: ${labels.join(', ')}. Use the complete_2fa tool with instance set to one of these to enter your code.` };
     }
   }
 
@@ -130,24 +132,90 @@ async function resolveRequest(
     }
   }
 
-  // If hostname specified, filter to matching instance
+  // Match the requested instance against the connected pool.
+  const match = pickInstance(connected, instanceHostname);
+  if ('matchIndex' in match) {
+    return { mychartRequest: connected[match.matchIndex].request, instance: connected[match.matchIndex].instance };
+  }
+  return { error: match.error };
+}
+
+/**
+ * Pure logic for selecting one item from a list given a user-supplied instance
+ * identifier. Exported for unit testing.
+ *
+ * The instance identifier can be either:
+ *   - a bare hostname (e.g. "mychart.example.org" or "mychart.example.org:8443"
+ *     when normalizeHostname has appended a port), matching exactly one item, OR
+ *   - "hostname:username" to disambiguate when multiple items share a hostname.
+ *
+ * Exact hostname match is tried first so port-suffixed hostnames keep working.
+ * Falls back to hostname:username parsing (using lastIndexOf so "host:8443:alice"
+ * still resolves) only if no exact match exists.
+ *
+ * `accessor` extracts {hostname, username} from each item; this makes the helper
+ * usable for both 'connected sessions' and 'configured instances' lookups.
+ */
+export function pickByInstanceIdentifier<T>(
+  items: T[],
+  instanceHostname: string | undefined,
+  accessor: (item: T) => { hostname: string; username: string },
+  notFoundContext: 'connected' | 'configured' = 'connected'
+): { matchIndex: number } | { error: string } {
+  const labelAll = () => items.map(i => {
+    const a = accessor(i);
+    return `${a.hostname}:${a.username}`;
+  }).join(', ');
+
   if (instanceHostname) {
-    const match = connected.find(c => c.instance.hostname === instanceHostname);
-    if (!match) {
-      const available = connected.map(c => c.instance.hostname).join(', ');
-      return { error: `Instance '${instanceHostname}' not found or not connected. Connected: ${available}` };
+    // 1. Exact hostname match (preserves port-suffixed hostnames).
+    const exactIndices = items.flatMap((it, i) => accessor(it).hostname === instanceHostname ? [i] : []);
+    if (exactIndices.length === 1) {
+      return { matchIndex: exactIndices[0] };
     }
-    return { mychartRequest: match.request, instance: match.instance };
+    if (exactIndices.length > 1) {
+      const labels = exactIndices.map(i => {
+        const a = accessor(items[i]);
+        return `${a.hostname}:${a.username}`;
+      }).join(', ');
+      return { error: `Multiple accounts on hostname '${instanceHostname}'. Specify the 'instance' parameter as 'hostname:username', one of: ${labels}` };
+    }
+
+    // 2. No exact match — try hostname:username syntax. Split on LAST colon so
+    //    a port-suffixed hostname like "host:8443" with username "alice" can be
+    //    written "host:8443:alice".
+    const colonIdx = instanceHostname.lastIndexOf(':');
+    if (colonIdx > 0 && colonIdx < instanceHostname.length - 1) {
+      const hostnamePart = instanceHostname.slice(0, colonIdx);
+      const usernamePart = instanceHostname.slice(colonIdx + 1);
+      const matchedIndex = items.findIndex(it => {
+        const a = accessor(it);
+        return a.hostname === hostnamePart && a.username === usernamePart;
+      });
+      if (matchedIndex >= 0) {
+        return { matchIndex: matchedIndex };
+      }
+    }
+
+    // 3. Not found.
+    const suffix = notFoundContext === 'connected' ? 'Connected' : 'Available';
+    return { error: `Instance '${instanceHostname}' not found or not ${notFoundContext}. ${suffix}: ${labelAll()}` };
   }
 
-  // If one connected, use it
-  if (connected.length === 1) {
-    return { mychartRequest: connected[0].request, instance: connected[0].instance };
+  // No instance specified.
+  if (items.length === 1) {
+    return { matchIndex: 0 };
   }
+  const suffix = notFoundContext === 'connected' ? 'Connected' : 'Available';
+  return { error: `Multiple MyChart accounts ${notFoundContext}. Specify the 'instance' parameter (hostname or hostname:username) with one of: ${labelAll()}` };
+}
 
-  // Multiple connected, no hostname specified
-  const hostnames = connected.map(c => c.instance.hostname).join(', ');
-  return { error: `Multiple MyChart accounts connected. Specify the 'instance' parameter with one of: ${hostnames}` };
+/** Convenience wrapper for the connected-session resolver. */
+export function pickInstance(
+  connected: { instance: { hostname: string; username: string } }[],
+  instanceHostname: string | undefined
+): { matchIndex: number } | { error: string } {
+  return pickByInstanceIdentifier(connected, instanceHostname, c => c.instance, 'connected');
 }
 
 type ScraperFn = (req: MyChartRequest) => Promise<unknown>;
@@ -233,16 +301,14 @@ export function createMcpServer(userId: string): McpServer {
       console.log(`[mcp] Tool call: connect_instance (user=${userId}, instance=${args.instance})`);
       try {
         const instances = await getMyChartInstances(userId);
-        const inst = instances.find(i => i.hostname === args.instance);
-        if (!inst) {
-          const available = instances.map(i => i.hostname).join(', ');
-          return errorResult(`Instance '${args.instance}' not found. Available: ${available}`);
-        }
+        const pick = pickByInstanceIdentifier(instances, args.instance, i => ({ hostname: i.hostname, username: i.username }), 'configured');
+        if ('error' in pick) return errorResult(pick.error);
+        const inst = instances[pick.matchIndex];
 
-        console.log(`[mcp] connect_instance: attempting auto-connect to ${inst.hostname} (hasTOTP=${!!inst.totpSecret})`);
+        console.log(`[mcp] connect_instance: attempting auto-connect to ${inst.hostname}:${inst.username} (hasTOTP=${!!inst.totpSecret})`);
         const result = await autoConnectInstance(userId, inst);
-        console.log(`[mcp] connect_instance: result=${result.state} for ${inst.hostname}`);
-        return jsonResult({ status: result.state, hostname: inst.hostname });
+        console.log(`[mcp] connect_instance: result=${result.state} for ${inst.hostname}:${inst.username}`);
+        return jsonResult({ status: result.state, hostname: inst.hostname, username: inst.username });
       } catch (err) {
         const error = err as Error;
         console.error(`[mcp] connect_instance: error -`, error.message, error.stack);
@@ -259,14 +325,17 @@ export function createMcpServer(userId: string): McpServer {
         const instances = await getMyChartInstances(userId);
         console.log(`[mcp] check_session: found ${instances.length} instance(s)`);
 
-        const toCheck = args.instance
-          ? instances.filter(i => i.hostname === args.instance)
-          : instances;
+        let toCheck: typeof instances;
+        if (args.instance) {
+          const pick = pickByInstanceIdentifier(instances, args.instance, i => ({ hostname: i.hostname, username: i.username }), 'configured');
+          if ('error' in pick) return errorResult(pick.error);
+          toCheck = [instances[pick.matchIndex]];
+        } else {
+          toCheck = instances;
+        }
 
         if (toCheck.length === 0) {
-          return errorResult(args.instance
-            ? `Instance '${args.instance}' not found.`
-            : 'No MyChart accounts configured.');
+          return errorResult('No MyChart accounts configured.');
         }
 
         const results = [];
@@ -279,17 +348,18 @@ export function createMcpServer(userId: string): McpServer {
             try {
               const resp = await entry.request.makeRequest({ path: '/Home', followRedirects: false });
               cookiesValid = resp.status === 200;
-              console.log(`[mcp] check_session: ${inst.hostname} cookie validation response status=${resp.status}`);
+              console.log(`[mcp] check_session: ${inst.hostname}:${inst.username} cookie validation response status=${resp.status}`);
             } catch (err) {
-              console.error(`[mcp] check_session: cookie validation failed for ${inst.hostname}:`, (err as Error).message);
+              console.error(`[mcp] check_session: cookie validation failed for ${inst.hostname}:${inst.username}:`, (err as Error).message);
             }
           }
 
           const cookieCount = entry ? entry.request.getCookieInfo().count : 0;
-          console.log(`[mcp] check_session: ${inst.hostname} — status=${entry?.status || 'none'}, ${cookieCount} cookies, valid=${cookiesValid}`);
+          console.log(`[mcp] check_session: ${inst.hostname}:${inst.username} — status=${entry?.status || 'none'}, ${cookieCount} cookies, valid=${cookiesValid}`);
 
           results.push({
             hostname: inst.hostname,
+            username: inst.username,
             connected: !!entry && entry.status === 'logged_in',
             cookiesValid,
           });
@@ -309,10 +379,9 @@ export function createMcpServer(userId: string): McpServer {
       console.log(`[mcp] Tool call: complete_2fa (user=${userId}, instance=${args.instance})`);
       try {
         const instances = await getMyChartInstances(userId);
-        const inst = instances.find(i => i.hostname === args.instance);
-        if (!inst) {
-          return errorResult(`Instance '${args.instance}' not found.`);
-        }
+        const pick = pickByInstanceIdentifier(instances, args.instance, i => ({ hostname: i.hostname, username: i.username }), 'configured');
+        if ('error' in pick) return errorResult(pick.error);
+        const inst = instances[pick.matchIndex];
 
         const sessionKey = `${userId}:${inst.id}`;
         console.log(`[mcp] complete_2fa: sessionKey=${sessionKey}`);
@@ -324,15 +393,15 @@ export function createMcpServer(userId: string): McpServer {
         }
         const req = entry.request;
 
-        console.log(`[mcp] complete_2fa: submitting code for ${inst.hostname}`);
+        console.log(`[mcp] complete_2fa: submitting code for ${inst.hostname}:${inst.username}`);
         const result = await complete2faFlow({ mychartRequest: req, code: args.code });
-        console.log(`[mcp] complete_2fa: result state=${result.state} for ${inst.hostname}`);
+        console.log(`[mcp] complete_2fa: result state=${result.state} for ${inst.hostname}:${inst.username}`);
         if (result.state === 'logged_in') {
           const { setSession } = await import('../sessions');
           setSession(sessionKey, result.mychartRequest, { hostname: inst.hostname });
           const storeKeysAfter = Array.from(sessionStore.all().entries()).map(([k, e]) => `${k}=${e.status}`).join(', ');
           console.log(`[mcp] complete_2fa: store state AFTER setSession: [${storeKeysAfter}]`);
-          return jsonResult({ status: 'logged_in', message: '2FA completed successfully' });
+          return jsonResult({ status: 'logged_in', message: '2FA completed successfully', hostname: inst.hostname, username: inst.username });
         }
         return errorResult(`2FA failed: ${result.state}`);
       } catch (err) {
