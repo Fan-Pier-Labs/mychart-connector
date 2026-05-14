@@ -5,16 +5,16 @@
     "": {
       "name": "openclaw-plugin-mychart",
       "dependencies": {
-        "cheerio": "^1.2.0",
-        "fetch-cookie": "^3.2.0",
-        "totp-generator": "^2.0.1",
+        "cheerio": "latest",
+        "fetch-cookie": "latest",
+        "totp-generator": "latest",
       },
       "devDependencies": {
-        "tsup": "^8.5.1",
-        "typescript": "^6.0.2",
+        "tsup": "latest",
+        "typescript": "latest",
       },
       "optionalDependencies": {
-        "sqlite3": "^6.0.1",
+        "sqlite3": "latest",
       },
     },
   },
@@ -417,7 +417,7 @@
 
     "tunnel-agent": ["tunnel-agent@0.6.0", "", { "dependencies": { "safe-buffer": "^5.0.1" } }, "sha512-McnNiV1l8RYeY8tBgEpuodCC1mLUdbSN+CYBL7kJsJNInOP8UjDDEwdk6Mw60vdLLrr5NHKZhMAOSrR2NZuQ+w=="],
 
-    "typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
+    "typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "ufo": ["ufo@1.6.3", "", {}, "sha512-yDJTmhydvl5lJzBmy/hyOAA0d+aqCBuwl818haVdYCRrWV84o7YyeVm4QlVHStqNrrJSTb6jKuFAVqAFsr+K3Q=="],
 
