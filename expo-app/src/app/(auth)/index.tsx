@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChatBubble, ToolCallIndicator } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
 import { LeftDrawer } from "@/components/LeftDrawer";
+import { AlertsCard } from "@/components/AlertsCard";
 import { SkillsSheet } from "@/components/SkillsSheet";
 import type { Skill } from "@/lib/skills/types";
 import { sendMessage, type ChatMessage, type ToolCall } from "@/lib/ai/claude-client";
@@ -198,17 +199,20 @@ export default function ChatScreen() {
 
         {messages.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>OpenRecord</Text>
-            <Text style={styles.emptySubtitle}>Ask anything about your health data</Text>
-            <Pressable
-              testID="run-skill-button"
-              accessibilityLabel="Run a skill"
-              accessibilityRole="button"
-              style={styles.runSkillButton}
-              onPress={() => setShowSkills(true)}
-            >
-              <Text style={styles.runSkillText}>Run a skill ›</Text>
-            </Pressable>
+            <View style={styles.emptyHero}>
+              <Text style={styles.emptyTitle}>OpenRecord</Text>
+              <Text style={styles.emptySubtitle}>Ask anything about your health data</Text>
+              <Pressable
+                testID="run-skill-button"
+                accessibilityLabel="Run a skill"
+                accessibilityRole="button"
+                style={styles.runSkillButton}
+                onPress={() => setShowSkills(true)}
+              >
+                <Text style={styles.runSkillText}>Run a skill ›</Text>
+              </Pressable>
+            </View>
+            <AlertsCard onDoAlert={handleSend} />
           </View>
         ) : (
           <FlatList
@@ -284,6 +288,11 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   empty: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingBottom: 16,
+  },
+  emptyHero: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",

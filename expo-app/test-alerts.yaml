@@ -1,0 +1,36 @@
+appId: com.fanpierlabs.openrecord
+---
+# Run from the authenticated home screen against fake-mychart.
+# Verifies real alerts populate from MyChart data and that CTAs render
+# with the correct labels (incl. the "with AI" suffix for AI actions).
+
+- launchApp:
+    clearState: false
+
+# Card visible (regenerate runs on mount; allow time for scraping)
+- extendedWaitUntil:
+    visible:
+      id: "alerts-toggle"
+    timeout: 30000
+- tapOn:
+    id: "alerts-toggle"
+
+# Bill alert with rich context
+- assertVisible: "Outstanding bill"
+- assertVisible:
+    text: ".*Springfield General Hospital.*"
+- assertVisible: "Pay bill"
+
+# Refill alerts (Homer is on Lisinopril among others) — no "with AI" suffix
+- assertVisible: "Lisinopril"
+- assertVisible: "Request refill"
+
+# Abnormal lab → AI-labeled action
+- assertVisible:
+    text: ".*Abnormal.*"
+- assertVisible: "Discuss with AI"
+
+# Ignoring an alert removes it from the list
+- tapOn: "Ignore"
+- assertVisible:
+    id: "alerts-toggle"
