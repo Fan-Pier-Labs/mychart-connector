@@ -68,7 +68,7 @@ describe('upcomingVisits', () => {
     expect(result.InProgressVisits).toHaveLength(1)
   })
 
-  it('makes POST request with verification token header', async () => {
+  it('sends LoadUpcoming with no body and no Content-Type (F5 WAF regression)', async () => {
     const req = new MyChartRequest('mychart.example.com')
     req.firstPathPart = 'MyChart'
     const calls: Array<{ url: string; init?: RequestInit }> = []
@@ -91,6 +91,12 @@ describe('upcomingVisits', () => {
     expect(calls[1].init?.method).toBe('POST')
     const headers = calls[1].init!.headers as Record<string, string>
     expect(headers['__requestverificationtoken']).toBe('my_csrf')
+    // Pin the WAF-safe shape: no body, no Content-Type. On Node's undici fetch,
+    // an empty-string body would still trigger Content-Type: text/plain. The
+    // body must be omitted entirely to avoid tripping F5 Volterra WAF rules.
+    expect(calls[1].init?.body).toBeUndefined()
+    expect(headers['content-type']).toBeUndefined()
+    expect(headers['Content-Type']).toBeUndefined()
   })
 })
 
@@ -136,7 +142,7 @@ describe('pastVisits', () => {
     expect(result.List['Org-1'].List[0].Diagnoses).toBe('Common Cold')
   })
 
-  it('includes oldestRenderedDate in request URL', async () => {
+  it('sends LoadPast with no body and no Content-Type (F5 WAF regression)', async () => {
     const req = new MyChartRequest('mychart.example.com')
     req.firstPathPart = 'MyChart'
     const calls: Array<{ url: string; init?: RequestInit }> = []
@@ -160,7 +166,16 @@ describe('pastVisits', () => {
     expect(calls[1].url).toContain('oldestRenderedDate=')
     expect(calls[1].url).toContain('2023-06-15')
     expect(calls[1].init?.method).toBe('POST')
-    expect(calls[1].init?.body).toBe('serializedIndex=')
+    // Mirror upcomingVisits: no body, no Content-Type header. The previous
+    // shape (form-urlencoded + 'serializedIndex=' body) trips F5 Volterra
+    // WAF rules on some MyChart deployments. We must omit the body entirely
+    // (not 'body: \'\'') because on Node's undici fetch an empty string still
+    // auto-adds 'Content-Type: text/plain;charset=UTF-8'. Pin all three to
+    // catch any partial revert.
+    expect(calls[1].init?.body).toBeUndefined()
+    const loadPastHeaders = calls[1].init?.headers as Record<string, string> | undefined
+    expect(loadPastHeaders?.['content-type']).toBeUndefined()
+    expect(loadPastHeaders?.['Content-Type']).toBeUndefined()
   })
 
   it('returns visits from multiple organizations', async () => {
