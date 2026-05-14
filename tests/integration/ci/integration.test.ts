@@ -575,6 +575,39 @@ describe('MCP API key lifecycle', () => {
     expect(body.hasKey).toBe(true);
   });
 
+  it('authenticates MCP via Authorization: Bearer header', async () => {
+    const keyRes = await authedFetch('/api/mcp-key', { method: 'POST' });
+    expect(keyRes.status).toBe(200);
+    const { key } = await keyRes.json();
+
+    const res = await fetch(`${BASE_URL}/api/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(res.status).not.toBe(401);
+    const body = await res.text();
+    expect(body).not.toContain('Missing or invalid API key');
+  });
+
+  it('rejects MCP request with no key in query or header', async () => {
+    const res = await fetch(`${BASE_URL}/api/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toContain('Authorization: Bearer');
+  });
+
   it('revokes the API key', async () => {
     const res = await authedFetch('/api/mcp-key', { method: 'DELETE' });
     expect(res.status).toBe(200);
