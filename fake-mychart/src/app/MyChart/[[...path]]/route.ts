@@ -595,17 +595,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (lower === 'api/past-results/getmultiplehistoricalresultcomponents') {
     return json({ historicalResults: [] });
   }
+  if (lower === 'api/visit-notes/getvisitnotes') {
+    try {
+      const body = await request.json();
+      const data = homer.visitNotesByCsn[body.CSN];
+      if (data) return json(data);
+    } catch { /* fall through */ }
+    return json({ lrpID: '', depPhoneNumber: '', isAtLeastOneNoteSensitive: false, noteList: [] });
+  }
   if (lower === 'api/report-content/loadreportcontent') {
     try {
       const body = await request.json();
-      if (body.reportID === 'RPT-XRAY-001') {
+      // Clinical note content (see getNoteContent in scrapers/myChart/notes/notes.ts).
+      if (body.reportMnemonic === 'OPEN_NOTES') {
+        const note = homer.noteContent[body.contextID];
+        if (note) return json(note);
+      }
+      // After Visit Summary (see getVisitAVS in scrapers/myChart/notes/notes.ts).
+      else if (body.reportMnemonic === 'AMB_AVS') {
+        const avs = homer.avsByCsn[body.csn];
+        if (avs) return json(avs);
+      }
+      // Imaging report bodies (existing).
+      else if (body.reportID === 'RPT-XRAY-001') {
         return json(homer.imagingReportContent);
       }
-      if (body.reportID === 'RPT-CT-001') {
+      else if (body.reportID === 'RPT-CT-001') {
         return json(homer.ctReportContent);
       }
     } catch { /* fall through */ }
-    return json({ reportContent: '' });
+    return json({ reportContent: '', reportCss: '' });
   }
 
   // ── FdiData (bridge from MyChart to eUnity) ───────────────────

@@ -1580,3 +1580,124 @@ export const imagingReportContent = {
   reportContent: `<div class="report-content"><h3>XR Skull 2 Views</h3><p>FINDINGS: Multiple radiopaque foreign bodies within cranial vault consistent with crayons.</p><div data-fdi-context='${JSON.stringify({ fdi: 'FDI-XRAY-001', ord: 'ORD-XRAY-001' })}'><a href="#">View Images</a></div></div>`,
   reportCss: '',
 };
+
+// ─── Clinical Notes (Shared Notes tab) ──────────────────────────────
+//
+// Each past visit can have multiple clinical notes (operative, anesthesia,
+// progress, etc.). The scraper at scrapers/myChart/notes/notes.ts hits
+// /api/visit-notes/GetVisitNotes with a CSN and gets back a list of notes,
+// then fetches each note body via /api/report-content/LoadReportContent
+// with reportMnemonic=OPEN_NOTES.
+
+export const visitNotesByCsn: Record<string, {
+  lrpID: string;
+  depPhoneNumber: string;
+  isAtLeastOneNoteSensitive: boolean;
+  noteList: Array<{
+    hnoID: string;
+    hnoDAT: string;
+    displayName: string;
+    iso: string;
+    isAddendum: boolean;
+    isNoteSensitive: boolean;
+    provider: { name: string; magicID: string };
+  }>;
+}> = {
+  // ER Visit - Donut Incident (3 notes: triage, attending, discharge summary)
+  'CSN-HOMER-003': {
+    lrpID: 'LRP-HOMER-003',
+    depPhoneNumber: '555-0123',
+    isAtLeastOneNoteSensitive: false,
+    noteList: [
+      {
+        hnoID: 'HNO-HOMER-003-A',
+        hnoDAT: '67890',
+        displayName: 'ED Triage Note',
+        iso: '2025-11-20T14:15:00Z',
+        isAddendum: false,
+        isNoteSensitive: false,
+        provider: { name: 'Nick Riviera, MD', magicID: 'PROV-NICK' },
+      },
+      {
+        hnoID: 'HNO-HOMER-003-B',
+        hnoDAT: '67891',
+        displayName: 'ED Provider Note',
+        iso: '2025-11-20T15:00:00Z',
+        isAddendum: false,
+        isNoteSensitive: false,
+        provider: { name: 'Nick Riviera, MD', magicID: 'PROV-NICK' },
+      },
+      {
+        hnoID: 'HNO-HOMER-003-C',
+        hnoDAT: '67892',
+        displayName: 'Discharge Summary',
+        iso: '2025-11-20T18:30:00Z',
+        isAddendum: false,
+        isNoteSensitive: false,
+        provider: { name: 'Nick Riviera, MD', magicID: 'PROV-NICK' },
+      },
+    ],
+  },
+  // Annual Physical (1 note)
+  'CSN-HOMER-002': {
+    lrpID: 'LRP-HOMER-002',
+    depPhoneNumber: '555-0100',
+    isAtLeastOneNoteSensitive: false,
+    noteList: [
+      {
+        hnoID: 'HNO-HOMER-002-A',
+        hnoDAT: '67800',
+        displayName: 'Progress Note',
+        iso: '2026-01-10T09:30:00Z',
+        isAddendum: false,
+        isNoteSensitive: false,
+        provider: { name: 'Julius Hibbert, MD', magicID: 'PROV-HIBBERT' },
+      },
+    ],
+  },
+  // Radiation Screening (no notes - empty list to verify 'no notes' path)
+  'CSN-HOMER-004': {
+    lrpID: 'LRP-HOMER-004',
+    depPhoneNumber: '555-0100',
+    isAtLeastOneNoteSensitive: false,
+    noteList: [],
+  },
+};
+
+// Keyed on hnoID. Returned by /api/report-content/LoadReportContent with
+// reportMnemonic=OPEN_NOTES.
+export const noteContent: Record<string, { reportContent: string; reportCss: string }> = {
+  'HNO-HOMER-003-A': {
+    reportContent: '<div class="note-body"><h3>ED Triage Note</h3><p><strong>Patient:</strong> Homer J. Simpson</p><p><strong>Chief Complaint:</strong> Severe abdominal pain.</p><p><strong>Triage Vitals:</strong> BP 158/95, HR 110, Temp 98.4F, SpO2 99%.</p><p><strong>HPI:</strong> 38yo male presents with acute abdominal distress after reported ingestion of 48 donuts in a single sitting at Lard Lad Donuts. Pain onset 30 min prior to arrival.</p><p><strong>Triage:</strong> ESI Level 3.</p></div>',
+    reportCss: '',
+  },
+  'HNO-HOMER-003-B': {
+    reportContent: '<div class="note-body"><h3>ED Provider Note</h3><p><strong>Patient:</strong> Homer J. Simpson</p><p><strong>Provider:</strong> Nick Riviera, MD</p><p><strong>Assessment:</strong> Acute gastric distention secondary to massive caloric overload. No signs of perforation on imaging. No peritoneal signs.</p><p><strong>Plan:</strong> NPO. IV fluids. Antiemetic. Observation. Surgical consult not indicated at this time. If symptoms worsen, repeat imaging.</p></div>',
+    reportCss: '',
+  },
+  'HNO-HOMER-003-C': {
+    reportContent: '<div class="note-body"><h3>Discharge Summary</h3><p><strong>Patient:</strong> Homer J. Simpson</p><p><strong>Disposition:</strong> Discharged home in stable condition.</p><p><strong>Discharge Instructions:</strong> Clear liquid diet for 24 hours, advance as tolerated. Avoid donuts. Follow up with PCP within one week.</p><p><strong>Discharge Medications:</strong> Ondansetron 4mg PRN nausea.</p></div>',
+    reportCss: '',
+  },
+  'HNO-HOMER-002-A': {
+    reportContent: '<div class="note-body"><h3>Progress Note - Annual Physical</h3><p><strong>Patient:</strong> Homer J. Simpson, age 38</p><p><strong>Provider:</strong> Julius Hibbert, MD</p><p><strong>Subjective:</strong> Patient reports overall feeling well. No acute complaints. Continues to work at Springfield Nuclear Power Plant.</p><p><strong>Objective:</strong> BP 142/88, HR 78, BMI 35.3 (obese).</p><p><strong>Assessment:</strong> Obesity. Hypertension, not at goal. Hypercholesterolemia.</p><p><strong>Plan:</strong> Reinforce dietary counseling. Continue current medications. Return in 3 months for re-evaluation.</p></div>',
+    reportCss: '',
+  },
+};
+
+// Keyed on CSN. Returned by /api/report-content/LoadReportContent with
+// reportMnemonic=AMB_AVS (After Visit Summary).
+export const avsByCsn: Record<string, { reportContent: string; reportCss: string }> = {
+  'CSN-HOMER-002': {
+    reportContent: '<div class="avs-body"><h2>After Visit Summary</h2><p><strong>Patient:</strong> Homer J. Simpson</p><p><strong>Visit Date:</strong> January 10, 2026</p><p><strong>Provider:</strong> Julius Hibbert, MD</p><p><strong>Reason for Visit:</strong> Annual Physical</p><h3>What we discussed today</h3><ul><li>Weight management - referred to dietitian</li><li>Blood pressure not at goal - continue current medications</li><li>Lipid panel results - reviewed</li></ul><h3>Medications</h3><ul><li>Lisinopril 20mg daily</li><li>Atorvastatin 40mg daily</li></ul><h3>Next Steps</h3><p>Follow up in 3 months. Schedule lipid panel before next visit.</p></div>',
+    reportCss: '',
+  },
+  'CSN-HOMER-003': {
+    reportContent: '<div class="avs-body"><h2>After Visit Summary</h2><p><strong>Patient:</strong> Homer J. Simpson</p><p><strong>Visit Date:</strong> November 20, 2025</p><p><strong>Provider:</strong> Nick Riviera, MD</p><p><strong>Reason for Visit:</strong> ER - Acute abdominal distress</p><h3>Discharge Instructions</h3><ul><li>Clear liquid diet for 24 hours</li><li>Avoid donuts and other large-volume meals</li><li>Return to ER if pain worsens, vomiting blood, or fever develops</li></ul><h3>Medications Prescribed</h3><ul><li>Ondansetron 4mg PRN nausea (10 tablets)</li></ul><h3>Follow Up</h3><p>Schedule appointment with PCP (Dr. Hibbert) within one week.</p></div>',
+    reportCss: '',
+  },
+  'CSN-HOMER-004': {
+    reportContent: '<div class="avs-body"><h2>After Visit Summary</h2><p><strong>Patient:</strong> Homer J. Simpson</p><p><strong>Visit Date:</strong> August 5, 2025</p><p><strong>Provider:</strong> Julius Hibbert, MD</p><p><strong>Reason for Visit:</strong> Radiation Exposure Screening (occupational)</p><h3>Findings</h3><p>Routine screening for Springfield Nuclear Power Plant Sector 7G employee. No acute findings. CBC within normal limits.</p><h3>Follow Up</h3><p>Next annual screening due August 2026.</p></div>',
+    reportCss: '',
+  },
+};

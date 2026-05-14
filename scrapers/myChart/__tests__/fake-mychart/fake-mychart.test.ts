@@ -36,6 +36,7 @@ import { getActivityFeed } from '../../activityFeed'
 import { getEducationMaterials } from '../../educationMaterials'
 import { getEhiExportTemplates } from '../../ehiExport'
 import { upcomingVisits, pastVisits } from '../../visits/visits'
+import { getVisitNotes, getNoteContent, getVisitAVS } from '../../notes/notes'
 import { listLabResults } from '../../labs_and_procedure_results/labResults'
 import { getBillingHistory } from '../../bills/bills'
 import { listConversations } from '../../messages/conversations'
@@ -281,6 +282,63 @@ describe('fake-mychart integration', () => {
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
     const result = await pastVisits(session, twoYearsAgo)
     expect(result).toBeDefined()
+  }, 10_000)
+
+  it('getVisitNotes returns the 3 ED notes for the Donut Incident visit', async () => {
+    const result = await getVisitNotes(session, 'CSN-HOMER-003')
+    expect(result.csn).toBe('CSN-HOMER-003')
+    expect(result.lrpId).toBe('LRP-HOMER-003')
+    expect(result.depPhoneNumber).toBe('555-0123')
+    expect(result.notes.length).toBe(3)
+    const titles = result.notes.map(n => n.displayName).sort()
+    expect(titles).toEqual(['Discharge Summary', 'ED Provider Note', 'ED Triage Note'])
+
+    // Verify per-note normalization: scraper reads uppercase wire keys
+    // (hnoID/hnoDAT/magicID) and emits camelCase. Regression-proof the casing.
+    const triage = result.notes.find(n => n.displayName === 'ED Triage Note')!
+    expect(triage.hnoId).toBe('HNO-HOMER-003-A')
+    expect(triage.hnoDat).toBe('67890')
+    expect(triage.iso).toBe('2025-11-20T14:15:00Z')
+    expect(triage.isAddendum).toBe(false)
+    expect(triage.isNoteSensitive).toBe(false)
+    expect(triage.providerName).toBe('Nick Riviera, MD')
+    expect(triage.providerMagicId).toBe('PROV-NICK')
+  }, 10_000)
+
+  it('getVisitNotes returns an empty list for a visit with no notes', async () => {
+    const result = await getVisitNotes(session, 'CSN-HOMER-004')
+    expect(result.csn).toBe('CSN-HOMER-004')
+    expect(result.notes.length).toBe(0)
+  }, 10_000)
+
+  it('getNoteContent returns the ED Provider note body', async () => {
+    const notes = await getVisitNotes(session, 'CSN-HOMER-003')
+    const provNote = notes.notes.find(n => n.displayName === 'ED Provider Note')
+    expect(provNote).toBeDefined()
+    const content = await getNoteContent(session, {
+      csn: 'CSN-HOMER-003',
+      lrpId: notes.lrpId,
+      hnoId: provNote!.hnoId,
+      hnoDat: provNote!.hnoDat,
+    })
+    expect(content.contentHtml).toContain('Nick Riviera')
+    expect(content.contentHtml).toContain('gastric distention')
+    expect(content.contentCss).toBe('')
+  }, 10_000)
+
+  it('getVisitAVS returns the AVS for the annual physical', async () => {
+    const result = await getVisitAVS(session, 'CSN-HOMER-002')
+    expect(result.contentHtml).toContain('After Visit Summary')
+    expect(result.contentHtml).toContain('Hibbert')
+    expect(result.contentHtml).toContain('Annual Physical')
+    expect(result.contentCss).toBe('')
+  }, 10_000)
+
+  it('getVisitAVS returns the radiation-screening AVS for CSN-HOMER-004', async () => {
+    const result = await getVisitAVS(session, 'CSN-HOMER-004')
+    expect(result.contentHtml).toContain('Radiation Exposure Screening')
+    expect(result.contentHtml).toContain('Sector 7G')
+    expect(result.contentCss).toBe('')
   }, 10_000)
 
   it('listLabResults returns lab results', async () => {
