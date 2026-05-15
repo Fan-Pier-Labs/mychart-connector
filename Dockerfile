@@ -16,6 +16,11 @@ COPY shared/ ./shared/
 # Build (NEXT_PUBLIC_* must be set at build time for Next.js inlining)
 ARG NEXT_PUBLIC_BASE_URL=https://openrecord.fanpierlabs.com
 ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
+# Optional: set to a self-hosted Sentry DSN to redirect telemetry to your
+# own Sentry project. When unset, the build falls back to the default DSN
+# in the Sentry configs.
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 RUN cd web && bun --bun next build
 
 ENV NODE_ENV=production
