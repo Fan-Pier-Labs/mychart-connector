@@ -1,0 +1,27 @@
+{
+  "name": "openrecord-mcpb",
+  "version": "0.1.0",
+  "description": "Claude Desktop Extension for OpenRecord — read and manage MyChart health data through Claude.",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "pack": "bun run build && npx -y @anthropic-ai/mcpb pack . openrecord.mcpb",
+    "smoke": "bun run build && node smoke.cjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "cheerio": "^1.2.0",
+    "fetch-cookie": "^3.2.0",
+    "jpeg-js": "^0.4.4",
+    "totp-generator": "^2.0.1",
+    "tough-cookie": "^6.0.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}

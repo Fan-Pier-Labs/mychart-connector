@@ -1,0 +1,17 @@
+# Source — already bundled into dist/server.cjs by tsup
+src/
+tsconfig.json
+tsup.config.ts
+.gitignore
+
+# Dev deps — Claude Desktop ships its own Node runtime, we ship a single
+# bundled CJS file. No node_modules needed at runtime.
+node_modules/
+package-lock.json
+bun.lock
+package.json
+
+# Local artifacts
+*.mcpb
+*.log
+.DS_Store

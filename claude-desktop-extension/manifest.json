@@ -1,0 +1,33 @@
+{
+  "manifest_version": "0.3",
+  "name": "openrecord",
+  "display_name": "OpenRecord — MyChart for Claude",
+  "version": "0.1.0",
+  "description": "Read and manage your MyChart health data through Claude.",
+  "long_description": "Connects Claude Desktop to Epic MyChart patient portals. Ask Claude to fetch your medications, lab results, imaging, messages, billing, and more — or to send a message to your care team, request a refill, or update emergency contacts. Auth is conversational: tell Claude to set up your account and a guided flow walks you through picking your MyChart, signing in, completing 2FA, and registering a passkey for future zero-prompt logins.",
+  "author": {
+    "name": "Fan Pier Labs",
+    "url": "https://openrecord.fanpierlabs.com"
+  },
+  "homepage": "https://openrecord.fanpierlabs.com",
+  "documentation": "https://github.com/Fan-Pier-Labs/openrecord/tree/main/claude-desktop-extension",
+  "support": "https://github.com/Fan-Pier-Labs/openrecord/issues",
+  "icon": "icon.png",
+  "keywords": ["mychart", "epic", "health", "ehr", "medical-records"],
+  "license": "SEE LICENSE IN LICENSE",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/server.cjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/server.cjs"]
+    }
+  },
+  "tools": [
+    { "name": "setup_account", "description": "Set up a new MyChart account. Walks the user through picking their MyChart, signing in, completing 2FA, and registering a passkey." },
+    { "name": "list_accounts", "description": "List configured MyChart accounts and their connection status." },
+    { "name": "disconnect_account", "description": "Forget a saved MyChart account (deletes the local passkey and session cache)." },
+    { "name": "select_account", "description": "Pick which account to use for subsequent tool calls when multiple are connected." }
+  ],
+  "tools_generated": true
+}
