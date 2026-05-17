@@ -29,7 +29,7 @@ async function getReportContent(mychartRequest: MyChartRequest, reportDetails: R
   return await res.json();
 }
 
-async function getRequestVerificationToken(mychartRequest: MyChartRequest) {
+export async function getRequestVerificationToken(mychartRequest: MyChartRequest) {
 
   // Go to the communication center
   const communicationCenterRes = await mychartRequest.makeRequest({ path: '/app/test-results' })

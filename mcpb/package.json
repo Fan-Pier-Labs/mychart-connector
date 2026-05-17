@@ -1,0 +1,26 @@
+{
+  "name": "openrecord-mcpb",
+  "version": "0.1.1",
+  "description": "Read and manage your MyChart health data through Claude.",
+  "author": "Fan Pier Labs",
+  "license": "SEE LICENSE IN LICENSE",
+  "main": "dist/server.cjs",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "pack": "mcpb pack . openrecord.mcpb",
+    "dev": "tsup --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "jpeg-js": "^0.4.4",
+    "zod": "4.4.3",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "@types/node": "^20.17.6"
+  }
+}

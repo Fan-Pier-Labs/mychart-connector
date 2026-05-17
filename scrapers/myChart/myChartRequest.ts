@@ -74,13 +74,33 @@ export class MyChartRequest {
     }
   }
 
-  getCookieInfo(): { count: number; names: string[] } {
-    const serialized = this.cookieJar.serializeSync() as unknown as { cookies?: { key: string; domain?: string; path?: string }[] };
+  getCookieInfo(): { count: number; names: string[]; all: string[] } {
+    const serialized = this.cookieJar.serializeSync() as any;
     const cookies = serialized?.cookies ?? [];
     return {
       count: cookies.length,
-      names: cookies.map(c => `${c.key}=${c.domain ?? ''}${c.path ?? ''}`),
+      names: cookies.map((c: any) => `${c.key}=${c.domain ?? ''}${c.path ?? ''}`),
+      all: cookies.map((c: any) => {
+        let str = `${c.key}=${c.value}`;
+        if (c.domain) str += `; Domain=${c.domain}`;
+        if (c.path) str += `; Path=${c.path}`;
+        return str;
+      })
     };
+  }
+
+  addCookies(cookies: string[]) {
+    for (const cookie of cookies) {
+      try {
+        this.cookieJar.setCookieSync(cookie, `https://${this.hostname}`);
+      } catch (err) {
+        console.error('Error adding cookie:', err);
+      }
+    }
+  }
+
+  getCookies(): string[] {
+    return this.cookieJar.getCookiesSync(`https://${this.hostname}`).map(c => c.toString());
   }
 
   async serialize(): Promise<string> {

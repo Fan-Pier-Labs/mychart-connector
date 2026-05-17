@@ -1,0 +1,22 @@
+{
+  "name": "openrecord",
+  "version": "0.1.1",
+  "description": "Read and manage your MyChart health data through Claude.",
+  "author": {
+    "name": "Fan Pier Labs"
+  },
+  "homepage": "https://openrecord.fanpierlabs.com",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/server.cjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/server.cjs"
+      ]
+    }
+  },
+  "user_config": {},
+  "manifest_version": "0.3"
+}

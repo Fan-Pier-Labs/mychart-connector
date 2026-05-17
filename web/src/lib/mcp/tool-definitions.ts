@@ -152,6 +152,25 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: 'Get imaging results (X-ray, MRI, CT, ultrasound). Returns order name, date, provider, and report/impression text.',
     inputSchema: paginatedParams,
   },
+  {
+    name: 'download_imaging_study',
+    description: 'Download images from an imaging study. Returns a list of JPEG images as base64 data. Use get_imaging_results first to get the study info.',
+    inputSchema: {
+      ...instanceParam,
+      accession: z.string().describe('Accession number from get_imaging_results'),
+      order_name: z.string().describe('Order name from get_imaging_results'),
+      max_images: z.number().optional().describe('Maximum number of images to download (default: all)'),
+    },
+  },
+  {
+    name: 'setup_account',
+    description: 'Connect a new MyChart account. Requires hostname, username, and password.',
+    inputSchema: {
+      hostname: z.string().describe('MyChart hostname (e.g. mychart.example.org)'),
+      username: z.string().describe('MyChart username'),
+      password: z.string().describe('MyChart password'),
+    },
+  },
 
   // Messaging tools
   {
