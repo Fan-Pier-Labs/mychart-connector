@@ -3,19 +3,25 @@
  *
  * Sends user messages to the backend's /api/ai endpoint (currently
  * Gemini, swappable server-side). Tool use is expressed by prompting
- * the model to emit JSON — either a tool call or a final answer —
- * instead of using any provider-native tool schema. That lets us point
- * this client at any reasonable chat model without code changes.
+ * the model to emit JSON objects — instead of using any provider-native
+ * tool schema. That lets us point this client at any reasonable chat
+ * model without code changes.
  *
  * Protocol:
- *   • System prompt lists the available tools and tells the model to
- *     respond with ONE of these JSON shapes, nothing else:
- *       {"tool": "<name>", "args": {...}}
- *       {"answer": "<text for the user>"}
- *   • If the model emits a tool call, we execute it locally and append
- *     its result as a new user message, then loop.
- *   • If the model emits an answer (or free-form text that doesn't
- *     parse), we surface it to the user and stop.
+ *   • Every model turn is one or more JSON objects of the shape
+ *     `{"tool": "<name>", "args": { ... }}`. Anything else (prose,
+ *     malformed JSON) is ignored.
+ *   • Read tools batch in parallel — emit N read calls in one turn and
+ *     they all run via Promise.allSettled, with results fed back as a
+ *     single user turn in emission order.
+ *   • Write tools (send_message, send_reply, request_refill) and
+ *     `respond` are exclusive: they must be called alone with no other
+ *     tool calls in the same turn. Batched exclusive calls are rejected
+ *     and the model is asked to retry.
+ *   • `respond({ text })` terminates the loop and surfaces `text` to
+ *     the user. It is the only way to reply.
+ *   • If a turn yields zero parseable tool calls we re-prompt the model.
+ *     Three consecutive failures abort with an error.
  */
 
 import {
@@ -26,6 +32,7 @@ import {
 } from "@/lib/storage/secure-store";
 import { getBackendSession } from "@/lib/backend/session";
 import { backendUrl } from "@/lib/backend/client";
+import { extractToolCalls } from "./tool-call-parser";
 
 export type ToolCall = {
   id: string;
@@ -98,24 +105,32 @@ function buildSystemPrompt(
     "You may discuss what their data shows, what conditions mean, what medications are for, and general management approaches (e.g. diet, exercise, sleep, common over-the-counter options).",
     "Do not diagnose new conditions, prescribe or change prescription medications, or give advice that would replace an in-person evaluation. For anything urgent, decisions about prescription changes, or symptoms that could be serious, recommend they contact their care team — but still answer the question first.",
     "",
-    "You have these tools available. Call them by responding with EXACTLY one JSON object, no prose, no markdown fences:",
+    "You communicate with the system by emitting JSON objects. Each tool call is its own JSON object of the form:",
     '  { "tool": "<tool_name>", "args": { ... } }',
-    "When you have enough information to answer the user, respond with EXACTLY:",
-    '  { "answer": "<your reply>" }',
+    "",
+    "You may emit MULTIPLE READ tool calls in a single turn (one JSON object per call, separated by whitespace). They will run in parallel and their results will be fed back together. Example:",
+    '  { "tool": "get_billing", "args": {} }',
+    '  { "tool": "get_messages", "args": { "limit": 50 } }',
+    "",
+    "Write tools (send_message, send_reply, request_refill) and `respond` are EXCLUSIVE — they must be the only tool call in the turn. Batching them with anything else will be rejected.",
+    "",
+    "To reply to the user, call the `respond` tool — this is the ONLY way to surface text to the user and ends your turn:",
+    '  { "tool": "respond", "args": { "text": "<your reply>" } }',
     "",
     "Tools:",
     toolList,
+    "- respond(text) — Send your final reply to the user. Must be called alone. This is how you end your turn.",
     "",
     "Handling common requests:",
     "- Insurance / billing updates, payment plans, charge questions: you CAN help by sending a message to the billing department. Call get_message_recipients to list available recipients, pick the one that looks like billing (e.g. 'Billing', 'Billing Department', 'Customer Service', 'Patient Accounts'), then draft a send_message and confirm with the user before sending.",
     "- Booking / scheduling / rescheduling / cancelling appointments: you CAN help by messaging the right provider. First call get_care_team (and if needed get_message_recipients) to find candidate providers. If the user already named a specialty or doctor, pick that one; otherwise ask the user which provider they want to see. Then draft a send_message to that provider describing what they're asking for (visit type, preferred dates/times, reason) and confirm before sending.",
-    "- Showing X-ray / imaging pictures: if the user asks to SEE an X-ray (not just the report), call get_imaging_results first to pick the right study, then call get_xray_image with its 0-based index. The tool returns { image_id, caption }. In your final answer, include the literal token [image:IMAGE_ID] on its own line where you want the picture to appear (the UI will swap it for the actual image).",
+    "- Showing X-ray / imaging pictures: if the user asks to SEE an X-ray (not just the report), call get_imaging_results first to pick the right study, then call get_xray_image with its 0-based index. The tool returns { image_id, caption }. In your `respond` text, include the literal token [image:IMAGE_ID] on its own line where you want the picture to appear (the UI will swap it for the actual image).",
     "- Prescription refills: use request_refill.",
     "- General questions for a provider: use send_message (look up recipients first if you're unsure of the name).",
     "- Replying to an existing thread: use send_reply with the conversation_id from get_messages.",
     "- For any write action (send_message, send_reply, request_refill), always show the user the exact payload and get explicit confirmation before calling the tool.",
     "",
-    "Formatting (for the final answer text inside the JSON):",
+    "Formatting (for the text inside `respond`):",
     "- Render on a narrow mobile screen — never use markdown tables. They wrap badly and become unreadable.",
     "- For lists of items (medications, lab results, appointments, providers, allergies, conditions, etc.), use a row-per-item layout: bold the item name on its own line, then put each detail on the next line. Separate items with a blank line.",
     "  Example for medications:",
@@ -132,10 +147,11 @@ function buildSystemPrompt(
     "- Keep paragraphs short. Prefer line breaks over commas when listing details.",
     "",
     "Rules:",
-    "- Output ONLY the JSON object, nothing else — no prefix, no suffix, no code fences.",
-    "- If the user's question needs data, call the appropriate tool first.",
+    "- Output ONLY JSON objects, nothing else — no prose, no prefix, no suffix, no code fences. Anything that isn't a JSON tool call is ignored.",
+    "- Reading data is cheap: when you need several pieces of data, batch the read calls in one turn so they run in parallel.",
+    "- If the user's question needs data, call the appropriate tool(s) first, then `respond` on a later turn.",
     '- Omit "instance" unless the user specifies a particular hostname.',
-    "- After receiving a tool result, decide whether to call another tool or return the final answer.",
+    "- After receiving tool results, decide whether to call more tools or call `respond` to reply.",
     "- Don't refuse a request just because you don't immediately know how — check the tools above first.",
     "",
     memorySection,
@@ -153,22 +169,13 @@ export type StreamCallbacks = {
 export type ToolExecutor = (toolName: string, input: Record<string, unknown>) => Promise<string>;
 
 const TOOL_LOOP_DEADLINE_MS = 10 * 60 * 1000;
+const MAX_CONSECUTIVE_PARSE_FAILURES = 3;
 
-function tryExtractJson(raw: string): Record<string, unknown> | null {
-  const trimmed = raw.trim();
-  // Strip markdown fences if present
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
-  // Find the first {...} block
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(candidate.slice(start, end + 1));
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
+const WRITE_TOOLS = new Set(["send_message", "send_reply", "request_refill"]);
+const RESPOND_TOOL = "respond";
+
+function isExclusiveTool(name: string): boolean {
+  return name === RESPOND_TOOL || WRITE_TOOLS.has(name);
 }
 
 type CompleteFn = (messages: ChatMessage[], system: string, model: string) => Promise<string>;
@@ -349,7 +356,7 @@ export async function sendMessage(
   const conversation: ChatMessage[] = [...messages];
   const toolCalls: ToolCall[] = [];
   const pendingImageIds: string[] = [];
-  let lastAnswer = "";
+  let parseFailures = 0;
 
   const deadline = Date.now() + TOOL_LOOP_DEADLINE_MS;
   for (let i = 0; ; i++) {
@@ -365,52 +372,98 @@ export async function sendMessage(
       return;
     }
 
-    const parsed = tryExtractJson(content);
+    const calls = extractToolCalls(content);
 
-    if (parsed && typeof parsed.tool === "string") {
-      const name = parsed.tool;
-      const input = (parsed.args as Record<string, unknown>) ?? {};
-      const tc: ToolCall = { id: `tc_${Date.now()}_${i}`, name, input };
+    if (calls.length === 0) {
+      parseFailures++;
+      if (parseFailures >= MAX_CONSECUTIVE_PARSE_FAILURES) {
+        callbacks.onError(
+          new Error(
+            `AI didn't respond in a parseable format after ${MAX_CONSECUTIVE_PARSE_FAILURES} retries. Please try again.`,
+          ),
+        );
+        return;
+      }
+      conversation.push({ role: "assistant", content });
+      conversation.push({
+        role: "user",
+        content:
+          "Your previous response had no parseable tool calls. Respond with one or more JSON objects, one per tool call. To reply to the user, call the `respond` tool: " +
+          '{"tool": "respond", "args": {"text": "your reply here"}}',
+      });
+      continue;
+    }
+    parseFailures = 0;
+
+    // Exclusive tools (respond + writes) must be alone in the turn.
+    const exclusive = calls.filter((c) => isExclusiveTool(c.tool));
+    if (exclusive.length > 0 && calls.length > 1) {
+      const names = exclusive.map((c) => c.tool).join(", ");
+      conversation.push({ role: "assistant", content });
+      conversation.push({
+        role: "user",
+        content:
+          `Tool batch rejected: ${names} must be called alone, but you emitted ${calls.length} tool calls in this turn. ` +
+          "Re-emit just the exclusive call by itself. Read tools can still be batched in a separate turn.",
+      });
+      continue;
+    }
+
+    // `respond` terminates the loop and surfaces text to the user.
+    if (calls.length === 1 && calls[0].tool === RESPOND_TOOL) {
+      const text = typeof calls[0].args.text === "string" ? (calls[0].args.text as string) : "";
+      let finalText = text;
+      for (const id of pendingImageIds) {
+        if (!finalText.includes(`[image:${id}]`)) {
+          finalText = `${finalText.trim()}\n\n[image:${id}]`;
+        }
+      }
+      callbacks.onText(finalText);
+      callbacks.onDone(finalText, toolCalls);
+      return;
+    }
+
+    // Otherwise: dispatch. Either a single write, or N reads in parallel.
+    conversation.push({ role: "assistant", content });
+
+    const dispatched: ToolCall[] = calls.map((c, j) => ({
+      id: `tc_${Date.now()}_${i}_${j}`,
+      name: c.tool,
+      input: c.args,
+    }));
+    for (const tc of dispatched) {
       toolCalls.push(tc);
       callbacks.onToolCall(tc);
+    }
 
-      // Record the assistant turn (raw JSON), then the tool result as the next user turn.
-      conversation.push({ role: "assistant", content });
-      let toolResult: string;
+    const settled = await Promise.allSettled(
+      calls.map((c) => executeLocalTool(c.tool, c.args)),
+    );
+
+    const resultParts: string[] = [];
+    for (let j = 0; j < calls.length; j++) {
+      const name = calls[j].tool;
+      const s = settled[j];
+      const result =
+        s.status === "fulfilled"
+          ? s.value
+          : `Error: ${(s.reason as Error)?.message ?? String(s.reason)}`;
+      // If a tool returned an image_id, remember it so we can ensure the
+      // final respond includes the [image:id] token even if the model forgets.
       try {
-        toolResult = await executeLocalTool(name, input);
-      } catch (err) {
-        toolResult = `Error: ${(err as Error).message}`;
-      }
-      // If an image tool returned an image_id, remember it so we can make
-      // sure the final answer includes the [image:id] token even when the
-      // model forgets to echo it.
-      try {
-        const parsedResult = JSON.parse(toolResult);
+        const parsedResult = JSON.parse(result);
         if (parsedResult && typeof parsedResult.image_id === "string") {
           pendingImageIds.push(parsedResult.image_id);
         }
       } catch {
         /* tool result wasn't JSON */
       }
-      conversation.push({
-        role: "user",
-        content: `Tool result for ${name}:\n${toolResult}`,
-      });
-      continue;
+      resultParts.push(`Tool result for ${name}:\n${result}`);
     }
 
-    // Final answer path: either the model returned {"answer": "..."} or free-form text.
-    lastAnswer =
-      parsed && typeof parsed.answer === "string" ? (parsed.answer as string) : content;
-    // Ensure image tokens are present so the UI can render attachments.
-    for (const id of pendingImageIds) {
-      if (!lastAnswer.includes(`[image:${id}]`)) {
-        lastAnswer = `${lastAnswer.trim()}\n\n[image:${id}]`;
-      }
-    }
-    callbacks.onText(lastAnswer);
-    callbacks.onDone(lastAnswer, toolCalls);
-    return;
+    conversation.push({
+      role: "user",
+      content: resultParts.join("\n\n"),
+    });
   }
 }
