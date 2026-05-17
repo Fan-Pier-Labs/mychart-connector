@@ -269,10 +269,10 @@ class DbTelemetryProvider implements TelemetryProvider {
 }
 
 class WebConsoleLogger implements Logger {
-  info(message: string, ...args: any[]) {
+  info(message: string, ...args: unknown[]) {
     console.log(message, ...args);
   }
-  error(message: string, ...args: any[]) {
+  error(message: string, ...args: unknown[]) {
     console.error(message, ...args);
   }
 }

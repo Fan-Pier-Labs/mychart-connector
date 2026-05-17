@@ -75,12 +75,12 @@ export class MyChartRequest {
   }
 
   getCookieInfo(): { count: number; names: string[]; all: string[] } {
-    const serialized = this.cookieJar.serializeSync() as any;
+    const serialized = this.cookieJar.serializeSync() as { cookies?: Array<{ key: string; value: string; domain?: string; path?: string }> };
     const cookies = serialized?.cookies ?? [];
     return {
       count: cookies.length,
-      names: cookies.map((c: any) => `${c.key}=${c.domain ?? ''}${c.path ?? ''}`),
-      all: cookies.map((c: any) => {
+      names: cookies.map(c => `${c.key}=${c.domain ?? ''}${c.path ?? ''}`),
+      all: cookies.map(c => {
         let str = `${c.key}=${c.value}`;
         if (c.domain) str += `; Domain=${c.domain}`;
         if (c.path) str += `; Path=${c.path}`;

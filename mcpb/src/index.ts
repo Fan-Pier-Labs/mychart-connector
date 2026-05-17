@@ -10,11 +10,9 @@ import {
 } from '../../web/src/lib/mcp/tool-registry';
 import { 
   loadInstances, 
-  loadInstance, 
   saveInstance, 
   saveSession, 
   loadSession,
-  deleteSession,
   type DiskInstance 
 } from './credential-store';
 import { MyChartRequest as MyChartRequestImpl } from '../../web/src/lib/mychart/myChartRequest';
@@ -37,10 +35,10 @@ class DiskImagingProvider implements ImagingProvider {
 }
 
 class StdioLogger implements Logger {
-  info(message: string, ...args: any[]) {
+  info(message: string, ...args: unknown[]) {
     console.error(message, ...args);
   }
-  error(message: string, ...args: any[]) {
+  error(message: string, ...args: unknown[]) {
     console.error(message, ...args);
   }
 }
@@ -211,7 +209,9 @@ class DiskSessionProvider implements SessionProvider {
         try {
           const resp = await session.request.makeRequest({ path: '/Home', followRedirects: false });
           cookiesValid = resp.status === 200;
-        } catch {}
+        } catch {
+          // Ignore validation errors
+        }
       }
       results.push({
         hostname: inst.hostname,

@@ -65,7 +65,9 @@ export async function loadInstance(hostname: string, username: string): Promise<
 export async function deleteInstance(hostname: string, username: string): Promise<void> {
   try {
     await fs.promises.unlink(getInstancePath(hostname, username));
-  } catch {}
+  } catch {
+    // Ignore if file doesn't exist
+  }
 }
 
 // Session store for MyChartRequest cookies
@@ -96,5 +98,7 @@ export async function deleteSession(hostname: string, username: string): Promise
     const safeName = `${hostname}_${username}`.replace(/[^a-z0-9.]/gi, '_');
     const filePath = path.join(SESSIONS_DIR, `${safeName}.json`);
     await fs.promises.unlink(filePath);
-  } catch {}
+  } catch {
+    // Ignore if file doesn't exist
+  }
 }
