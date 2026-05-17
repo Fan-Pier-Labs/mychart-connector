@@ -2,6 +2,7 @@ import { login_TEST } from "../login";
 import { MyChartRequest } from "../myChartRequest";
 import { getRequestVerificationTokenFromBody } from "../util";
 import { PastVisitsContainer, VisitListContainer } from "./types";
+import { logger } from '../../../shared/logger';
 
 
 export async function upcomingVisits(myChartRequest: MyChartRequest) {
@@ -11,7 +12,7 @@ export async function upcomingVisits(myChartRequest: MyChartRequest) {
   const requestVerificationToken = getRequestVerificationTokenFromBody(await res.text())
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token', res)
+    logger.debug('could not find request verification token', res)
     return { visits: [], error: 'Authentication error: could not get CSRF token for visits' }
   }
 
@@ -38,7 +39,7 @@ export async function pastVisits(myChartRequest: MyChartRequest, oldestRenderedD
   const requestVerificationToken = getRequestVerificationTokenFromBody(await res.text())
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token', res)
+    logger.debug('could not find request verification token', res)
     return { visits: [], error: 'Authentication error: could not get CSRF token for visits' }
   }
 

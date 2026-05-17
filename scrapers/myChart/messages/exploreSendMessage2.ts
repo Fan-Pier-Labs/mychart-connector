@@ -5,6 +5,7 @@
 import { getRequestVerificationTokenFromBody } from '../util';
 import { MyChartRequest } from '../myChartRequest';
 import fs from 'fs';
+import { logger } from '../../../shared/logger';
 
 async function explore2() {
   const hostname = 'mychart.example.org';
@@ -22,19 +23,19 @@ async function explore2() {
   // Verify cookies are valid
   const testRes = await mychartRequest.makeRequest({ path: '/Home', followRedirects: false });
   if (testRes.status !== 200) {
-    console.log('Cookies expired! Re-run exploreSendMessage.ts first.');
+    logger.debug('Cookies expired! Re-run exploreSendMessage.ts first.');
     process.exit(1);
   }
-  console.log('Cookies valid!\n');
+  logger.debug('Cookies valid!\n');
 
   // Get verification token
   const commRes = await mychartRequest.makeRequest({ path: '/app/communication-center' });
   const commHtml = await commRes.text();
   const token = getRequestVerificationTokenFromBody(commHtml)!;
-  console.log('Token:', token.substring(0, 20) + '...\n');
+  logger.debug('Token:', token.substring(0, 20) + '...\n');
 
   // Fetch the mychart-web-server JS bundle to find API endpoints
-  console.log('=== Fetching JS bundles for API endpoint discovery ===\n');
+  logger.debug('=== Fetching JS bundles for API endpoint discovery ===\n');
 
   const jsBundles = [
     '/scripts/lib/pxbuild/epic.px.client.mychart-web-server.js',
@@ -44,25 +45,25 @@ async function explore2() {
   const allEndpoints: string[] = [];
 
   for (const bundle of jsBundles) {
-    console.log(`Fetching ${bundle}...`);
+    logger.debug(`Fetching ${bundle}...`);
     try {
       const res = await mychartRequest.makeRequest({ path: bundle });
       const js = await res.text();
-      console.log(`  Size: ${js.length} chars`);
+      logger.debug(`  Size: ${js.length} chars`);
 
       // Find all API endpoint patterns
       const apiPatterns = js.match(/["']\/api\/[^"']+["']/g) || [];
       const uniqueEndpoints = [...new Set(apiPatterns)].sort();
-      console.log(`  Found ${uniqueEndpoints.length} API endpoints`);
+      logger.debug(`  Found ${uniqueEndpoints.length} API endpoints`);
 
       // Filter for messaging-related
       const messagingEndpoints = uniqueEndpoints.filter(e =>
         /message|conversation|compose|send|reply|recipient|ask|advice|communication/i.test(e)
       );
       if (messagingEndpoints.length > 0) {
-        console.log(`  Messaging-related endpoints:`);
+        logger.debug(`  Messaging-related endpoints:`);
         for (const e of messagingEndpoints) {
-          console.log(`    ${e}`);
+          logger.debug(`    ${e}`);
           allEndpoints.push(e.replace(/["']/g, ''));
         }
       }
@@ -70,24 +71,24 @@ async function explore2() {
       // Also save all endpoints to file
       await fs.promises.writeFile(`/tmp/mychart_js_endpoints_${bundle.split('/').pop()}.txt`, uniqueEndpoints.join('\n'));
     } catch (err) {
-      console.log(`  Error: ${(err as Error).message}`);
+      logger.debug(`  Error: ${(err as Error).message}`);
     }
   }
 
   // Also try to find the communication-center specific bundle
-  console.log('\nLooking for communication-center specific JS...');
+  logger.debug('\nLooking for communication-center specific JS...');
   const askQuestionHtml = await fs.promises.readFile('/tmp/mychart_ask_question.html', 'utf8');
 
   // Find all script src URLs
   const scriptUrls = [...askQuestionHtml.matchAll(/src="([^"]+\.js[^"]*)"/g)].map(m => m[1]);
-  console.log(`Found ${scriptUrls.length} script URLs in ask-question page`);
+  logger.debug(`Found ${scriptUrls.length} script URLs in ask-question page`);
 
   // Look for any that might be loaded dynamically or contain "communication" or "message"
   // Since it's a React SPA, the routes/APIs are likely in the client SDK
   // Let's fetch ALL the JS and search
   for (const url of scriptUrls) {
     if (url.includes('pxbuild') || url.includes('core-') || url.includes('bundle')) {
-      console.log(`\nFetching ${url.split('?')[0]}...`);
+      logger.debug(`\nFetching ${url.split('?')[0]}...`);
       try {
         const fullUrl = url.startsWith('http') ? url : undefined;
         const path = fullUrl ? undefined : url.replace(/\?.*/, '');
@@ -101,34 +102,34 @@ async function explore2() {
         ];
 
         if (patterns.length > 0) {
-          console.log(`  Found messaging patterns:`);
+          logger.debug(`  Found messaging patterns:`);
           for (const m of [...new Set(patterns.map(p => p[0]))]) {
-            console.log(`    ${m}`);
+            logger.debug(`    ${m}`);
           }
         }
 
         // Broader search for "send" and "reply" in API context
         const sendPatterns = js.match(/["']\/api\/[^"']*(?:send|reply|compose|post|create|submit)[^"']*["']/gi) || [];
         if (sendPatterns.length > 0) {
-          console.log(`  Send/Reply API endpoints:`);
+          logger.debug(`  Send/Reply API endpoints:`);
           for (const e of [...new Set(sendPatterns)]) {
-            console.log(`    ${e}`);
+            logger.debug(`    ${e}`);
             allEndpoints.push(e.replace(/["']/g, ''));
           }
         }
       } catch (err) {
-        console.log(`  Error: ${(err as Error).message}`);
+        logger.debug(`  Error: ${(err as Error).message}`);
       }
     }
   }
 
   // Now try the discovered endpoints
-  console.log('\n=== Testing discovered messaging endpoints ===\n');
+  logger.debug('\n=== Testing discovered messaging endpoints ===\n');
 
   const uniqueAllEndpoints = [...new Set(allEndpoints)];
   for (const endpoint of uniqueAllEndpoints) {
     try {
-      console.log(`POST ${endpoint}...`);
+      logger.debug(`POST ${endpoint}...`);
       const res = await mychartRequest.makeRequest({
         path: endpoint,
         method: 'POST',
@@ -139,19 +140,19 @@ async function explore2() {
         body: JSON.stringify({}),
       });
       const text = await res.text();
-      console.log(`  Status: ${res.status}, Length: ${text.length}`);
+      logger.debug(`  Status: ${res.status}, Length: ${text.length}`);
       if (res.status === 200 && text.length > 2) {
-        console.log(`  Response: ${text.substring(0, 500)}`);
+        logger.debug(`  Response: ${text.substring(0, 500)}`);
       }
     } catch (err) {
-      console.log(`  Error: ${(err as Error).message}`);
+      logger.debug(`  Error: ${(err as Error).message}`);
     }
   }
 
   // Step: Also try to directly load the "ask a question" page as an API call
   // Since /AskQuestion redirects to /app/communication-center/ask-question
   // The React app likely has a specific API it calls on that route
-  console.log('\n=== Trying communication-center API patterns ===\n');
+  logger.debug('\n=== Trying communication-center API patterns ===\n');
 
   const commEndpoints = [
     '/api/communication-center/ask-question',
@@ -178,7 +179,7 @@ async function explore2() {
 
   for (const endpoint of commEndpoints) {
     try {
-      console.log(`POST ${endpoint}...`);
+      logger.debug(`POST ${endpoint}...`);
       const res = await mychartRequest.makeRequest({
         path: endpoint,
         method: 'POST',
@@ -189,20 +190,20 @@ async function explore2() {
         body: JSON.stringify({}),
       });
       const text = await res.text();
-      console.log(`  Status: ${res.status}, Length: ${text.length}`);
+      logger.debug(`  Status: ${res.status}, Length: ${text.length}`);
       if (res.status === 200 && text.length > 2) {
-        console.log(`  Response: ${text.substring(0, 500)}`);
+        logger.debug(`  Response: ${text.substring(0, 500)}`);
         await fs.promises.writeFile(`/tmp/mychart_comm_${endpoint.replace(/\//g, '_')}.json`, text);
       }
     } catch (err) {
-      console.log(`  Error: ${(err as Error).message}`);
+      logger.debug(`  Error: ${(err as Error).message}`);
     }
   }
 
-  console.log('\n=== Done ===');
+  logger.debug('\n=== Done ===');
 }
 
 explore2().catch((err) => {
-  console.error('Fatal error:', err);
+  logger.error('Fatal error:', err);
   process.exit(1);
 });

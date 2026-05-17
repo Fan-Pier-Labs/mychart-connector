@@ -1,3 +1,4 @@
+import { logger } from '../shared/logger';
 export const DEFAULT_HEADERS = {
   'Cache-Control': 'max-age=0',
   'Sec-Ch-Ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
@@ -21,7 +22,7 @@ export async function rawRequest(url: string, options: RequestInit = {}): Promis
 
 export async function follow302sAndReturnFinalUrl(url: string): Promise<string> {
   const response = await rawRequest(url, {redirect: 'manual' as const});
-  console.log(response.status, url);
+  logger.debug(response.status, url);
   if (response.status === 302 || response.status === 301) {
     const newUrl = response.headers.get('location');
     if (!newUrl) {
@@ -39,6 +40,6 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   (async () => {
     const url = 'https://mychart.example.org/mychart';
     const finalUrl = await follow302sAndReturnFinalUrl(url);
-    console.log(finalUrl);
+    logger.debug(finalUrl);
   })();
 }

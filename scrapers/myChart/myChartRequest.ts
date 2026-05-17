@@ -3,6 +3,7 @@ import fs from 'fs';
 import {mockRequest} from './mock_data/index'
 import { OPENRECORD_MOCK_DATA } from '../../shared/env';
 import { RequestConfig } from './types';
+import { logger } from '../../shared/logger';
 
 /**
  * Options for creating a MyChartRequest.
@@ -103,10 +104,10 @@ export class MyChartRequest {
         }
         return request;
       } else {
-        console.error('Invalid data for MyChartRequest unserialization:', data);
+        logger.error('Invalid data for MyChartRequest unserialization:', data);
       }
     } catch (error) {
-      console.error('Error unserializing MyChartRequest:', error);
+      logger.error('Error unserializing MyChartRequest:', error);
     }
     return null;
   }
@@ -131,7 +132,7 @@ export class MyChartRequest {
       data = await fs.promises.readFile(filePath, 'utf8');
     }
     catch (e) {
-      console.log('Error loading cookies:', e);
+      logger.debug('Error loading cookies:', e);
       return
     }
     const serializedJar = JSON.parse(data);
@@ -237,12 +238,12 @@ export class MyChartRequest {
 
     if (OPENRECORD_MOCK_DATA) {
       response = await mockRequest(url, finalConfig)
-      console.log('MOCK:', response.status, url)
+      logger.debug('MOCK:', response.status, url)
     }
     else {
       response = await this.fetchWithCookieJar(url, finalConfig)
       // Log each request and its status code.
-      console.log(response.status, url)
+      logger.debug(response.status, url)
     }
 
 

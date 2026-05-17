@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type Diagnosis = {
   diagnosisName: string;
@@ -73,7 +74,7 @@ export async function getMedicalHistory(mychartRequest: MyChartRequest): Promise
   };
 
   if (!token) {
-    console.log('Could not find request verification token for medical history');
+    logger.debug('Could not find request verification token for medical history');
     return empty;
   }
 

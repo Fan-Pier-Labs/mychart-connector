@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody, parseMyChartDate, sortNewestFirstByDate } from "./util";
+import { logger } from '../../shared/logger';
 
 export type Letter = {
   dateISO: string;
@@ -37,7 +38,7 @@ export async function getLetters(mychartRequest: MyChartRequest): Promise<Letter
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for letters');
+    logger.debug('Could not find request verification token for letters');
     return [];
   }
 

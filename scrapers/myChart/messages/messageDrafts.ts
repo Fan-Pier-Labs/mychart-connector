@@ -1,5 +1,6 @@
 import { MyChartRequest } from '../myChartRequest';
 import { getRequestVerificationTokenFromBody } from '../util';
+import { logger } from '../../../shared/logger';
 
 export type DraftResult = {
   success: boolean;
@@ -19,7 +20,7 @@ export async function saveReplyDraft(
 ): Promise<DraftResult> {
   const token = await getToken(mychartRequest);
   if (!token) {
-    console.log('Could not find request verification token for save draft');
+    logger.debug('Could not find request verification token for save draft');
     return { success: false, error: 'Could not get verification token' };
   }
 
@@ -45,7 +46,7 @@ export async function saveNewMessageDraft(
 ): Promise<DraftResult> {
   const token = await getToken(mychartRequest);
   if (!token) {
-    console.log('Could not find request verification token for save draft');
+    logger.debug('Could not find request verification token for save draft');
     return { success: false, error: 'Could not get verification token' };
   }
 
@@ -70,7 +71,7 @@ export async function deleteDraft(
 ): Promise<DraftResult> {
   const token = await getToken(mychartRequest);
   if (!token) {
-    console.log('Could not find request verification token for delete draft');
+    logger.debug('Could not find request verification token for delete draft');
     return { success: false, error: 'Could not get verification token' };
   }
 

@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type CareJourney = {
   id: string;
@@ -27,7 +28,7 @@ export async function getCareJourneys(mychartRequest: MyChartRequest): Promise<C
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for care journeys');
+    logger.debug('Could not find request verification token for care journeys');
     return [];
   }
 

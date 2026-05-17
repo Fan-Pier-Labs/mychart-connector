@@ -72,7 +72,7 @@ import { requestMedicationRefill } from '../../scrapers/myChart/medicationRefill
 import { downloadImagingStudyDirect } from '../../scrapers/myChart/eunity/imagingDirectDownload';
 import { convertCloToBitmap16 } from '../../scrapers/myChart/clo-image-parser/clo_to_bitmap';
 
-import { searchInstances, findByHostname } from './instances';
+import { searchInstances } from './instances';
 import {
   resolveSession,
   isConnected,

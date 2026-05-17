@@ -3,6 +3,7 @@
  * latest GitHub release. Fire-and-forget — never throws or blocks the caller.
  */
 
+import { logger } from './logger';
 const GITHUB_RELEASES_URL =
   'https://api.github.com/repos/Fan-Pier-Labs/openrecord/releases/latest';
 
@@ -52,7 +53,7 @@ export async function checkForUpdate(opts: {
       if (opts.logger) {
         opts.logger.warn(msg);
       } else {
-        console.warn(msg);
+        logger.warn(msg);
       }
     }
 

@@ -4,6 +4,7 @@ import { login_TEST } from "../login";
 import { MyChartRequest } from "../myChartRequest";
 import { getRequestVerificationTokenFromBody } from "../util";
 import { extractFdiContext, getImageViewerSamlUrl, followSamlChain } from "../eunity/imagingViewer";
+import { logger } from '../../../shared/logger';
 
 
 async function getReportContent(mychartRequest: MyChartRequest, reportDetails: ReportDetails, requestVerificationToken: string): Promise<ReportContent> {
@@ -100,7 +101,7 @@ export async function listLabResults(mychartRequest: MyChartRequest): Promise<La
   const requestVerificationToken = await getRequestVerificationToken(mychartRequest)
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token')
+    logger.debug('could not find request verification token')
     return []
   }
 
@@ -129,7 +130,7 @@ export async function listLabResults(mychartRequest: MyChartRequest): Promise<La
         seenKeys.add(newResultGroup.key);
 
         const labResult: LabTestResultWithHistory = await getLabResult(mychartRequest, newResultGroup.key, requestVerificationToken);
-        console.log('got detail back:', labResult.orderName)
+        logger.debug('got detail back:', labResult.orderName)
 
         // Fetch historical trend data for this order
         const history = await getHistoricalResults(mychartRequest, newResultGroup.key, requestVerificationToken);
@@ -152,7 +153,7 @@ export async function getImagingResults(mychartRequest: MyChartRequest, options?
   const requestVerificationToken = await getRequestVerificationToken(mychartRequest);
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token for imaging');
+    logger.debug('could not find request verification token for imaging');
     return [];
   }
 
@@ -257,7 +258,7 @@ export async function getImagingResults(mychartRequest: MyChartRequest, options?
                     }
                   }
                 } catch (err) {
-                  console.log('Error getting viewer URL:', (err as Error).message);
+                  logger.debug('Error getting viewer URL:', (err as Error).message);
                 }
 
                 break; // Only need FDI from one result
@@ -287,7 +288,7 @@ async function test() {
   // // const labresults = await getLabResult(mychartRequest, 'WP-249LQ11wkP8SwrVbZakPwK2g-3D-3D-24qwHst6DyZlk7obuDd6Gho16-2F3S-2BypDIGyTtp1dJYThc-3D', verificationtoken)
   // const labresults = await getLabResult(mychartRequest, 'WP-24QvFqBxM5P2VEehMHXypjtA-3D-3D-24yYqau894Z-2F-2FzME-2F3wrC8wxS3mgP9ZzzELfC-2B2XJkcrg-3D', verificationtoken)
 
-  console.log(JSON.stringify(labresults, null, 2))
+  logger.debug(JSON.stringify(labresults, null, 2))
 
 
 }

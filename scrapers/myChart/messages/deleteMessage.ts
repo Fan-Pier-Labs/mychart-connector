@@ -1,5 +1,6 @@
 import { MyChartRequest } from '../myChartRequest';
 import { getRequestVerificationTokenFromBody } from '../util';
+import { logger } from '../../../shared/logger';
 
 export type DeleteMessageResult = {
   success: boolean;
@@ -12,7 +13,7 @@ export async function deleteMessage(mychartRequest: MyChartRequest, conversation
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for delete message');
+    logger.debug('Could not find request verification token for delete message');
     return { success: false, error: 'Could not get verification token' };
   }
 

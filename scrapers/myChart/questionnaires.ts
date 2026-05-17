@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type Questionnaire = {
   id: string;
@@ -27,7 +28,7 @@ export async function getQuestionnaires(mychartRequest: MyChartRequest): Promise
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for questionnaires');
+    logger.debug('Could not find request verification token for questionnaires');
     return [];
   }
 

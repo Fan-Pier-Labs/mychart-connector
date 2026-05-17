@@ -56,6 +56,7 @@
 import { readFileSync, existsSync } from "fs";
 import { inflateSync } from "zlib";
 import { decompress as zstdDecompress } from "fzstd";
+import { logger } from '../../../shared/logger';
 
 const CLOCLHAAR_MAGIC = Buffer.from("CLOCLHAAR###");
 const CLOHEADERZ01_MAGIC = Buffer.from("CLOHEADERZ01");
@@ -312,7 +313,7 @@ export function parseWrapper(input: string | Buffer): CloMetadata {
       }
     }
   } catch (err) {
-    console.warn(`[clo_to_bitmap] AMF3 parsing failed, falling back to text-based detection:`, (err as Error).message);
+    logger.warn(`[clo_to_bitmap] AMF3 parsing failed, falling back to text-based detection:`, (err as Error).message);
   }
 
   // Fallback: text-based detection
@@ -413,7 +414,7 @@ export function extractTiles(data: Buffer): TileMap {
                 decompressed
               );
             } catch (err) {
-              console.warn(`[clo_to_bitmap] Failed to decompress tile at group=${groupIdx} row=${tileRow} col=${tileCol} block=${blockNum}:`, (err as Error).message);
+              logger.warn(`[clo_to_bitmap] Failed to decompress tile at group=${groupIdx} row=${tileRow} col=${tileCol} block=${blockNum}:`, (err as Error).message);
             }
           }
           pos = dataPos + compressedSize;
@@ -881,7 +882,7 @@ function parseInputs(
           metadata.photometric = "MONOCHROME1";
         }
       } catch (err) {
-        console.warn(`[clo_to_bitmap] Failed to parse wrapper, using defaults:`, (err as Error).message);
+        logger.warn(`[clo_to_bitmap] Failed to parse wrapper, using defaults:`, (err as Error).message);
       }
     }
   }

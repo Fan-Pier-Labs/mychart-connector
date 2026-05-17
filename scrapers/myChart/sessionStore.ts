@@ -15,6 +15,7 @@
  */
 
 import { MyChartRequest } from './myChartRequest';
+import { logger } from '../../shared/logger';
 
 const KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30 seconds, matches MyChart's own JS interval
 
@@ -93,7 +94,7 @@ class SessionStore {
     if (this.intervalHandle) {
       return () => this.stopKeepalive();
     }
-    console.log(`[keepalive] Starting keepalive (every ${KEEPALIVE_INTERVAL_MS / 1000}s)`);
+    logger.debug(`[keepalive] Starting keepalive (every ${KEEPALIVE_INTERVAL_MS / 1000}s)`);
     this.intervalHandle = setInterval(() => this.runKeepalive(), KEEPALIVE_INTERVAL_MS);
     return () => this.stopKeepalive();
   }
@@ -103,7 +104,7 @@ class SessionStore {
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
-      console.log('[keepalive] Stopped');
+      logger.debug('[keepalive] Stopped');
     }
   }
 
@@ -112,7 +113,7 @@ class SessionStore {
     const activeSessions = this.active();
     const allSessions = Array.from(this.sessions.entries());
     const statusSummary = allSessions.map(([, e]) => `${e.hostname}:${e.status}`).join(', ');
-    console.log(`[keepalive] Cycle start | total=${this.sessions.size} active=${activeSessions.length} | ${statusSummary || 'none'}`);
+    logger.debug(`[keepalive] Cycle start | total=${this.sessions.size} active=${activeSessions.length} | ${statusSummary || 'none'}`);
 
     for (const [token, entry] of activeSessions) {
       await this.pingSession(token, entry);
@@ -132,7 +133,7 @@ class SessionStore {
     const sessionAge = Math.round((Date.now() - entry.createdAt.getTime()) / 1000);
     try {
       const infoBefore = entry.request.getCookieInfo();
-      console.log(`[keepalive] ${label} (${host}): ping #${cnt} | age=${sessionAge}s cookies=${infoBefore.count} [${infoBefore.names.join(', ')}]`);
+      logger.debug(`[keepalive] ${label} (${host}): ping #${cnt} | age=${sessionAge}s cookies=${infoBefore.count} [${infoBefore.names.join(', ')}]`);
 
       const start = Date.now();
       const [dotNetResp, aspResp] = await Promise.all([
@@ -154,7 +155,7 @@ class SessionStore {
       const dotNetLocation = dotNetResp.headers.get('Location') ?? '';
       const aspLocation = aspResp.headers.get('Location') ?? '';
 
-      console.log(
+      logger.debug(
         `[keepalive] ${label} (${host}): response in ${elapsed}ms | ` +
         `KeepAlive: status=${dotNetStatus} body="${dotNetBody.trim().slice(0, 50)}" location="${dotNetLocation}" | ` +
         `keepalive.asp: status=${aspStatus} body="${aspBody.trim().slice(0, 50)}" location="${aspLocation}"`
@@ -165,23 +166,23 @@ class SessionStore {
       // instances even when the session is alive (endpoint may not exist → 404/empty).
       // If keepalive.asp also returns "0" we log it, but it doesn't drive expiry alone.
       if (dotNetBody.trim() === '0') {
-        console.warn(`[keepalive] ${label} (${host}): EXPIRED — /Home/KeepAlive returned "0" (keepalive.asp=${aspBody.trim()})`);
+        logger.warn(`[keepalive] ${label} (${host}): EXPIRED — /Home/KeepAlive returned "0" (keepalive.asp=${aspBody.trim()})`);
         entry.status = 'expired';
         return;
       }
       if (aspBody.trim() === '0') {
-        console.warn(`[keepalive] ${label} (${host}): keepalive.asp returned "0" but /Home/KeepAlive returned "${dotNetBody.trim()}" — treating as alive`);
+        logger.warn(`[keepalive] ${label} (${host}): keepalive.asp returned "0" but /Home/KeepAlive returned "${dotNetBody.trim()}" — treating as alive`);
       }
 
       if (dotNetStatus === 200 || aspStatus === 200) {
         this.keepAliveErrors.delete(token);
         const infoAfter = entry.request.getCookieInfo();
-        console.log(`[keepalive] ${label} (${host}): ALIVE | cookies: ${infoBefore.count} -> ${infoAfter.count}`);
+        logger.debug(`[keepalive] ${label} (${host}): ALIVE | cookies: ${infoBefore.count} -> ${infoAfter.count}`);
         return;
       }
 
       // Neither endpoint returned 200 — likely a redirect to login page
-      console.warn(
+      logger.warn(
         `[keepalive] ${label} (${host}): EXPIRED — neither endpoint returned 200 | ` +
         `KeepAlive: ${dotNetStatus} -> "${dotNetLocation}" | keepalive.asp: ${aspStatus} -> "${aspLocation}"`
       );
@@ -191,12 +192,12 @@ class SessionStore {
       this.keepAliveErrors.set(token, errorCount);
       const errMsg = (err as Error).message;
       const errStack = (err as Error).stack ?? '';
-      console.error(
+      logger.error(
         `[keepalive] ${label} (${host}): network error (${errorCount}/${KEEPALIVE_MAX_ERRORS}) — ${errMsg}\n` +
         errStack.split('\n').slice(0, 3).join('\n')
       );
       if (errorCount >= KEEPALIVE_MAX_ERRORS) {
-        console.error(`[keepalive] ${label} (${host}): marking as ERROR after ${KEEPALIVE_MAX_ERRORS} consecutive failures`);
+        logger.error(`[keepalive] ${label} (${host}): marking as ERROR after ${KEEPALIVE_MAX_ERRORS} consecutive failures`);
         entry.status = 'error';
         this.keepAliveErrors.delete(token);
       }

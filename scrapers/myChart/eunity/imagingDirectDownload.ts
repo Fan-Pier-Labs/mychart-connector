@@ -19,6 +19,7 @@ import * as path from 'path';
 import { MyChartRequest } from '../myChartRequest';
 import { FdiContext, followSamlChain, getImageViewerSamlUrl } from './imagingViewer';
 import { fetchWithCookies, abortAfter } from './fetch';
+import { logger } from '../../../shared/logger';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -465,8 +466,8 @@ export function parseEunityStudyParams(viewerUrl: string, viewerBody?: string): 
     return { accession, serviceInstance, patientId };
   }
 
-  console.log(`      [PARAMS] Could not extract study params`);
-  console.log(`      [PARAMS] accession=${accession}, serviceInstance=${serviceInstance}, patientId=${patientId}`);
+  logger.debug(`      [PARAMS] Could not extract study params`);
+  logger.debug(`      [PARAMS] accession=${accession}, serviceInstance=${serviceInstance}, patientId=${patientId}`);
   return null;
 }
 
@@ -522,7 +523,7 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   if (uidOccurrences.length === 0) return null;
 
   const uniqueUIDs = [...new Set(uidOccurrences.map(o => o.uid))];
-  console.log(`      [AMF-PARSE] ${uniqueUIDs.length} unique study-related UIDs from ${uidOccurrences.length} occurrences`);
+  logger.debug(`      [AMF-PARSE] ${uniqueUIDs.length} unique study-related UIDs from ${uidOccurrences.length} occurrences`);
 
   // Study UID: the first UID in the response (AMF always starts with study-level data)
   const studyUID = uniqueUIDs[0];
@@ -612,7 +613,7 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   const actualSeriesWithImages = [...seriesInstances.values()].filter(s => s.size > 0).length;
 
   if (candidateSeriesUIDs.length === 0 || totalInstances === 0) {
-    console.log(`      [AMF-PARSE] Positional analysis found ${candidateSeriesUIDs.length} series with ${totalInstances} instances, falling back to pair-based parsing`);
+    logger.debug(`      [AMF-PARSE] Positional analysis found ${candidateSeriesUIDs.length} series with ${totalInstances} instances, falling back to pair-based parsing`);
     return parseStudySeriesFromAmfLegacy(amfBuf);
   }
 
@@ -623,11 +624,11 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
   // Don't fall back for CT/MRI with many instances per series (>10).
   const maxInstancesPerSeries = Math.max(...[...seriesInstances.values()].map(s => s.size));
   if (expectedPairCount >= 2 && actualSeriesWithImages <= 1 && maxInstancesPerSeries <= 10 && expectedPairCount > actualSeriesWithImages) {
-    console.log(`      [AMF-PARSE] Positional analysis found ${actualSeriesWithImages} series with images but ${expectedPairCount} pairs expected, falling back to pair-based parsing`);
+    logger.debug(`      [AMF-PARSE] Positional analysis found ${actualSeriesWithImages} series with images but ${expectedPairCount} pairs expected, falling back to pair-based parsing`);
     return parseStudySeriesFromAmfLegacy(amfBuf);
   }
 
-  console.log(`      [AMF-PARSE] Detected ${candidateSeriesUIDs.length} series via positional analysis`);
+  logger.debug(`      [AMF-PARSE] Detected ${candidateSeriesUIDs.length} series via positional analysis`);
 
   // Extract series descriptions from nearby readable strings
   const descriptionPattern = /[\x20-\x7e]{3,100}/g;
@@ -692,10 +693,10 @@ export function parseStudySeriesFromAmf(amfBuf: Buffer): ParsedStudyInfo | null 
       }
     }
 
-    console.log(`      [AMF-PARSE] ${bestDesc}: ${instances.size} instances`);
+    logger.debug(`      [AMF-PARSE] ${bestDesc}: ${instances.size} instances`);
   }
 
-  console.log(`      [AMF-PARSE] Total: ${series.length} (seriesUID, instanceUID) entries across ${candidateSeriesUIDs.length} series`);
+  logger.debug(`      [AMF-PARSE] Total: ${series.length} (seriesUID, instanceUID) entries across ${candidateSeriesUIDs.length} series`);
 
   return { studyUID, series };
 }
@@ -842,7 +843,7 @@ async function initializeAmfSession(
   });
 
   if (!res.ok) {
-    console.log(`      [AMF] Request failed: ${res.status}`);
+    logger.debug(`      [AMF] Request failed: ${res.status}`);
     return null;
   }
 
@@ -850,11 +851,11 @@ async function initializeAmfSession(
   const parsed = parseAmfResponse(amfBuf);
 
   if (parsed && parsed.code !== 0) {
-    console.log(`      [AMF] Error code=${parsed.code}: ${parsed.response ?? '(null)'}`);
+    logger.debug(`      [AMF] Error code=${parsed.code}: ${parsed.response ?? '(null)'}`);
   }
 
   if (parsed && parsed.code === 0) {
-    console.log(`      [AMF] Session initialized successfully (${amfBuf.length} bytes)`);
+    logger.debug(`      [AMF] Session initialized successfully (${amfBuf.length} bytes)`);
   }
 
   // Check if the response contains a different serviceInstance
@@ -862,8 +863,8 @@ async function initializeAmfSession(
   let effectiveServiceInstance = serviceInstance;
 
   if (realSI && realSI !== serviceInstance) {
-    console.log(`      [AMF] Server returned different serviceInstance: ${realSI} (was ${serviceInstance})`);
-    console.log(`      [AMF] Making second AMF call with real serviceInstance...`);
+    logger.debug(`      [AMF] Server returned different serviceInstance: ${realSI} (was ${serviceInstance})`);
+    logger.debug(`      [AMF] Making second AMF call with real serviceInstance...`);
 
     // Make a second AMF call with the real serviceInstance (like the browser does)
     const amfReq2 = buildGetStudyListMetaRequest(accession, realSI, patientId);
@@ -880,7 +881,7 @@ async function initializeAmfSession(
       const amfBuf2 = Buffer.from(await res2.arrayBuffer());
       const parsed2 = parseAmfResponse(amfBuf2);
       if (parsed2?.code === 0) {
-        console.log(`      [AMF] Second session initialized successfully (${amfBuf2.length} bytes)`);
+        logger.debug(`      [AMF] Second session initialized successfully (${amfBuf2.length} bytes)`);
         // Return the FIRST AMF response (has full study/series data) but with the real serviceInstance
         return { amfBuf, effectiveServiceInstance: realSI };
       }
@@ -1123,14 +1124,14 @@ async function downloadProgressiveClopixel(
 
       // Check for CLOERROR in response
       if (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR') {
-        console.log(`        [PIXEL] Level ${level}: server returned CLOERROR, stopping`);
+        logger.debug(`        [PIXEL] Level ${level}: server returned CLOERROR, stopping`);
         break;
       }
 
       results.push({ level, data });
-      console.log(`        [PIXEL] Level ${level}: ${(data.length / 1024).toFixed(0)} KB`);
+      logger.debug(`        [PIXEL] Level ${level}: ${(data.length / 1024).toFixed(0)} KB`);
     } catch (err) {
-      console.log(`        [PIXEL] Level ${level} failed: ${(err as Error).message}`);
+      logger.debug(`        [PIXEL] Level ${level} failed: ${(err as Error).message}`);
       break;
     }
   }
@@ -1179,7 +1180,7 @@ export async function probeDicomWeb(
       const ct = res.headers.get('content-type') || '';
 
       if (res.ok && (ct.includes('dicom') || ct.includes('multipart') || ct.includes('json'))) {
-        console.log(`      [DICOMweb] Found endpoint: ${urlPath} (${ct})`);
+        logger.debug(`      [DICOMweb] Found endpoint: ${urlPath} (${ct})`);
         return { endpoint: urlPath, contentType: ct };
       }
 
@@ -1234,19 +1235,19 @@ export async function downloadImagingDirect(
 
   try {
     // Step 1: Follow SAML chain
-    console.log('      Following SAML chain...');
+    logger.debug('      Following SAML chain...');
     const session = await followSamlChain(mychartRequest, samlUrl);
     if (!session) {
       result.errors.push('Failed to follow SAML chain to eUnity');
       return result;
     }
-    console.log(`      Got eUnity session (JSESSIONID: ${session.jsessionId?.substring(0, 12)}...)`);
+    logger.debug(`      Got eUnity session (JSESSIONID: ${session.jsessionId?.substring(0, 12)}...)`);
 
     const baseUrl = new URL(session.viewerUrl).origin;
     await fs.promises.mkdir(outputDir, { recursive: true });
 
     // Step 2: Initialize AMF session
-    console.log('      Initializing AMF session...');
+    logger.debug('      Initializing AMF session...');
     const amfResult = await initializeAmfSession(
       session.cookieJar,
       baseUrl,
@@ -1268,12 +1269,12 @@ export async function downloadImagingDirect(
     // Parse UIDs from AMF response if available
     const uids = parseAmfForUIDs(amfResponse, studyParams.studyUID);
     if (uids.length > 0) {
-      console.log(`      AMF returned ${uids.length} UIDs`);
+      logger.debug(`      AMF returned ${uids.length} UIDs`);
     }
 
     // Step 3: Download images (wrapper + progressive pixel levels)
     for (const series of seriesInfo) {
-      console.log(`      Downloading ${series.seriesDescription}...`);
+      logger.debug(`      Downloading ${series.seriesDescription}...`);
       const safeName = studyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
       const safeDesc = series.seriesDescription.replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -1289,7 +1290,7 @@ export async function downloadImagingDirect(
 
         // Skip empty/error responses
         if (data.length < 256 || (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR')) {
-          console.log(`      Skipping ${series.seriesDescription}: empty or error response (${data.length} bytes)`);
+          logger.debug(`      Skipping ${series.seriesDescription}: empty or error response (${data.length} bytes)`);
           continue;
         }
 
@@ -1308,7 +1309,7 @@ export async function downloadImagingDirect(
           format: isCloFormat(data) ? 'CLHAAR' : 'UNKNOWN',
         });
 
-        console.log(`      Saved: ${fileName} (${data.length} bytes)`);
+        logger.debug(`      Saved: ${fileName} (${data.length} bytes)`);
 
         // Progressive CLOPIXEL levels for full resolution
         const pixelLevels = await downloadProgressiveClopixel(session.cookieJar, baseUrl, {
@@ -1375,7 +1376,7 @@ export async function downloadImagingStudyDirect(
 
   try {
     // Step 1: Get SAML URL from FdiData
-    console.log('      Getting SAML URL for direct download...');
+    logger.debug('      Getting SAML URL for direct download...');
     const viewerSession = await getImageViewerSamlUrl(mychartRequest, fdiContext);
     if (!viewerSession?.samlUrl) {
       result.errors.push('Could not get SAML URL from FdiData');
@@ -1383,13 +1384,13 @@ export async function downloadImagingStudyDirect(
     }
 
     // Step 2: Follow SAML chain to eUnity
-    console.log('      Following SAML chain...');
+    logger.debug('      Following SAML chain...');
     const session = await followSamlChain(mychartRequest, viewerSession.samlUrl);
     if (!session) {
       result.errors.push('Failed to follow SAML chain to eUnity');
       return result;
     }
-    console.log(`      Got eUnity session (JSESSIONID: ${session.jsessionId?.substring(0, 12)}...)`);
+    logger.debug(`      Got eUnity session (JSESSIONID: ${session.jsessionId?.substring(0, 12)}...)`);
 
     // Step 3: Extract study params from viewer URL
     const studyParams = parseEunityStudyParams(session.viewerUrl, session.viewerBody);
@@ -1397,7 +1398,7 @@ export async function downloadImagingStudyDirect(
       result.errors.push(`Could not extract study params from viewer URL: ${session.viewerUrl}`);
       return result;
     }
-    console.log(`      Study params: accession=${studyParams.accession}, serviceInstance=${studyParams.serviceInstance}`);
+    logger.debug(`      Study params: accession=${studyParams.accession}, serviceInstance=${studyParams.serviceInstance}`);
 
     const baseUrl = new URL(session.viewerUrl).origin;
     const skipFileWrite = options?.skipFileWrite ?? false;
@@ -1406,7 +1407,7 @@ export async function downloadImagingStudyDirect(
     }
 
     // Step 4: Initialize AMF session (required before CustomImageServlet will serve images)
-    console.log('      Initializing AMF session...');
+    logger.debug('      Initializing AMF session...');
     const amfResult = await initializeAmfSession(
       session.cookieJar,
       baseUrl,
@@ -1422,7 +1423,7 @@ export async function downloadImagingStudyDirect(
 
     const { amfBuf: amfResponse, effectiveServiceInstance } = amfResult;
     if (effectiveServiceInstance !== studyParams.serviceInstance) {
-      console.log(`      Using effective serviceInstance: ${effectiveServiceInstance}`);
+      logger.debug(`      Using effective serviceInstance: ${effectiveServiceInstance}`);
       studyParams.serviceInstance = effectiveServiceInstance;
     }
 
@@ -1432,7 +1433,7 @@ export async function downloadImagingStudyDirect(
       result.errors.push('Could not parse series info from AMF response');
       return result;
     }
-    console.log(`      Found ${studyInfo.series.length} series, studyUID: ${studyInfo.studyUID.substring(0, 30)}...`);
+    logger.debug(`      Found ${studyInfo.series.length} series, studyUID: ${studyInfo.studyUID.substring(0, 30)}...`);
 
     // Build series list summary (available even with maxImages: 0)
     const seriesMap = new Map<string, { description: string; count: number }>();
@@ -1472,7 +1473,7 @@ export async function downloadImagingStudyDirect(
         completed++;
         if (data.length < 256 || (data.length > 8 && data.toString('ascii', 0, 8) === 'CLOERROR')) {
           if (completed % 50 === 0 || completed === seriesToDownload.length) {
-            console.log(`      [${completed}/${seriesToDownload.length}] Progress...`);
+            logger.debug(`      [${completed}/${seriesToDownload.length}] Progress...`);
           }
           return;
         }
@@ -1538,7 +1539,7 @@ export async function downloadImagingStudyDirect(
         }
 
         if (completed % 50 === 0 || completed === seriesToDownload.length) {
-          console.log(`      [${completed}/${seriesToDownload.length}] Downloaded ${(data.length / 1024).toFixed(0)} KB - ${series.seriesDescription}`);
+          logger.debug(`      [${completed}/${seriesToDownload.length}] Downloaded ${(data.length / 1024).toFixed(0)} KB - ${series.seriesDescription}`);
         }
       } catch (err) {
         completed++;
@@ -1547,7 +1548,7 @@ export async function downloadImagingStudyDirect(
     }
 
     // Run downloads in parallel batches
-    console.log(`      Downloading ${seriesToDownload.length} images (concurrency: ${concurrency})...`);
+    logger.debug(`      Downloading ${seriesToDownload.length} images (concurrency: ${concurrency})...`);
     for (let i = 0; i < seriesToDownload.length; i += concurrency) {
       const batch = seriesToDownload.slice(i, i + concurrency);
       await Promise.all(batch.map(s => downloadOne(s)));

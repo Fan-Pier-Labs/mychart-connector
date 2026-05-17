@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from './logger';
 
 /**
  * Change directory to the nearest ancestor directory containing a package.json file.
@@ -16,7 +17,7 @@ export function changeDirToPackageRoot(): void {
   while (!fs.existsSync(path.join(currentDir, 'package.json'))) {
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
-      console.log('package.json not found in any parent directory.');
+      logger.debug('package.json not found in any parent directory.');
       return;
     }
     currentDir = parentDir;
@@ -27,11 +28,11 @@ export function changeDirToPackageRoot(): void {
 // For testing purposes, you can call the function if this file is run directly.
 if (import.meta.main) {
   try {
-    console.log('Current directory before change:', process.cwd());
+    logger.debug('Current directory before change:', process.cwd());
     changeDirToPackageRoot();
-    console.log('Changed directory to:', process.cwd());
+    logger.debug('Changed directory to:', process.cwd());
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     process.exit(1);
   }
 }

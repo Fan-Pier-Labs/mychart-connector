@@ -7,6 +7,7 @@ import { sendTelemetryEvent } from "../../shared/telemetry";
 import { acceptTermsAndConditions } from "./termsAndConditions";
 import { isBlockedInstance } from "./blockedInstances";
 import { createAssertion, type PasskeyCredential } from "./softwareAuthenticator";
+import { logger } from '../../shared/logger';
 
 
 // Just for testing / local development
@@ -64,7 +65,7 @@ export async function probeFirstPathPartByTryingCommonLoginPaths(mychartRequest:
       const html = await resp.text();
 
       if (finalUrl.host !== mychartRequest.hostname) {
-        console.log(`Skipping ${candidate} probe: redirected off-host to ${finalUrl.host}`);
+        logger.debug(`Skipping ${candidate} probe: redirected off-host to ${finalUrl.host}`);
         continue;
       }
 
@@ -74,11 +75,11 @@ export async function probeFirstPathPartByTryingCommonLoginPaths(mychartRequest:
 
       const finalPathPart = finalUrl.pathname.split('/').filter(Boolean)[0];
       if ((finalPathPart && finalPathPart.toLowerCase() === candidate.toLowerCase()) && looksLikeLoginPage(html)) {
-        console.log('Recovered firstPathPart by probing common login path:', finalPathPart || candidate);
+        logger.debug('Recovered firstPathPart by probing common login path:', finalPathPart || candidate);
         return finalPathPart || candidate;
       }
     } catch (error) {
-      console.log(`Failed ${candidate} probe:`, error);
+      logger.debug(`Failed ${candidate} probe:`, error);
     }
   }
 
@@ -119,14 +120,14 @@ export async function extractFirstPathPartFromMarketingPage(mychartRequest: MyCh
       // Pick the most frequently referenced path part
       const sorted = [...candidates.entries()].sort((a, b) => b[1] - a[1]);
       const bestCandidate = sorted[0][0];
-      console.log('Extracted firstPathPart from marketing page:', bestCandidate, `(found ${candidates.size} candidate(s):`, [...candidates.entries()].map(([k, v]) => `${k}=${v}`).join(', ') + ')');
+      logger.debug('Extracted firstPathPart from marketing page:', bestCandidate, `(found ${candidates.size} candidate(s):`, [...candidates.entries()].map(([k, v]) => `${k}=${v}`).join(', ') + ')');
       return bestCandidate;
     }
 
-    console.log('No MyChart URLs found on marketing page for hostname:', mychartRequest.hostname);
+    logger.debug('No MyChart URLs found on marketing page for hostname:', mychartRequest.hostname);
     return null;
   } catch (e) {
-    console.log('Failed to fetch marketing page:', e);
+    logger.debug('Failed to fetch marketing page:', e);
     return null;
   }
 }
@@ -134,7 +135,7 @@ export async function extractFirstPathPartFromMarketingPage(mychartRequest: MyCh
 async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<MyChartRequest | null> {
 
   if (mychartRequest.firstPathPart) {
-    console.log('first path part already determined', mychartRequest.firstPathPart)
+    logger.debug('first path part already determined', mychartRequest.firstPathPart)
     return mychartRequest;
   }
 
@@ -142,7 +143,7 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
   const pathResponse = await mychartRequest.makeRequest({followRedirects: false, url: requestUrl })
 
   const locationResponseHeader = pathResponse.headers.get('Location')
-  console.log('location response header', locationResponseHeader)
+  logger.debug('location response header', locationResponseHeader)
 
   let firstPathPart;
 
@@ -153,7 +154,7 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
     const pathPart = finalUrl.pathname.split('/')[1];
     if (pathPart) {
       firstPathPart = pathPart;
-      console.log('extracted first path part from response URL:', firstPathPart);
+      logger.debug('extracted first path part from response URL:', firstPathPart);
     }
   }
 
@@ -163,27 +164,27 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
     // Use redirectUrl.host (includes port) since mychartRequest.hostname may include a port.
     const redirectUrl = new URL(locationResponseHeader, mychartRequest.protocol + '://' + mychartRequest.hostname);
     if (redirectUrl.host !== mychartRequest.hostname) {
-      console.log('Cross-domain redirect detected:', mychartRequest.hostname, '->', redirectUrl.host);
+      logger.debug('Cross-domain redirect detected:', mychartRequest.hostname, '->', redirectUrl.host);
       // Follow the redirect and scrape the marketing page for MyChart URLs
       // that point back to the original hostname (e.g. script tags, data attributes, links).
       firstPathPart = await extractFirstPathPartFromMarketingPage(mychartRequest, redirectUrl.href);
     } else {
       firstPathPart = parseFirstPathPartFromLocation(locationResponseHeader, mychartRequest.hostname, mychartRequest.protocol);
-      console.log('first path part', firstPathPart)
+      logger.debug('first path part', firstPathPart)
     }
   }
   else {
-    console.log('Looking for first path part: no location response header')
+    logger.debug('Looking for first path part: no location response header')
   }
 
   if (!firstPathPart) {
     const body = await pathResponse.text()
     firstPathPart = parseFirstPathPartFromHtml(body);
     if (firstPathPart) {
-      console.log('extracted first url path part from the body')
+      logger.debug('extracted first url path part from the body')
     }
     else {
-      console.log('could not extract second part', body)
+      logger.debug('could not extract second part', body)
     }
   }
 
@@ -192,8 +193,8 @@ async function determineFirstPathPart(mychartRequest: MyChartRequest): Promise<M
   }
 
   if (!firstPathPart) {
-    console.log('Could not find first path part');
-    console.log('TODO: handle this error better')
+    logger.debug('Could not find first path part');
+    logger.debug('TODO: handle this error better')
     return mychartRequest;
   }
 
@@ -282,7 +283,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   sendTelemetryEvent('scraper_login_started', { hostname });
 
   if (!hostname || !user || !pass) {
-    console.log('missing hostname, user, or pass', {hostname, user, pass})
+    logger.debug('missing hostname, user, or pass', {hostname, user, pass})
     throw new Error('Missing hostname, user, or pass')
   }
 
@@ -297,14 +298,14 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   const mychartRequest = new MyChartRequest(hostname, { protocol: effectiveProtocol, fetchFn });
   const firstPathPartFromInput = parseFirstPathPartFromInput(hostname);
   if (firstPathPartFromInput) {
-    console.log('Using firstPathPart from user input:', firstPathPartFromInput);
+    logger.debug('Using firstPathPart from user input:', firstPathPartFromInput);
     mychartRequest.setFirstPathPart(firstPathPartFromInput);
   }
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest)
 
   if (!foundMyChartFirstPathPart) {
-    console.log('could not determine first path part')
+    logger.debug('could not determine first path part')
     return {state: 'error', error: 'could not determine first path part', mychartRequest}
   }
 
@@ -320,7 +321,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
 
   let requestVerificationToken = getRequestVerificationTokenFromBody(loginPageHtml)
 
-  console.log('request verification token:', requestVerificationToken)
+  logger.debug('request verification token:', requestVerificationToken)
 
   // Extract additional hidden fields that MyChart expects
   const navRequestMetrics = $('input[name="__NavigationRequestMetrics"]').attr('value') || '';
@@ -344,9 +345,9 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
       if (credMatch && credMatch[1].includes('Username') && !credMatch[1].includes('LoginIdentifier')) {
         usernameField = 'Username';
       }
-      console.log('Detected credential field:', usernameField);
+      logger.debug('Detected credential field:', usernameField);
     } catch (e) {
-      console.log('Could not detect credential field, defaulting to', usernameField, e);
+      logger.debug('Could not detect credential field, defaulting to', usernameField, e);
     }
   }
 
@@ -381,9 +382,9 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   const secondaryAuthPage = await res.text()
   const responseUrl = res.url || '';
 
-  console.log(`[login] DoLogin response: status=${res.status} url=${responseUrl}`);
-  console.log(`[login] Page checks: has_secondaryvalidationcontroller=${secondaryAuthPage.includes('secondaryvalidationcontroller')} has_md_home_index=${secondaryAuthPage.toLowerCase().includes('md_home_index')} has_termsconditions=${responseUrl.toLowerCase().includes('termsconditions')}`);
-  console.log(`[login] Page snippet (first 300 chars):`, secondaryAuthPage.substring(0, 300));
+  logger.debug(`[login] DoLogin response: status=${res.status} url=${responseUrl}`);
+  logger.debug(`[login] Page checks: has_secondaryvalidationcontroller=${secondaryAuthPage.includes('secondaryvalidationcontroller')} has_md_home_index=${secondaryAuthPage.toLowerCase().includes('md_home_index')} has_termsconditions=${responseUrl.toLowerCase().includes('termsconditions')}`);
+  logger.debug(`[login] Page snippet (first 300 chars):`, secondaryAuthPage.substring(0, 300));
 
   // If the user is required to set up 2fa but hasn't set up 2fa yet, there may be a message stating that they have to set up 2fa.
 
@@ -391,7 +392,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   const bodyLower = secondaryAuthPage.toLocaleLowerCase();
   const urlLower = responseUrl.toLocaleLowerCase();
   if (bodyLower.includes('login failed') || bodyLower.includes('login unsuccessful') || urlLower.includes('loginfailed')) {
-    console.log('Login failed with username ', user, hostname)
+    logger.debug('Login failed with username ', user, hostname)
     return {
       state: 'invalid_login',
       error: 'Username or password is incorrect',
@@ -403,10 +404,10 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   if (secondaryAuthPage.includes('secondaryvalidationcontroller') || urlLower.includes('secondaryvalidation')) {
 
     requestVerificationToken = getRequestVerificationTokenFromBody(secondaryAuthPage)
-    console.log('new request verification token:', requestVerificationToken)
+    logger.debug('new request verification token:', requestVerificationToken)
 
     if (!requestVerificationToken) {
-      console.log('could not find request verification token', secondaryAuthPage)
+      logger.debug('could not find request verification token', secondaryAuthPage)
       return {state: 'error', error: 'could not find request verification token', mychartRequest}
     }
 
@@ -414,8 +415,8 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
 
     // Detect which 2FA delivery methods are available on the page
     const deliveryMethods = parse2faDeliveryMethods(secondaryAuthPage);
-    console.log('2FA delivery methods:', JSON.stringify(deliveryMethods));
-    console.log('[login] 2FA page body (first 2000 chars):', secondaryAuthPage.substring(0, 2000));
+    logger.debug('2FA delivery methods:', JSON.stringify(deliveryMethods));
+    logger.debug('[login] 2FA page body (first 2000 chars):', secondaryAuthPage.substring(0, 2000));
 
     let twoFaDelivery: TwoFaDeliveryInfo | undefined;
 
@@ -449,22 +450,22 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
         });
         const respBody = await resp.text();
         const success = respBody.includes('"Success":true');
-        console.log(`[login] SendCode ${label}: status=${resp.status} body=${respBody.substring(0, 200)} success=${success}`);
+        logger.debug(`[login] SendCode ${label}: status=${resp.status} body=${respBody.substring(0, 200)} success=${success}`);
         return success;
       }
 
       if (deliveryMethods.hasEmail && deliveryMethods.hasSms) {
-        console.log('[login] Both email and SMS detected, using email');
+        logger.debug('[login] Both email and SMS detected, using email');
         if (await trySendCode('deliveryMethodEmail=true&resendCode=false&workflow=1', 'email')) {
           sentMethod = 'email';
         }
       } else if (deliveryMethods.hasEmail) {
-        console.log('[login] Only email detected, using email');
+        logger.debug('[login] Only email detected, using email');
         if (await trySendCode('deliveryMethodEmail=true&resendCode=false&workflow=1', 'email')) {
           sentMethod = 'email';
         }
       } else if (deliveryMethods.hasSms) {
-        console.log('[login] Only SMS detected, using SMS');
+        logger.debug('[login] Only SMS detected, using SMS');
         if (await trySendCode('deliveryMethodEmail=false&resendCode=false&workflow=1', 'sms-legacy')) {
           sentMethod = 'sms';
         }
@@ -472,7 +473,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
 
       // If nothing detected or detected method failed, try all formats
       if (!sentMethod) {
-        console.log('[login] Trying all SendCode formats...');
+        logger.debug('[login] Trying all SendCode formats...');
         // Try SMS formats first (more common for text-only instances)
         if (await trySendCode('deliveryMethodSMS=true&resendCode=false&workflow=1', 'sms-new')) {
           sentMethod = 'sms';
@@ -484,7 +485,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
       }
 
       if (!sentMethod) {
-        console.log('[login] All SendCode attempts failed — could not send 2FA code');
+        logger.debug('[login] All SendCode attempts failed — could not send 2FA code');
       }
 
       // Try to extract masked contact info
@@ -492,14 +493,14 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
       if (sentMethod === 'email') {
         contact = deliveryMethods.emailContact;
         twoFaDelivery = { method: 'email', contact };
-        console.log(`Asked for a 2FA code to be sent to email${contact ? ` (${contact})` : ''}, waiting for email to arrive`);
+        logger.debug(`Asked for a 2FA code to be sent to email${contact ? ` (${contact})` : ''}, waiting for email to arrive`);
       } else {
         contact = deliveryMethods.smsContact;
         twoFaDelivery = { method: 'sms', contact };
-        console.log(`Asked for a 2FA code to be sent via SMS${contact ? ` (${contact})` : ''}`);
+        logger.debug(`Asked for a 2FA code to be sent via SMS${contact ? ` (${contact})` : ''}`);
       }
     } else {
-      console.log("Skipping SendCode (using TOTP)")
+      logger.debug("Skipping SendCode (using TOTP)")
     }
 
     return {
@@ -523,7 +524,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
   // Use the response URL to avoid false positives from pages that merely
   // reference "termsconditions" in CSS/JS/footer links.
   if (urlLower.includes('termsconditions') || (bodyLower.includes('terms and conditions') && !urlLower.includes('/home'))) {
-    console.log('Landed on Terms & Conditions page after login, auto-accepting');
+    logger.debug('Landed on Terms & Conditions page after login, auto-accepting');
     const accepted = await acceptTermsAndConditions(mychartRequest);
     if (accepted) {
       return {
@@ -531,7 +532,7 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
         mychartRequest
       }
     }
-    console.log('Failed to auto-accept Terms & Conditions');
+    logger.debug('Failed to auto-accept Terms & Conditions');
     return {
       state: 'error',
       error: 'Failed to accept MyChart Terms & Conditions',
@@ -539,9 +540,9 @@ export async function myChartUserPassLogin ({hostname, user, pass, skipSendCode,
     }
   }
 
-  console.log('i am at some page, i dont know what to do!')
-  console.log('Response URL:', responseUrl)
-  console.log('Page snippet (first 500 chars):', secondaryAuthPage.substring(0, 500))
+  logger.debug('i am at some page, i dont know what to do!')
+  logger.debug('Response URL:', responseUrl)
+  logger.debug('Page snippet (first 500 chars):', secondaryAuthPage.substring(0, 500))
 
   return {
     state: 'error',
@@ -581,7 +582,7 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
   const requestVerificationToken = getRequestVerificationTokenFromBody(secondaryAuthPage)
 
   if (!requestVerificationToken) { 
-    console.log('could not find request verification token', secondaryAuthPage)
+    logger.debug('could not find request verification token', secondaryAuthPage)
     return {
       state: 'error',
       mychartRequest
@@ -589,12 +590,12 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
   }
 
 
-  console.log("Got 2fa sortedCodes from email:", sortedCodes)
+  logger.debug("Got 2fa sortedCodes from email:", sortedCodes)
 
   let invalidCode = false;
 
   for (const code of sortedCodes) {
-    console.log('Trying code', code.code)
+    logger.debug('Trying code', code.code)
     const resp = await mychartRequest.makeRequest({
       path: "/Authentication/SecondaryValidation/Validate?noCache=" + Math.random(),
       "headers": { 
@@ -617,10 +618,10 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
       // pages that merely reference "termsconditions" in CSS/JS/footer links.
       const insideUrl = (insideResp.url || '').toLowerCase();
       if (insideUrl.includes('termsconditions') || (insideBodyLower.includes('terms and conditions') && !insideUrl.includes('/home'))) {
-        console.log('Landed on Terms & Conditions page after 2FA, auto-accepting');
+        logger.debug('Landed on Terms & Conditions page after 2FA, auto-accepting');
         const accepted = await acceptTermsAndConditions(mychartRequest);
         if (!accepted) {
-          console.log('Failed to auto-accept Terms & Conditions after 2FA');
+          logger.debug('Failed to auto-accept Terms & Conditions after 2FA');
           return {
             state: 'error',
             mychartRequest
@@ -637,7 +638,7 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
 
     if (respBody.TwoFactorCodeFailReason === 'codewrong') {
       // wrong code!
-      console.log('wrong code!', code.code, code.score)
+      logger.debug('wrong code!', code.code, code.score)
       invalidCode = true;
     }
   }
@@ -650,7 +651,7 @@ export async function complete2faFlow({mychartRequest, code, twofaCodeArray, isT
     };
   }
 
-  console.log('i am at some page after 2fa validation call, i dont know what to do!')
+  logger.debug('i am at some page after 2fa validation call, i dont know what to do!')
   return {
     state: 'error',
     mychartRequest
@@ -690,7 +691,7 @@ export async function myChartPasskeyLogin({hostname, credential, protocol, fetch
   const mychartRequest = new MyChartRequest(hostname, { protocol: effectiveProtocol, fetchFn });
   const firstPathPartFromInput = parseFirstPathPartFromInput(hostname);
   if (firstPathPartFromInput) {
-    console.log('Using firstPathPart from user input:', firstPathPartFromInput);
+    logger.debug('Using firstPathPart from user input:', firstPathPartFromInput);
     mychartRequest.setFirstPathPart(firstPathPartFromInput);
   }
 
@@ -709,7 +710,7 @@ export async function myChartPasskeyLogin({hostname, credential, protocol, fetch
   }
 
   // Get passkey challenge
-  console.log('  Getting passkey challenge...');
+  logger.debug('  Getting passkey challenge...');
   const getParamsResp = await mychartRequest.makeRequest({
     path: '/Authentication/Login/GetPasskeyGetParams?force=true&noCache=' + Math.random(),
     method: 'POST',
@@ -720,18 +721,18 @@ export async function myChartPasskeyLogin({hostname, credential, protocol, fetch
   });
 
   if (getParamsResp.status !== 200) {
-    console.log('  GetPasskeyGetParams failed:', getParamsResp.status);
+    logger.debug('  GetPasskeyGetParams failed:', getParamsResp.status);
     return { state: 'error', error: 'Failed to get passkey challenge', mychartRequest };
   }
 
   const getParamsResult = await getParamsResp.json();
   if (!getParamsResult.Success || !getParamsResult.PasskeyGetParams) {
-    console.log('  GetPasskeyGetParams unsuccessful:', JSON.stringify(getParamsResult));
+    logger.debug('  GetPasskeyGetParams unsuccessful:', JSON.stringify(getParamsResult));
     return { state: 'error', error: 'Passkey login not available on this instance', mychartRequest };
   }
 
   const passkeyParams = getParamsResult.PasskeyGetParams;
-  console.log('  Got passkey challenge. RpId:', passkeyParams.RpId || '(default)');
+  logger.debug('  Got passkey challenge. RpId:', passkeyParams.RpId || '(default)');
 
   // Create assertion using software authenticator
   const origin = `${effectiveProtocol}://${mychartRequest.hostname}`;
@@ -759,7 +760,7 @@ export async function myChartPasskeyLogin({hostname, credential, protocol, fetch
     + '&__CurrentPageLoadDescriptor=' + encodeURIComponent(currentPageLoadDescriptor)
     + '&__RttCaptureEnabled=' + rttCaptureEnabled;
 
-  console.log('  Submitting passkey login...');
+  logger.debug('  Submitting passkey login...');
   const res = await mychartRequest.makeRequest({
     path: '/Authentication/Login/DoLogin',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -774,19 +775,19 @@ export async function myChartPasskeyLogin({hostname, credential, protocol, fetch
 
   // Check for login failure
   if (bodyLower.includes('login failed') || bodyLower.includes('login unsuccessful') || urlLower.includes('loginfailed')) {
-    console.log('  Passkey login failed');
+    logger.debug('  Passkey login failed');
     return { state: 'invalid_login', error: 'Passkey authentication failed', mychartRequest };
   }
 
   // Success — logged in directly (passkey bypasses 2FA)
   if (bodyLower.includes('md_home_index')) {
-    console.log('  Passkey login successful!');
+    logger.debug('  Passkey login successful!');
     return { state: 'logged_in', mychartRequest };
   }
 
   // Terms & Conditions
   if (urlLower.includes('termsconditions') || (bodyLower.includes('terms and conditions') && !urlLower.includes('/home'))) {
-    console.log('  Landed on Terms & Conditions page, auto-accepting');
+    logger.debug('  Landed on Terms & Conditions page, auto-accepting');
     const accepted = await acceptTermsAndConditions(mychartRequest);
     if (accepted) {
       return { state: 'logged_in', mychartRequest };
@@ -796,19 +797,19 @@ export async function myChartPasskeyLogin({hostname, credential, protocol, fetch
 
   // Unexpected page — might still need 2FA (shouldn't happen with passkey, but handle gracefully)
   if (responseBody.includes('secondaryvalidationcontroller') || urlLower.includes('secondaryvalidation')) {
-    console.log('  Passkey login still requires 2FA — unexpected');
+    logger.debug('  Passkey login still requires 2FA — unexpected');
     return { state: 'need_2fa', mychartRequest };
   }
 
-  console.log('  Passkey login ended on unexpected page');
-  console.log('  Response URL:', responseUrl);
-  console.log('  Page snippet:', responseBody.substring(0, 500));
+  logger.debug('  Passkey login ended on unexpected page');
+  logger.debug('  Response URL:', responseUrl);
+  logger.debug('  Page snippet:', responseBody.substring(0, 500));
   return { state: 'error', error: 'Passkey login ended on unexpected page', mychartRequest };
 }
 
 export async function areCookiesValid(mychartRequest: MyChartRequest): Promise<boolean> {
   const res = await mychartRequest.makeRequest({path: '/Home', followRedirects: false})
-  console.log("are cookies valid?", res.status == 200, res.headers.get('Location'))
+  logger.debug("are cookies valid?", res.status == 200, res.headers.get('Location'))
   return res.status == 200
 }
 
@@ -823,7 +824,7 @@ async function myChartRawLogin_TEST({hostname, user, pass}: {hostname: string, u
   }
 
   const cookiesValid = await areCookiesValid(mychartRequest)
-  console.log('cookies valid?', cookiesValid)
+  logger.debug('cookies valid?', cookiesValid)
 
   return mychartRequest;
 }
@@ -837,14 +838,14 @@ export async function login_TEST(hostname: string): Promise<MyChartRequest> {
   let mychartRequest = new MyChartRequest(hostname);
   const firstPathPartFromInput = parseFirstPathPartFromInput(hostname);
   if (firstPathPartFromInput) {
-    console.log('Using firstPathPart from user input:', firstPathPartFromInput);
+    logger.debug('Using firstPathPart from user input:', firstPathPartFromInput);
     mychartRequest.setFirstPathPart(firstPathPartFromInput);
   }
 
   const foundMyChartFirstPathPart = await determineFirstPathPart(mychartRequest);
 
   if (!foundMyChartFirstPathPart) {
-    console.log('could not determine first path part! exiting early')
+    logger.debug('could not determine first path part! exiting early')
     return mychartRequest
   }
 
@@ -866,14 +867,14 @@ export async function login_TEST(hostname: string): Promise<MyChartRequest> {
 
   // If we got redirected somewhere, we need to relogin
   if (!areCookiesValidBool) {
-    console.log('Cookies are not valid, going through login process again')
+    logger.debug('Cookies are not valid, going through login process again')
     // mychartRequest = await myChartRawLogin(hostname);
     const creds = await readTestCredentials_TEST_ONLY()
     mychartRequest = await myChartRawLogin_TEST({hostname, user: creds[hostname]['user'], pass: creds[hostname]['pass']})
 
   }
   else {
-    console.log('Cookies are valid, re-using them')
+    logger.debug('Cookies are valid, re-using them')
   }
 
   await mychartRequest.saveCookies_TEST('cookies.json');  

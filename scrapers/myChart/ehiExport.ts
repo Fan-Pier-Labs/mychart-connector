@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type EhiTemplate = {
   id: string;
@@ -25,7 +26,7 @@ export async function getEhiExportTemplates(mychartRequest: MyChartRequest): Pro
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for EHI export');
+    logger.debug('Could not find request verification token for EHI export');
     return [];
   }
 

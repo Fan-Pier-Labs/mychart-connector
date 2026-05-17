@@ -14,6 +14,7 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import * as fs from "fs";
 import * as path from "path";
+import { logger } from '../../shared/logger';
 
 const S3_BUCKET = "mychart-connector";
 const S3_LOGO_PREFIX = "mychart-logos/";
@@ -50,7 +51,7 @@ interface MyChartInstance {
 }
 
 async function fetchDirectory(): Promise<MyChartCustomer[]> {
-  console.log("Fetching MyChart directory from", MYCHART_DIRECTORY_URL);
+  logger.debug("Fetching MyChart directory from", MYCHART_DIRECTORY_URL);
   const response = await fetch(MYCHART_DIRECTORY_URL, {
     headers: {
       "User-Agent":
@@ -72,7 +73,7 @@ async function fetchDirectory(): Promise<MyChartCustomer[]> {
   const jsonStr = match[1].replace(/\\'/g, "'").replace(/\\"/g, '"');
   const directory = JSON.parse(jsonStr);
   const customers: MyChartCustomer[] = directory.Customers;
-  console.log(`Found ${customers.length} MyChart instances`);
+  logger.debug(`Found ${customers.length} MyChart instances`);
   return customers;
 }
 
@@ -118,7 +119,7 @@ async function downloadLogo(
   try {
     const response = await fetch(fullImageUrl);
     if (!response.ok) {
-      console.warn(
+      logger.warn(
         `  Failed to download logo for ${customer.Name}: ${response.status}`
       );
       return null;
@@ -127,7 +128,7 @@ async function downloadLogo(
     fs.writeFileSync(filepath, data);
     return { filename, data };
   } catch (err) {
-    console.warn(
+    logger.warn(
       `  Error downloading logo for ${customer.Name}: ${(err as Error).message}`
     );
     return null;
@@ -137,7 +138,7 @@ async function downloadLogo(
 async function downloadAllLogos(customers: MyChartCustomer[]) {
   fs.mkdirSync(LOGOS_DIR, { recursive: true });
 
-  console.log(`Downloading ${customers.length} logos to ${LOGOS_DIR}...`);
+  logger.debug(`Downloading ${customers.length} logos to ${LOGOS_DIR}...`);
   let downloaded = 0;
   const skipped = 0;
   let failed = 0;
@@ -153,7 +154,7 @@ async function downloadAllLogos(customers: MyChartCustomer[]) {
     const total = Math.min(i + CONCURRENCY, customers.length);
     process.stdout.write(`\r  Progress: ${total}/${customers.length}`);
   }
-  console.log(
+  logger.debug(
     `\n  Downloaded: ${downloaded}, Skipped (already exists): ${skipped}, Failed: ${failed}`
   );
 }
@@ -173,7 +174,7 @@ async function uploadAllLogos() {
   });
 
   const files = fs.readdirSync(LOGOS_DIR).filter((f) => !f.startsWith("."));
-  console.log(`Uploading ${files.length} logos to s3://${S3_BUCKET}/${S3_LOGO_PREFIX}...`);
+  logger.debug(`Uploading ${files.length} logos to s3://${S3_BUCKET}/${S3_LOGO_PREFIX}...`);
 
   let uploaded = 0;
   let failed = 0;
@@ -209,14 +210,14 @@ async function uploadAllLogos() {
       if (r.status === "fulfilled") uploaded++;
       else {
         failed++;
-        console.warn(`  Upload failed: ${r.reason}`);
+        logger.warn(`  Upload failed: ${r.reason}`);
       }
     }
     const total = Math.min(i + CONCURRENCY, files.length);
     process.stdout.write(`\r  Progress: ${total}/${files.length}`);
   }
 
-  console.log(`\n  Uploaded: ${uploaded}, Failed: ${failed}`);
+  logger.debug(`\n  Uploaded: ${uploaded}, Failed: ${failed}`);
 }
 
 async function main() {
@@ -234,7 +235,7 @@ async function main() {
   const instances = customers.map(customerToInstance);
 
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(instances, null, 2));
-  console.log(`Wrote ${instances.length} instances to ${OUTPUT_FILE}`);
+  logger.debug(`Wrote ${instances.length} instances to ${OUTPUT_FILE}`);
 
   if (!skipLogos) {
     await downloadAllLogos(customers);
@@ -243,10 +244,10 @@ async function main() {
     }
   }
 
-  console.log("Done!");
+  logger.debug("Done!");
 }
 
 main().catch((err) => {
-  console.error(err);
+  logger.error(err);
   process.exit(1);
 });

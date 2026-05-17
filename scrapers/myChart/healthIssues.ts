@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type HealthIssue = {
   name: string;
@@ -29,7 +30,7 @@ export async function getHealthIssues(mychartRequest: MyChartRequest): Promise<H
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for health issues');
+    logger.debug('Could not find request verification token for health issues');
     return [];
   }
 

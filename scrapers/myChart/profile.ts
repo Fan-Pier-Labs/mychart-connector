@@ -2,6 +2,7 @@ import { login_TEST } from "./login";
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
 import * as cheerio from 'cheerio';
+import { logger } from '../../shared/logger';
 
 // This file scrapes a user's email from MyChart.
 
@@ -147,7 +148,7 @@ export function parseProfileHtml(body: string): ProfileData | null {
     }
   }
 
-  console.log('Could not parse profile from /Home page, no regex match', printheaderDiv.trim())
+  logger.debug('Could not parse profile from /Home page, no regex match', printheaderDiv.trim())
   return null;
 }
 
@@ -158,19 +159,19 @@ export async function getMyChartProfile(mychartRequest: MyChartRequest): Promise
 
   if ([301, 302].includes(resp.status)) {
     const location = resp.headers.get('Location') || '';
-    console.log(`[profile] /Home returned ${resp.status} → ${location}`);
+    logger.debug(`[profile] /Home returned ${resp.status} → ${location}`);
     if (location.toLowerCase().includes('login')) {
-      console.log('[profile] Session expired — redirected to login page');
+      logger.debug('[profile] Session expired — redirected to login page');
       return null;
     }
     // Non-login redirect: follow it and parse
     const followResp = await mychartRequest.makeRequest({url: new URL(location, mychartRequest.protocol + '://' + mychartRequest.hostname).href});
     const body = await followResp.text();
-    console.log(`[profile] Followed redirect to ${location}, response URL: ${followResp.url}, status: ${followResp.status}`);
+    logger.debug(`[profile] Followed redirect to ${location}, response URL: ${followResp.url}, status: ${followResp.status}`);
     return parseProfileHtml(body);
   }
 
-  console.log(`[profile] /Home returned ${resp.status}, URL: ${resp.url}`);
+  logger.debug(`[profile] /Home returned ${resp.status}, URL: ${resp.url}`);
   const body = await resp.text()
   return parseProfileHtml(body)
 }
@@ -185,7 +186,7 @@ export async function getEmail(mychartRequest: MyChartRequest): Promise<string |
   const requestVerificationToken = getRequestVerificationTokenFromBody(body)
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token')
+    logger.debug('could not find request verification token')
     return null;
   }
 
@@ -212,7 +213,7 @@ async function test() {
   
   const profile = await getMyChartProfile(mychartRequest)
 
-  console.log('getMedicalRecordNumber is', profile)
+  logger.debug('getMedicalRecordNumber is', profile)
 }
 
 

@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type VitalReading = {
   date: string;
@@ -29,7 +30,7 @@ export async function getVitals(mychartRequest: MyChartRequest): Promise<Flowshe
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for vitals');
+    logger.debug('Could not find request verification token for vitals');
     return [];
   }
 

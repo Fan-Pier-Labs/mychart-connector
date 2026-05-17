@@ -11,6 +11,7 @@
 import { getRequestVerificationTokenFromBody } from '../util';
 import { MyChartRequest } from '../myChartRequest';
 import fs from 'fs';
+import { logger } from '../../../shared/logger';
 
 async function explore5() {
   const hostname = 'mychart.example.org';
@@ -25,8 +26,8 @@ async function explore5() {
   await mychartRequest.loadCookies_TEST('/tmp/mychart_explore_cookies.json');
 
   const testRes = await mychartRequest.makeRequest({ path: '/Home', followRedirects: false });
-  if (testRes.status !== 200) { console.log('Cookies expired!'); process.exit(1); }
-  console.log('Cookies valid!\n');
+  if (testRes.status !== 200) { logger.debug('Cookies expired!'); process.exit(1); }
+  logger.debug('Cookies valid!\n');
 
   // Get token from communication center
   const commRes = await mychartRequest.makeRequest({ path: '/app/communication-center' });
@@ -48,40 +49,40 @@ async function explore5() {
   };
 
   // Step 1: GetMessageMenuSettings - understand what message types we can send
-  console.log('=== GetMessageMenuSettings ===\n');
+  logger.debug('=== GetMessageMenuSettings ===\n');
   const menuSettings = await makeApiRequest('/api/conversations/GetMessageMenuSettings', {});
-  console.log('Status:', menuSettings.status);
-  console.log('Response:', JSON.stringify(menuSettings.json, null, 2)?.substring(0, 2000));
+  logger.debug('Status:', menuSettings.status);
+  logger.debug('Response:', JSON.stringify(menuSettings.json, null, 2)?.substring(0, 2000));
   if (menuSettings.json) {
     await fs.promises.writeFile('/tmp/mychart_message_menu_settings.json', JSON.stringify(menuSettings.json, null, 2));
   }
 
   // Step 2: GetComposeId - get a compose ID
-  console.log('\n=== GetComposeId ===\n');
+  logger.debug('\n=== GetComposeId ===\n');
   const composeId = await makeApiRequest('/api/conversations/GetComposeId', {});
-  console.log('Status:', composeId.status);
-  console.log('Response:', composeId.text?.substring(0, 500));
+  logger.debug('Status:', composeId.status);
+  logger.debug('Response:', composeId.text?.substring(0, 500));
 
   // Step 3: GetComposeSettings - get compose settings (try with empty org first)
-  console.log('\n=== GetComposeSettings ===\n');
+  logger.debug('\n=== GetComposeSettings ===\n');
   const composeSettingsEmpty = await makeApiRequest('/api/conversations/GetComposeSettings', { organizationId: '' });
-  console.log('Empty org status:', composeSettingsEmpty.status);
-  console.log('Response:', JSON.stringify(composeSettingsEmpty.json, null, 2)?.substring(0, 1000));
+  logger.debug('Empty org status:', composeSettingsEmpty.status);
+  logger.debug('Response:', JSON.stringify(composeSettingsEmpty.json, null, 2)?.substring(0, 1000));
 
   // Step 4: GetOrganizations
-  console.log('\n=== GetOrganizations ===\n');
+  logger.debug('\n=== GetOrganizations ===\n');
   const orgs = await makeApiRequest('/api/conversations/GetOrganizations', {});
-  console.log('Status:', orgs.status);
-  console.log('Response:', JSON.stringify(orgs.json, null, 2)?.substring(0, 1000));
+  logger.debug('Status:', orgs.status);
+  logger.debug('Response:', JSON.stringify(orgs.json, null, 2)?.substring(0, 1000));
 
   // Step 5: GetFoldersList
-  console.log('\n=== GetFoldersList ===\n');
+  logger.debug('\n=== GetFoldersList ===\n');
   const folders = await makeApiRequest('/api/conversations/GetFoldersList', {});
-  console.log('Status:', folders.status);
-  console.log('Response:', JSON.stringify(folders.json, null, 2)?.substring(0, 500));
+  logger.debug('Status:', folders.status);
+  logger.debug('Response:', JSON.stringify(folders.json, null, 2)?.substring(0, 500));
 
   // Step 6: GetConversationDetails - get details of a conversation we can reply to
-  console.log('\n=== GetConversationDetails ===\n');
+  logger.debug('\n=== GetConversationDetails ===\n');
 
   // First get conversation list
   const convoList = await makeApiRequest('/api/conversations/GetConversationList', {
@@ -93,7 +94,7 @@ async function explore5() {
   });
 
   const conversations = convoList.json?.conversations || [];
-  console.log(`Total conversations: ${conversations.length}`);
+  logger.debug(`Total conversations: ${conversations.length}`);
 
   // Find the "Cough" conversation which has a provider audience
   const targetConvo = conversations.find((c: { audience: unknown[]; subject: string }) =>
@@ -101,38 +102,38 @@ async function explore5() {
   );
 
   if (targetConvo) {
-    console.log(`\nTarget conversation: "${targetConvo.subject}"`);
-    console.log('hthId:', targetConvo.hthId);
-    console.log('messageType:', targetConvo.messageType);
-    console.log('audience:', JSON.stringify(targetConvo.audience));
+    logger.debug(`\nTarget conversation: "${targetConvo.subject}"`);
+    logger.debug('hthId:', targetConvo.hthId);
+    logger.debug('messageType:', targetConvo.messageType);
+    logger.debug('audience:', JSON.stringify(targetConvo.audience));
 
     // Try GetConversationDetails
     const detail = await makeApiRequest('/api/conversations/GetConversationDetails', {
       hthId: targetConvo.hthId,
     });
-    console.log('\nDetail status:', detail.status, 'length:', detail.text?.length);
-    console.log('Detail response:', detail.text?.substring(0, 200));
+    logger.debug('\nDetail status:', detail.status, 'length:', detail.text?.length);
+    logger.debug('Detail response:', detail.text?.substring(0, 200));
 
     // Try GetConversationMessages
-    console.log('\n=== GetConversationMessages ===');
+    logger.debug('\n=== GetConversationMessages ===');
     const messages = await makeApiRequest('/api/conversations/GetConversationMessages', {
       hthId: targetConvo.hthId,
     });
-    console.log('Messages status:', messages.status, 'length:', messages.text?.length);
+    logger.debug('Messages status:', messages.status, 'length:', messages.text?.length);
     if (messages.json) {
-      console.log('Messages response:', JSON.stringify(messages.json, null, 2)?.substring(0, 2000));
+      logger.debug('Messages response:', JSON.stringify(messages.json, null, 2)?.substring(0, 2000));
       await fs.promises.writeFile('/tmp/mychart_convo_messages.json', JSON.stringify(messages.json, null, 2));
     }
 
     // Step 7: Now try SendReply with the correct body format
-    console.log('\n=== Testing SendReply (dry run - won\'t actually send yet) ===\n');
+    logger.debug('\n=== Testing SendReply (dry run - won\'t actually send yet) ===\n');
 
     // Get a composeId first
     const cid = await makeApiRequest('/api/conversations/GetComposeId', {});
-    console.log('Compose ID:', cid.text);
+    logger.debug('Compose ID:', cid.text);
 
     // For now, just log what we'd send - don't actually send yet
-    console.log('\nSendReply body format would be:');
+    logger.debug('\nSendReply body format would be:');
     const sendReplyBody = {
       conversationId: targetConvo.hthId,
       organizationId: '',
@@ -143,19 +144,19 @@ async function explore5() {
       includeOtherViewers: false,
       composeId: cid.text?.replace(/"/g, '') || '',
     };
-    console.log(JSON.stringify(sendReplyBody, null, 2));
+    logger.debug(JSON.stringify(sendReplyBody, null, 2));
   }
 
   // Step 8: Explore the disclaimer endpoint
-  console.log('\n=== GetDisclaimer ===\n');
+  logger.debug('\n=== GetDisclaimer ===\n');
   const disclaimer = await makeApiRequest('/api/conversations/GetDisclaimer', {});
-  console.log('Status:', disclaimer.status);
-  console.log('Response:', disclaimer.text?.substring(0, 500));
+  logger.debug('Status:', disclaimer.status);
+  logger.debug('Response:', disclaimer.text?.substring(0, 500));
 
-  console.log('\n=== Done ===');
+  logger.debug('\n=== Done ===');
 }
 
 explore5().catch((err) => {
-  console.error('Fatal error:', err);
+  logger.error('Fatal error:', err);
   process.exit(1);
 });

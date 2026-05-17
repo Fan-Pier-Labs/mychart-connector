@@ -1,5 +1,6 @@
 import { MyChartRequest } from "../myChartRequest";
 import { getRequestVerificationTokenFromBody } from "../util";
+import { logger } from '../../../shared/logger';
 
 interface ConversationEntry {
   hthId?: string;
@@ -33,7 +34,7 @@ export async function listConversations(mychartRequest: MyChartRequest): Promise
   const requestVerificationToken = getRequestVerificationTokenFromBody(await communicationCenterRes.text())
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token')
+    logger.debug('could not find request verification token')
     return null
   }
 
@@ -50,7 +51,7 @@ export async function listConversations(mychartRequest: MyChartRequest): Promise
 
   const out = await messages.json() as ConversationListResponse;
 
-  console.log(out)
+  logger.debug(out)
 
   return out;
 }

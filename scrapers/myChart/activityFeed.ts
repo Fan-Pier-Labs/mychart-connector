@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type ActivityFeedItem = {
   id: string;
@@ -29,7 +30,7 @@ export async function getActivityFeed(mychartRequest: MyChartRequest): Promise<A
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for activity feed');
+    logger.debug('Could not find request verification token for activity feed');
     return [];
   }
 

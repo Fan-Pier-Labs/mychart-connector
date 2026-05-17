@@ -55,6 +55,7 @@ export { convertBitmap16ToWebp } from "./exporters/to_webp";
 import sharp from "sharp";
 import { writeFileSync } from "fs";
 import type { Bitmap } from "./clo_to_bitmap";
+import { logger } from '../../../shared/logger';
 
 export async function convertBitmapToJpg(
   bitmap: Bitmap,
@@ -134,7 +135,7 @@ function findCloPairs(directory: string): [string, string | undefined][] {
         pairs.push([path, undefined]);
       }
     } catch (err) {
-      console.warn(`[clo_to_jpg] Failed to read ${path}:`, (err as Error).message);
+      logger.warn(`[clo_to_jpg] Failed to read ${path}:`, (err as Error).message);
     }
   }
 
@@ -146,7 +147,7 @@ function findCloPairs(directory: string): [string, string | undefined][] {
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error("Usage: bun clo_to_jpg.ts <input.clo|directory> [output.jpg|directory]");
+    logger.error("Usage: bun clo_to_jpg.ts <input.clo|directory> [output.jpg|directory]");
     process.exit(1);
   }
 
@@ -156,7 +157,7 @@ async function main() {
   if (statSync(input).isDirectory()) {
     const pairs = findCloPairs(input);
     if (pairs.length === 0) {
-      console.error(`No CLO pixel files found in ${input}`);
+      logger.error(`No CLO pixel files found in ${input}`);
       process.exit(1);
     }
 
@@ -168,14 +169,14 @@ async function main() {
       const outputPath = join(outputDir, `${stem}.jpg`);
       try {
         await convertCloToJpg({ pixelData: pixelPath, outputPath, wrapperData: wrapperPath });
-        console.log(`Converted: ${pixelPath} -> ${outputPath}`);
+        logger.debug(`Converted: ${pixelPath} -> ${outputPath}`);
       } catch (e) {
-        console.error(`Failed: ${pixelPath}: ${e}`);
+        logger.error(`Failed: ${pixelPath}: ${e}`);
       }
     }
   } else {
     if (!existsSync(input)) {
-      console.error(`File not found: ${input}`);
+      logger.error(`File not found: ${input}`);
       process.exit(1);
     }
 
@@ -192,9 +193,9 @@ async function main() {
 
     try {
       const result = await convertCloToJpg({ pixelData: input, outputPath, wrapperData: wrapperPath });
-      console.log(`Saved: ${result}`);
+      logger.debug(`Saved: ${result}`);
     } catch (e) {
-      console.error(`Error: ${e}`);
+      logger.error(`Error: ${e}`);
       process.exit(1);
     }
   }

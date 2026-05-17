@@ -9,6 +9,7 @@ import { date2dte } from "./utils";
 import { BillingAccount, BillingDetails, BillingVisit, PaymentListResponse, StatementItem, StatementListResponse } from "./types";
 import { mkdirp } from 'mkdirp';
 import { OPENRECORD_MOCK_DATA } from '../../../shared/env';
+import { logger } from '../../../shared/logger';
 
 
 
@@ -27,7 +28,7 @@ export function parsePaymentUrl(html: string): { id: string, context: string } |
     // Split into path and query string
     let [, queryString] = urlStr.split('?');
     if (!queryString) {
-      console.log('returning null')
+      logger.debug('returning null')
       return null;
     }
     queryString = queryString.replaceAll('\\u0026', '&');
@@ -41,7 +42,7 @@ export function parsePaymentUrl(html: string): { id: string, context: string } |
       }
     }
   }
-  console.log('returning null')
+  logger.debug('returning null')
   return null;
 }
 
@@ -96,14 +97,14 @@ async function getBillingAccountDetails(mychartRequest: MyChartRequest, billingA
   const date100YearsAgo = subYears(new Date(), 100);
   const date1YearFromNow = addYears(new Date(), 1);
 
-  console.log('100 years ago:', date100YearsAgo);
-  console.log('1 year from now:', date1YearFromNow);
+  logger.debug('100 years ago:', date100YearsAgo);
+  logger.debug('1 year from now:', date1YearFromNow);
 
   const results = await mychartRequest.makeRequest({ path: `/Billing/Details/GetVisits?noCache=${Math.random()}&id=${billingAccount.id}&context=${billingAccount.context}&filterOption=1&searchStartDTE=${date2dte(date100YearsAgo)}&searchStopDTE=${date2dte(date1YearFromNow)}&cid=` })
 
   const json = await results.json() as BillingDetails
 
-  console.log(json)
+  logger.debug(json)
 
   return json
 }
@@ -138,7 +139,7 @@ export async function getEncBillingId(mychartRequest: MyChartRequest, billingAcc
   const match = body.match(/EncID"\s*:\s*"([^"]*)"/)
 
   if (!match) {
-    console.log('unable to find end id')
+    logger.debug('unable to find end id')
   }
 
   return match?.[1]
@@ -170,7 +171,7 @@ export async function getBillingHistory(mychartRequest: MyChartRequest): Promise
     const billingDetails = await getBillingAccountDetails(mychartRequest, billingAccount)
     const allVisits: BillingVisit[] = billingDetails.Data.UnifiedVisitList.concat(billingDetails.Data.InformationalVisitList)
 
-    console.log('Found', allVisits?.length, ' bills in my chart')
+    logger.debug('Found', allVisits?.length, ' bills in my chart')
 
     billingAccount.billingDetails = billingDetails;
 
@@ -185,7 +186,7 @@ export async function getBillingHistory(mychartRequest: MyChartRequest): Promise
       billingAccount.paymentList = paymentList;
       billingAccount.encBillingId = encBillingId || undefined;
     } catch (err) {
-      console.log('Failed to fetch billing details:', (err as Error).message);
+      logger.debug('Failed to fetch billing details:', (err as Error).message);
     }
   }
 
@@ -210,11 +211,11 @@ export async function getBillingStatementPDFs(mychartRequest: MyChartRequest, bi
     // Write the buffer to a file
     await mkdirp('pdfs')
     if (OPENRECORD_MOCK_DATA) {
-      console.log("not saving xlxs", name, " to disk b/c its mock data mode")
+      logger.debug("not saving xlxs", name, " to disk b/c its mock data mode")
     }
     else {
       await fs.promises.writeFile('./pdfs/' + name, new Uint8Array(buffer));
-      console.log('Saved', name)
+      logger.debug('Saved', name)
     }
   }
 }
@@ -228,7 +229,7 @@ async function test() {
 
   const results = await getBillingHistory(mychartRequest)
 
-  console.log(results)
+  logger.debug(results)
 }
 
 

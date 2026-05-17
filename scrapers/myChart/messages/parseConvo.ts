@@ -2,6 +2,7 @@
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import { Conversation, InputFormat, Message, User } from '../types';
+import { logger } from '../../../shared/logger';
 
 
 // This file parses the JSON response from the conersation details API and 
@@ -67,4 +68,4 @@ function parseConvo(json: InputFormat): Conversation {
 
 
 
-console.log(JSON.stringify(parseConvo(json), null, 4))
+logger.debug(JSON.stringify(parseConvo(json), null, 4))

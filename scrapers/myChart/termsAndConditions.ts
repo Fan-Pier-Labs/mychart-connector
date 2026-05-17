@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { MyChartRequest } from './myChartRequest';
 import { getRequestVerificationTokenFromBody } from './util';
+import { logger } from '../../shared/logger';
 
 /**
  * Accept MyChart's Terms & Conditions on behalf of the user.
@@ -42,8 +43,8 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
   });
 
   if (!csrfToken) {
-    console.log('[terms] No CSRF token found on Terms & Conditions page');
-    console.log('[terms] Page HTML (first 2000 chars):', body.substring(0, 2000));
+    logger.debug('[terms] No CSRF token found on Terms & Conditions page');
+    logger.debug('[terms] Page HTML (first 2000 chars):', body.substring(0, 2000));
     return false;
   }
 
@@ -75,8 +76,8 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
     requestConfig = { path: postPath };
   }
 
-  console.log('[terms] Posting T&C acceptance to:', postPath);
-  console.log('[terms] Form fields:', Object.keys(formFields).join(', '));
+  logger.debug('[terms] Posting T&C acceptance to:', postPath);
+  logger.debug('[terms] Form fields:', Object.keys(formFields).join(', '));
 
   const acceptResp = await mychartRequest.makeRequest({
     ...requestConfig,
@@ -93,15 +94,15 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
   // Check if we're no longer on the T&C page
   if (!acceptUrl.toLowerCase().includes('termsconditions') &&
       !acceptBody.toLowerCase().includes('termsconditions')) {
-    console.log('[terms] Terms & Conditions accepted successfully');
+    logger.debug('[terms] Terms & Conditions accepted successfully');
     return true;
   }
 
   // If still on T&C, try clicking accept links
-  console.log('[terms] First POST did not clear T&C page');
-  console.log('[terms] Response status:', acceptResp.status);
-  console.log('[terms] Response headers:', Object.fromEntries(acceptResp.headers.entries()));
-  console.log('[terms] Response body (first 1000 chars):', acceptBody.substring(0, 1000));
+  logger.debug('[terms] First POST did not clear T&C page');
+  logger.debug('[terms] Response status:', acceptResp.status);
+  logger.debug('[terms] Response headers:', Object.fromEntries(acceptResp.headers.entries()));
+  logger.debug('[terms] Response body (first 1000 chars):', acceptBody.substring(0, 1000));
 
   // Look for accept buttons/links
   const $accept = cheerio.load(acceptBody);
@@ -115,7 +116,7 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
   });
 
   for (const link of acceptLinks) {
-    console.log('[terms] Trying accept link:', link);
+    logger.debug('[terms] Trying accept link:', link);
     const linkIsAbsolute = link.startsWith('http');
     const linkIsRootRelative = link.startsWith('/');
     let linkConfig: { url?: string; path?: string };
@@ -132,12 +133,12 @@ export async function acceptTermsAndConditions(mychartRequest: MyChartRequest): 
 
     if (!linkUrl.toLowerCase().includes('termsconditions') &&
         !linkBody.toLowerCase().includes('termsconditions')) {
-      console.log('[terms] Terms & Conditions accepted via link');
+      logger.debug('[terms] Terms & Conditions accepted via link');
       return true;
     }
   }
 
-  console.log('[terms] Could not accept Terms & Conditions');
-  console.log('[terms] Page HTML (first 2000 chars):', body.substring(0, 2000));
+  logger.debug('[terms] Could not accept Terms & Conditions');
+  logger.debug('[terms] Page HTML (first 2000 chars):', body.substring(0, 2000));
   return false;
 }

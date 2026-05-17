@@ -1,5 +1,6 @@
 import { MyChartRequest } from "../myChartRequest";
 import { getRequestVerificationTokenFromBody } from "../util";
+import { logger } from '../../../shared/logger';
 
 export interface LinkedMyChart {
   name: string;
@@ -20,7 +21,7 @@ export async function getLinkedMyChartAccounts(mychartRequest: MyChartRequest): 
   const requestVerificationToken = getRequestVerificationTokenFromBody(html)
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token')
+    logger.debug('could not find request verification token')
     return [];
   }
 

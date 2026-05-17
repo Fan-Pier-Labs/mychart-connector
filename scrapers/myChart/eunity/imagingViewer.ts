@@ -4,6 +4,7 @@ import { MyChartRequest } from '../myChartRequest';
 import { getRequestVerificationTokenFromBody } from '../util';
 import { ReportContent } from '../labs_and_procedure_results/labtestresulttype';
 import { fetchWithCookies } from './fetch';
+import { logger } from '../../../shared/logger';
 
 export interface FdiContext {
   fdi: string;
@@ -87,7 +88,7 @@ export async function getImageViewerSamlUrl(
 ): Promise<ImagingViewerSession | null> {
   const token = await getCSRFToken(mychartRequest);
   if (!token) {
-    console.log('Could not get CSRF token for FdiData');
+    logger.debug('Could not get CSRF token for FdiData');
     return null;
   }
 
@@ -102,14 +103,14 @@ export async function getImageViewerSamlUrl(
   });
 
   if (!res.ok) {
-    console.log('FdiData request failed:', res.status);
+    logger.debug('FdiData request failed:', res.status);
     return null;
   }
 
   const data = await res.json() as { url: string; launchmode: number; IsFdiPost: boolean };
 
   if (!data.url) {
-    console.log('FdiData response missing URL');
+    logger.debug('FdiData response missing URL');
     return null;
   }
 
@@ -173,7 +174,7 @@ export async function followSamlChain(
         const loc = res.headers.get('location');
         if (!loc) break;
         url = new URL(loc, url).href;
-        console.log(`  [SAML] ${res.status} -> ${url}`);
+        logger.debug(`  [SAML] ${res.status} -> ${url}`);
         method = 'GET';
         body = undefined;
         contentType = undefined;
@@ -189,8 +190,8 @@ export async function followSamlChain(
       // 200 response — check for meta-refresh or auto-submit form
       if (res.status === 200) {
         const html = await res.text();
-        console.log(`  [SAML] 200 at ${url} (${html.length} chars)`);
-        if (html.length < 3000) console.log(`  [SAML] Body: ${html.substring(0, 2000)}`);
+        logger.debug(`  [SAML] 200 at ${url} (${html.length} chars)`);
+        if (html.length < 3000) logger.debug(`  [SAML] Body: ${html.substring(0, 2000)}`);
 
         // Check for meta-refresh: <meta http-equiv="refresh" content="0;URL='https://...'">
         const metaMatch = html.match(/http-equiv="refresh"\s+content="[^"]*URL='([^']+)'/i) ||
@@ -221,7 +222,7 @@ export async function followSamlChain(
             method = 'GET';
             body = undefined;
             contentType = undefined;
-            console.log(`  [SAML] JS redirect -> ${url}`);
+            logger.debug(`  [SAML] JS redirect -> ${url}`);
             continue;
           }
         }
@@ -251,19 +252,19 @@ export async function followSamlChain(
         }
 
         // Reached a page that's not eUnity and has no redirect
-        console.log('SAML chain stopped at:', url);
+        logger.debug('SAML chain stopped at:', url);
         break;
       }
 
       // Other status
-      console.log(`SAML chain unexpected status ${res.status} at ${url}`);
+      logger.debug(`SAML chain unexpected status ${res.status} at ${url}`);
       break;
     }
 
-    console.log('SAML chain did not reach eUnity viewer');
+    logger.debug('SAML chain did not reach eUnity viewer');
     return null;
   } catch (err) {
-    console.log('Error following SAML chain:', (err as Error).message);
+    logger.debug('Error following SAML chain:', (err as Error).message);
     return null;
   }
 }

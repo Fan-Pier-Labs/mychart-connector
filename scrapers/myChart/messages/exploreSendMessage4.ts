@@ -6,6 +6,7 @@
 import { getRequestVerificationTokenFromBody } from '../util';
 import { MyChartRequest } from '../myChartRequest';
 import fs from 'fs';
+import { logger } from '../../../shared/logger';
 
 async function explore4() {
   const hostname = 'mychart.example.org';
@@ -20,8 +21,8 @@ async function explore4() {
   await mychartRequest.loadCookies_TEST('/tmp/mychart_explore_cookies.json');
 
   const testRes = await mychartRequest.makeRequest({ path: '/Home', followRedirects: false });
-  if (testRes.status !== 200) { console.log('Cookies expired!'); process.exit(1); }
-  console.log('Cookies valid!\n');
+  if (testRes.status !== 200) { logger.debug('Cookies expired!'); process.exit(1); }
+  logger.debug('Cookies valid!\n');
 
   // Get token
   const commRes = await mychartRequest.makeRequest({ path: '/app/communication-center' });
@@ -29,7 +30,7 @@ async function explore4() {
   const token = getRequestVerificationTokenFromBody(commHtml)!;
 
   // Step 1: Fetch the lazy-loaded PX client modules
-  console.log('=== Fetching PX client modules ===\n');
+  logger.debug('=== Fetching PX client modules ===\n');
 
   const modules = [
     'epic.px.client.communication-center',
@@ -39,10 +40,10 @@ async function explore4() {
   ];
 
   for (const mod of modules) {
-    console.log(`\n--- ${mod} ---`);
+    logger.debug(`\n--- ${mod} ---`);
     const res = await mychartRequest.makeRequest({ path: `/scripts/lib/pxbuild/${mod}.js` });
     const js = await res.text();
-    console.log(`Status: ${res.status}, Size: ${js.length}`);
+    logger.debug(`Status: ${res.status}, Size: ${js.length}`);
 
     if (res.status === 200 && js.length > 100) {
       await fs.promises.writeFile(`/tmp/mychart_${mod.replace(/\./g, '_')}.js`, js);
@@ -59,9 +60,9 @@ async function explore4() {
 
       const uniqueApis = [...new Set(apiPatterns.map(m => m[0]))];
       if (uniqueApis.length > 0) {
-        console.log(`API patterns found:`);
+        logger.debug(`API patterns found:`);
         for (const api of uniqueApis) {
-          console.log(`  ${api}`);
+          logger.debug(`  ${api}`);
         }
       }
 
@@ -72,46 +73,46 @@ async function explore4() {
       const filteredUrls = [...new Set(urlPatterns.map(m => m[0]))]
         .filter(u => u.length < 100 && (u.includes('/') || u.includes('api') || u.includes('Api')));
       if (filteredUrls.length > 0) {
-        console.log(`URL-like patterns:`);
+        logger.debug(`URL-like patterns:`);
         for (const u of filteredUrls) {
-          console.log(`  ${u}`);
+          logger.debug(`  ${u}`);
         }
       }
 
       // Look for function names that suggest sending
       const funcPatterns = js.match(/(?:function|const|let|var)\s+([a-zA-Z_$]+(?:send|reply|compose|create|post)[a-zA-Z_$]*)/gi) || [];
       if (funcPatterns.length > 0) {
-        console.log(`Send-related functions:`);
+        logger.debug(`Send-related functions:`);
         for (const f of [...new Set(funcPatterns)]) {
-          console.log(`  ${f}`);
+          logger.debug(`  ${f}`);
         }
       }
     }
   }
 
   // Step 2: Also try the init files which may have more config
-  console.log('\n=== Fetching PX init modules ===\n');
+  logger.debug('\n=== Fetching PX init modules ===\n');
 
   for (const mod of modules) {
     const res = await mychartRequest.makeRequest({ path: `/scripts/lib/pxbuild/${mod}.init.js` });
     const js = await res.text();
     if (res.status === 200 && js.length > 50) {
-      console.log(`${mod}.init: ${js.length} chars`);
+      logger.debug(`${mod}.init: ${js.length} chars`);
       await fs.promises.writeFile(`/tmp/mychart_${mod.replace(/\./g, '_')}_init.js`, js);
 
       // Look for API patterns
       const apis = [...js.matchAll(/["'][^"']*(?:api|Api)[^"']*["']/g)].map(m => m[0]);
       if (apis.length > 0) {
-        console.log(`  APIs:`);
+        logger.debug(`  APIs:`);
         for (const a of [...new Set(apis)]) {
-          console.log(`    ${a}`);
+          logger.debug(`    ${a}`);
         }
       }
     }
   }
 
   // Step 3: Try the SendReply endpoint with various body formats
-  console.log('\n=== Testing SendReply with various body formats ===\n');
+  logger.debug('\n=== Testing SendReply with various body formats ===\n');
 
   // Get a conversation we can try replying to
   const convoListRes = await mychartRequest.makeRequest({
@@ -130,9 +131,9 @@ async function explore4() {
   const targetConvo = conversations.find((c: { audience: unknown[] }) => c.audience && c.audience.length > 0);
 
   if (targetConvo) {
-    console.log(`Using conversation: ${targetConvo.subject}`);
-    console.log(`hthId: ${targetConvo.hthId}`);
-    console.log(`audience:`, JSON.stringify(targetConvo.audience));
+    logger.debug(`Using conversation: ${targetConvo.subject}`);
+    logger.debug(`hthId: ${targetConvo.hthId}`);
+    logger.debug(`audience:`, JSON.stringify(targetConvo.audience));
 
     // Try different body formats for SendReply
     const bodyFormats = [
@@ -146,7 +147,7 @@ async function explore4() {
     ];
 
     for (const body of bodyFormats) {
-      console.log(`\nTrying body: ${JSON.stringify(body).substring(0, 100)}...`);
+      logger.debug(`\nTrying body: ${JSON.stringify(body).substring(0, 100)}...`);
       const res = await mychartRequest.makeRequest({
         path: '/api/conversations/SendReply',
         method: 'POST',
@@ -157,21 +158,21 @@ async function explore4() {
         body: JSON.stringify(body),
       });
       const text = await res.text();
-      console.log(`  Status: ${res.status}, Response: ${text.substring(0, 500)}`);
+      logger.debug(`  Status: ${res.status}, Response: ${text.substring(0, 500)}`);
       // If we get a meaningful response (not just {}), save it
       if (text.length > 5) {
         await fs.promises.writeFile('/tmp/mychart_sendreply_response.json', text);
-        console.log('  Saved response!');
+        logger.debug('  Saved response!');
       }
     }
   } else {
-    console.log('No conversation with audience found');
+    logger.debug('No conversation with audience found');
   }
 
-  console.log('\n=== Done ===');
+  logger.debug('\n=== Done ===');
 }
 
 explore4().catch((err) => {
-  console.error('Fatal error:', err);
+  logger.error('Fatal error:', err);
   process.exit(1);
 });

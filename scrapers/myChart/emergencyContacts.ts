@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type EmergencyContact = {
   id?: string;
@@ -49,7 +50,7 @@ export async function getEmergencyContacts(mychartRequest: MyChartRequest): Prom
   const token = await getToken(mychartRequest);
 
   if (!token) {
-    console.log('Could not find request verification token for emergency contacts');
+    logger.debug('Could not find request verification token for emergency contacts');
     return [];
   }
 

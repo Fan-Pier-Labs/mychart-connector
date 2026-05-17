@@ -1,5 +1,6 @@
 import { MyChartRequest } from "../myChartRequest";
 import { getRequestVerificationTokenFromBody } from "../util";
+import { logger } from '../../../shared/logger';
 
 // --- Output types ---
 
@@ -103,7 +104,7 @@ export async function listConversationsWithFullHistory(
   );
 
   if (!requestVerificationToken) {
-    console.log("could not find request verification token");
+    logger.debug("could not find request verification token");
     return { conversations: [] };
   }
 
@@ -169,7 +170,7 @@ export async function listConversationsWithFullHistory(
     return !!(author.wprKey && patientViewerKeys.has(author.wprKey));
   }
 
-  console.log(
+  logger.debug(
     `Found ${rawConversations.length} conversations with inline messages`
   );
 
@@ -210,7 +211,7 @@ export async function listConversationsWithFullHistory(
   );
 
   if (conversationsNeedingMore.length > 0) {
-    console.log(
+    logger.debug(
       `${conversationsNeedingMore.length} conversation(s) have more messages, fetching full threads...`
     );
 
@@ -236,7 +237,7 @@ export async function listConversationsWithFullHistory(
               });
 
               if (threadResp.status >= 500 && attempt < maxRetries) {
-                console.log(
+                logger.debug(
                   `  Got ${threadResp.status} fetching thread for "${convo.subject}", retrying (${attempt}/${maxRetries})...`
                 );
                 await new Promise((r) => setTimeout(r, 1000 * attempt));
@@ -258,12 +259,12 @@ export async function listConversationsWithFullHistory(
               break; // Success, stop retrying
             } catch (err) {
               if (attempt < maxRetries) {
-                console.log(
+                logger.debug(
                   `  Error fetching thread for "${convo.subject}", retrying (${attempt}/${maxRetries})...`
                 );
                 await new Promise((r) => setTimeout(r, 1000 * attempt));
               } else {
-                console.log(
+                logger.debug(
                   `  Error fetching full thread for "${convo.subject}" after ${maxRetries} attempts: ${(err as Error).message}`
                 );
               }
@@ -278,7 +279,7 @@ export async function listConversationsWithFullHistory(
     (sum, c) => sum + c.messages.length,
     0
   );
-  console.log(
+  logger.debug(
     `Fetched ${results.length} conversations with ${totalMessages} total messages`
   );
 

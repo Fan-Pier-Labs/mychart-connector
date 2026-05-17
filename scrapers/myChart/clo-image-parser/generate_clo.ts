@@ -12,6 +12,7 @@
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { deflateSync } from "zlib";
+import { logger } from '../../../shared/logger';
 
 const CLOCLHAAR_MAGIC = Buffer.from("CLOCLHAAR###");
 const CLOHEADERZ01_MAGIC = Buffer.from("CLOHEADERZ01");
@@ -705,7 +706,7 @@ export function generateTestFiles(outputDir: string) {
     writeFileSync(pixelPath, pixelData);
     writeFileSync(wrapperPath, wrapperData);
 
-    console.log(
+    logger.debug(
       `Generated: ${testImage.name} (${testImage.width}x${testImage.height}) → ${pixelPath}`
     );
   }
@@ -720,5 +721,5 @@ if (import.meta.main) {
       : join(import.meta.dir, "synthetic_test_data");
 
   generateTestFiles(outputDir);
-  console.log(`\nDone. Test files written to ${outputDir}`);
+  logger.debug(`\nDone. Test files written to ${outputDir}`);
 }

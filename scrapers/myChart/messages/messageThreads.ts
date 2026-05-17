@@ -1,5 +1,6 @@
 import { MyChartRequest } from "../myChartRequest";
 import { getRequestVerificationTokenFromBody } from "../util";
+import { logger } from '../../../shared/logger';
 
 export type ThreadMessage = {
   messageId: string;
@@ -37,7 +38,7 @@ export async function getConversationMessages(mychartRequest: MyChartRequest, co
   const empty: ConversationThread = { conversationId, subject: '', messages: [] };
 
   if (!token) {
-    console.log('Could not find request verification token for message threads');
+    logger.debug('Could not find request verification token for message threads');
     return empty;
   }
 

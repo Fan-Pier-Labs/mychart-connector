@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { logger } from '../../shared/logger';
 
 
 export function getRequestVerificationTokenFromBody(html: string): string | undefined {
@@ -9,7 +10,7 @@ export function getRequestVerificationTokenFromBody(html: string): string | unde
   const requestVerificationToken = tokenEle?.[0]?.attribs?.value
 
   if (!requestVerificationToken) {
-    console.log('could not find request verification token', html)
+    logger.debug('could not find request verification token', html)
     return undefined;
   }
 

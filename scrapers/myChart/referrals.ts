@@ -1,5 +1,6 @@
 import { MyChartRequest } from "./myChartRequest";
 import { getRequestVerificationTokenFromBody } from "./util";
+import { logger } from '../../shared/logger';
 
 export type Referral = {
   internalId: string;
@@ -37,7 +38,7 @@ export async function getReferrals(mychartRequest: MyChartRequest): Promise<Refe
   const token = getRequestVerificationTokenFromBody(html);
 
   if (!token) {
-    console.log('Could not find request verification token for referrals');
+    logger.debug('Could not find request verification token for referrals');
     return [];
   }
 
