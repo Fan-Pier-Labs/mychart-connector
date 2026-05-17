@@ -1183,9 +1183,11 @@ export const subtopics = {
     { displayName: 'Medical Question', value: 'TOPIC-001' },
     { displayName: 'Medication Refill', value: 'TOPIC-002' },
     { displayName: 'Appointment Request', value: 'TOPIC-003' },
+    { displayName: 'Billing Question', value: 'TOPIC-004' },
   ],
 };
 
+// recipientType: 1 = individual provider, 6 = department/pool (billing, customer service, etc.)
 export const messageRecipients = [
   {
     recipientType: 1,
@@ -1205,6 +1207,26 @@ export const messageRecipients = [
     departmentId: 'DEP-002',
     poolId: 'POOL-002',
     providerId: 'PROV-NICK',
+    organizationId: '',
+  },
+  {
+    recipientType: 6,
+    displayName: 'Billing Department',
+    specialty: 'Billing',
+    userId: 'POOL-BILLING',
+    departmentId: 'DEP-BILLING',
+    poolId: 'POOL-BILLING',
+    providerId: '',
+    organizationId: '',
+  },
+  {
+    recipientType: 6,
+    displayName: 'Customer Service',
+    specialty: 'Customer Service',
+    userId: 'POOL-CS',
+    departmentId: 'DEP-CS',
+    poolId: 'POOL-CS',
+    providerId: '',
     organizationId: '',
   },
 ];

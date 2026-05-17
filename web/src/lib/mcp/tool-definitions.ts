@@ -156,15 +156,15 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   // Messaging tools
   {
     name: 'get_message_recipients',
-    description: 'Get list of available message recipients (providers) and message topics/categories',
+    description: 'Get list of available message recipients and message topics/categories. Recipients can be individual providers (doctors, nurses) or departments/pools (billing, customer service, scheduling) depending on what the MyChart instance exposes.',
     inputSchema: instanceParam,
   },
   {
     name: 'send_message',
-    description: 'Send a new message to a provider, starting a new conversation thread',
+    description: 'Send a new message to any available recipient, starting a new conversation thread. The recipient can be a provider (e.g. a doctor) or a department/pool (e.g. billing, customer service) — use get_message_recipients first to see the full list.',
     inputSchema: {
       ...instanceParam,
-      recipient_name: z.string().describe('Name of the recipient provider (fuzzy matched against available recipients)'),
+      recipient_name: z.string().describe('Name of the recipient (fuzzy matched against available recipients — providers or departments like "Billing")'),
       topic: z.string().describe('Message topic/category (fuzzy matched against available topics)'),
       subject: z.string().describe('Message subject line'),
       message_body: z.string().describe('Message body text'),

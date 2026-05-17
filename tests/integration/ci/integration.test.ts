@@ -549,6 +549,82 @@ describe('eUnity scraper end-to-end', () => {
 });
 
 // ===================================================================
+// 4d. Messaging — list recipients + send to billing department
+// ===================================================================
+//
+// Confirms the web app surfaces non-provider recipients (departments
+// like billing, customer service) returned by GetMedicalAdviceRequestRecipients
+// and that sending a message to one of them flows end-to-end and appears
+// in the conversations list on the next scrape.
+
+describe('Messaging recipients and send-to-billing', () => {
+  let billingRecipient: { displayName: string; recipientType: number } | undefined;
+  let billingTopic: { displayName: string; value: string } | undefined;
+
+  it('includes both providers and department recipients (Billing, Customer Service)', async () => {
+    const res = await authedFetch('/api/messages/recipients', {
+      method: 'POST',
+      body: JSON.stringify({ token: sessionKey }),
+    });
+    expect(res.status).toBe(200);
+    const { recipients, topics } = await res.json();
+
+    expect(Array.isArray(recipients)).toBe(true);
+    expect(Array.isArray(topics)).toBe(true);
+
+    // Should have at least one provider (recipientType 1) and at least one
+    // department/pool (recipientType 6, e.g. Billing).
+    const providers = recipients.filter((r: { recipientType: number }) => r.recipientType === 1);
+    const departments = recipients.filter((r: { recipientType: number }) => r.recipientType === 6);
+    expect(providers.length).toBeGreaterThan(0);
+    expect(departments.length).toBeGreaterThan(0);
+
+    billingRecipient = recipients.find(
+      (r: { displayName: string }) => r.displayName.toLowerCase().includes('billing'),
+    );
+    expect(billingRecipient).toBeDefined();
+
+    billingTopic = topics.find(
+      (t: { displayName: string }) => t.displayName.toLowerCase().includes('billing'),
+    );
+    expect(billingTopic).toBeDefined();
+  });
+
+  it('sends a message to the billing department and gets a conversation ID back', async () => {
+    expect(billingRecipient).toBeDefined();
+    expect(billingTopic).toBeDefined();
+
+    const res = await authedFetch('/api/messages/send-new', {
+      method: 'POST',
+      body: JSON.stringify({
+        token: sessionKey,
+        recipient: billingRecipient,
+        topic: billingTopic,
+        subject: 'Question about my statement',
+        messageBody: 'Hi, I have a question about a charge on my last statement.',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(typeof body.conversationId).toBe('string');
+    expect(body.conversationId.length).toBeGreaterThan(0);
+  });
+
+  it('shows the new billing conversation in the next messages scrape', async () => {
+    const res = await authedFetch('/api/scrape', {
+      method: 'POST',
+      body: JSON.stringify({ sessionKey }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    const blob = JSON.stringify(data.messages ?? []);
+    expect(blob).toContain('Question about my statement');
+    expect(blob).toContain('Billing Department');
+  }, 60_000);
+});
+
+// ===================================================================
 // 5. MCP API Key Lifecycle
 // ===================================================================
 
