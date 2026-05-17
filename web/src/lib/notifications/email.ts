@@ -19,6 +19,12 @@ async function getResendApiKey(): Promise<string> {
   return cachedResendApiKey;
 }
 
+// Self-hosters can override the notifications From address via
+// OPENRECORD_NOTIFICATIONS_FROM (their Resend account won't have
+// fanpierlabs.com verified).
+const DEFAULT_FROM = 'MyChart MCP <notifications@fanpierlabs.com>';
+const FROM_ADDRESS = process.env.OPENRECORD_NOTIFICATIONS_FROM || DEFAULT_FROM;
+
 /**
  * Send a notification email via Resend.
  */
@@ -30,7 +36,7 @@ export async function sendNotificationEmail(
   const resend = new Resend(apiKey);
 
   const { error } = await resend.emails.send({
-    from: 'MyChart MCP <notifications@fanpierlabs.com>',
+    from: FROM_ADDRESS,
     to,
     subject: email.subject,
     html: email.html,

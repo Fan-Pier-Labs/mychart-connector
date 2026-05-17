@@ -53,7 +53,145 @@ echo '.passkey-credentials/' >> .gitignore
 
 The file contains a private key — never commit it.
 
-### 3. Use the passkey from your code
+## CLI examples
+
+The CLI works standalone — you don't need to write any code to fetch
+your chart, send a message, or refill a prescription. Every flag is
+also documented in the [CLI reference](#cli-reference) table below.
+
+```bash
+# Smoke test: log in interactively and dump every scrape category.
+# Prompts for username, password, and 2FA code.
+npx mychart-cli --host mychart.example.org
+
+# Same, fully non-interactive: pass creds + 2FA code on the command line.
+npx mychart-cli --host mychart.example.org \
+  --user alice@example.com --pass 'hunter2' --2fa 123456
+
+# Auto-fill creds from your browser's saved password store
+# (Chrome, Arc, and Firefox are supported). Still prompts for 2FA.
+npx mychart-cli --host mychart.example.org --read-login-from-browser
+
+# Auto-pick the first MyChart account found across all browsers.
+npx mychart-cli --read-login-from-browser
+```
+
+**Passkey workflow** — register once, then log in with no prompts ever
+again:
+
+```bash
+# One-time setup: register a passkey on the account.
+npx mychart-cli --host mychart.example.org --set-up-passkey
+
+# Every subsequent login: zero prompts, no 2FA code needed.
+npx mychart-cli --host mychart.example.org --use-passkey
+
+# Manage passkeys on the account.
+npx mychart-cli --host mychart.example.org --list-passkeys
+npx mychart-cli --host mychart.example.org --delete-passkey
+```
+
+**TOTP workflow** — if you'd rather use an authenticator-app code as
+your second factor:
+
+```bash
+# Register a TOTP authenticator on the account. The CLI writes the
+# secret to ./.totp-secrets/<host>.txt and prints a QR code.
+npx mychart-cli --host mychart.example.org --set-up-totp
+
+# Re-use the saved TOTP secret on every login — no prompt.
+npx mychart-cli --host mychart.example.org --use-saved-totp
+
+# Disable TOTP on the account.
+npx mychart-cli --host mychart.example.org --disable-totp
+```
+
+**One-shot actions** — send a message, request a refill, download an
+imaging study:
+
+```bash
+# Compose a new message to your care team.
+npx mychart-cli --host mychart.example.org --action send-message \
+  --subject "Question about my medication" \
+  --message "Hi — is it okay to take this with food?"
+
+# Reply to an existing message thread.
+npx mychart-cli --host mychart.example.org --action send-reply \
+  --conversation-id <id> --message "Thanks!"
+
+# Request a refill on a current prescription (CLI walks you through
+# picking which med and which pharmacy).
+npx mychart-cli --host mychart.example.org --action request-refill
+
+# Download an imaging study (X-ray, MRI, CT) as JPEGs.
+npx mychart-cli --host mychart.example.org --action get-imaging
+```
+
+## AI agent prompt
+
+Want to give an AI assistant (Claude, ChatGPT, Cursor, etc.) access to
+your chart? Install the CLI globally and copy-paste the block below into
+the assistant's system prompt or first message. The agent can then run
+`mychart-cli` via its shell tool to read and act on your records.
+
+```bash
+npm install -g mychart-cli
+```
+
+```text
+You have access to `mychart-cli`, a command-line tool that connects to
+Epic MyChart patient portals. It can log in (password+2FA, TOTP, or
+passkey), scrape every section of a patient's chart (medications, lab
+results, imaging, visits, messages, billing, allergies, immunizations,
+preventive care, etc.), and act on it (send messages, reply to threads,
+request prescription refills, manage emergency contacts).
+
+To use it, run shell commands with the bundled `mychart-cli` binary.
+The first positional argument is always `--host <hostname>`, where the
+hostname is the MyChart portal domain (e.g. `mychart.example.org`).
+
+If a passkey has been registered for this host (look for
+`./.passkey-credentials/<host>.json`), prefer `--use-passkey` — it logs
+in with zero prompts. Otherwise you'll need `--user`, `--pass`, and a
+`--2fa` code, or you can use `--read-login-from-browser` to auto-fill
+credentials from the user's saved browser passwords.
+
+Common commands you can run:
+
+  # Log in and dump every scrape category to stdout (medications,
+  # labs, imaging, visits, messages, etc.).
+  mychart-cli --host mychart.example.org --use-passkey
+
+  # Non-interactive login with explicit credentials.
+  mychart-cli --host mychart.example.org \
+    --user $USER --pass $PASS --2fa 123456
+
+  # Send a new message to the care team.
+  mychart-cli --host mychart.example.org --use-passkey \
+    --action send-message --subject "..." --message "..."
+
+  # Reply to an existing thread.
+  mychart-cli --host mychart.example.org --use-passkey \
+    --action send-reply --conversation-id <id> --message "..."
+
+  # Request a refill (interactive — picks med and pharmacy).
+  mychart-cli --host mychart.example.org --use-passkey \
+    --action request-refill
+
+  # Download an imaging study as JPEGs.
+  mychart-cli --host mychart.example.org --use-passkey \
+    --action get-imaging
+
+For the full flag reference and library API (you can also call
+`MyChartClient` directly from JavaScript or TypeScript), see
+https://www.npmjs.com/package/mychart-cli.
+
+Never print the user's password, 2FA codes, or raw passkey credential
+bytes back to them. Treat scraped medical data as PII — don't log it
+to third-party services without explicit permission.
+```
+
+## Using the passkey from your code
 
 ```ts
 import {

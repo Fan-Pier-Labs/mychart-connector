@@ -29,7 +29,10 @@ async function getResend(): Promise<Resend> {
   return cachedResend;
 }
 
-const FROM_ADDRESS = 'OpenRecord <noreply@emails.fanpierlabs.com>';
+// Self-hosters can override the From address via OPENRECORD_EMAIL_FROM
+// (their Resend account won't have emails.fanpierlabs.com verified).
+const DEFAULT_FROM = 'OpenRecord <noreply@emails.fanpierlabs.com>';
+const FROM_ADDRESS = process.env.OPENRECORD_EMAIL_FROM || DEFAULT_FROM;
 
 /**
  * Send a transactional email (password reset, etc.) via Resend.

@@ -86,9 +86,7 @@ The plugin auto-logs in on first tool call, keeps the session alive, and re-auth
 
 ### Self-Host on Railway
 
-Deploy your own instance with one click:
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/5F69Mf?referralCode=xrxOUg)
+Deploy your own instance with one click using the button at the top of this README.
 
 The template automatically provisions a Postgres database, generates secrets, and runs migrations on first startup. No manual configuration required.
 
@@ -161,6 +159,11 @@ bun run test:fake-mychart    # Fake MyChart integration tests
 bun run lint                 # ESLint (scrapers + web)
 bun run fix                  # ESLint auto-fix
 ```
+
+## Todo
+
+1. Build a Claude extension so everything can run locally instead of via an MCP server
+2. Add support for refills and sending messages to doctors via MyChart
 
 ## Telemetry
 

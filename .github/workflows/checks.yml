@@ -154,6 +154,8 @@ jobs:
       - run: cd tests/integration/ci && bun install
       - name: Install Playwright browsers
         run: cd tests/integration/ci && bunx playwright install --with-deps chromium
+      - name: Build npm-package CLI binary
+        run: cd npm-package && bun install && bun run build
       - name: Start services
         run: docker compose -f docker-compose.ci.yaml up -d --build --wait
         timeout-minutes: 10
