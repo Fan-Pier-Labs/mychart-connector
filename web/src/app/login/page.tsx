@@ -202,6 +202,9 @@ export default function LoginPage() {
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
   const [showMagicLinkInput, setShowMagicLinkInput] = useState(false);
   const [modalStep, setModalStep] = useState<"choose" | "signin">("choose");
+  const [newsletterStatus, setNewsletterStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [newsletterName, setNewsletterName] = useState("");
+  const [newsletterEmail, setNewsletterEmail] = useState("");
   const timelineSectionRef = useRef<HTMLElement>(null);
 
   const isLoggedIn = !ctx.sessionLoading && !!ctx.user;
@@ -218,7 +221,7 @@ export default function LoginPage() {
       .then((data) => {
         if (data.googleOAuthEnabled) setGoogleOAuthEnabled(true);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Timeline intersection observer
@@ -397,6 +400,35 @@ export default function LoginPage() {
     } catch (err) {
       toast.error("Failed to load demo: " + (err as Error).message);
       setLoading(false);
+    }
+  }
+
+  async function handleNewsletterSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newsletterName || !newsletterEmail) return;
+
+    setNewsletterStatus("loading");
+    try {
+      const res = await fetch("https://formspree.io/f/xvzlepwo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ name: newsletterName, email: newsletterEmail })
+      });
+
+      if (res.ok) {
+        setNewsletterStatus("success");
+        setNewsletterName("");
+        setNewsletterEmail("");
+        toast.success("Thanks for subscribing!");
+      } else {
+        throw new Error("Failed to subscribe");
+      }
+    } catch (err) {
+      setNewsletterStatus("error");
+      toast.error("Failed to subscribe. Please try again.");
     }
   }
 
@@ -768,6 +800,64 @@ export default function LoginPage() {
             Get started
             <Icon icon="lucide:arrow-right" width={18} height={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
           </button>
+        </section>
+
+        {/* Newsletter Section */}
+        <section className="py-24 relative flex flex-col items-center justify-center text-center px-6 z-20 bg-slate-50/50 border-t border-slate-200/40">
+          <div className="max-w-xl w-full">
+            <h2 className="text-3xl md:text-4xl font-medium text-slate-900 tracking-tight mb-4">
+              Stay updated
+            </h2>
+            <p className="text-md text-slate-500 mb-8 font-light">
+              Join our newsletter to get the latest updates on OpenRecord, new AI capabilities, and supported healthcare providers.
+            </p>
+            {newsletterStatus === "success" ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 flex flex-col items-center">
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mb-4 text-emerald-600">
+                  <Icon icon="lucide:check" width={24} height={24} />
+                </div>
+                <h3 className="text-xl font-medium text-emerald-900 mb-2">Thanks for subscribing!</h3>
+                <p className="text-emerald-700">We&apos;ll keep you updated on the latest features.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleNewsletterSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Input
+                    type="text"
+                    placeholder="Your Name"
+                    required
+                    value={newsletterName}
+                    onChange={(e) => setNewsletterName(e.target.value)}
+                    className="flex-1 bg-white h-12 rounded-xl"
+                    disabled={newsletterStatus === "loading"}
+                  />
+                  <Input
+                    type="email"
+                    placeholder="Email Address"
+                    required
+                    value={newsletterEmail}
+                    onChange={(e) => setNewsletterEmail(e.target.value)}
+                    className="flex-1 bg-white h-12 rounded-xl"
+                    disabled={newsletterStatus === "loading"}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white h-12 rounded-xl text-base transition-all duration-300"
+                  disabled={newsletterStatus === "loading"}
+                >
+                  {newsletterStatus === "loading" ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      Subscribing...
+                    </span>
+                  ) : (
+                    "Subscribe to Newsletter"
+                  )}
+                </Button>
+              </form>
+            )}
+          </div>
         </section>
 
         {/* Footer */}
